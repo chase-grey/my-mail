@@ -1,0 +1,10 @@
+node_modules
+dist
+.scratch
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+
+# per-user claude code settings
+.claude/settings.local.json
