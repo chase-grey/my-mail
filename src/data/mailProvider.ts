@@ -219,8 +219,18 @@ export class MailProvider {
   async snoozedFolder(): Promise<string> {
     if (this.snoozedFolderId) return this.snoozedFolderId
     const query = new URLSearchParams({ '$filter': `displayName eq '${snoozedFolderName}'`, '$select': 'id,displayName' })
-    const found = await this.graph.request<{ value: GraphFolder[] }>(`/me/mailFolders?${query}`)
-    const folder = found.value[0] ?? await this.graph.request<GraphFolder>('/me/mailFolders', { method: 'POST', body: JSON.stringify({ displayName: snoozedFolderName, isHidden: false }) })
+    const find = async () => (await this.graph.request<{ value: GraphFolder[] }>(`/me/mailFolders?${query}`)).value[0]
+    let folder = await find()
+    if (!folder) {
+      try {
+        folder = await this.graph.request<GraphFolder>('/me/mailFolders', { method: 'POST', body: JSON.stringify({ displayName: snoozedFolderName, isHidden: false }) })
+      } catch (error) {
+        // 409: the folder was made between the look and the create.
+        if (!(error instanceof GraphError && error.status === 409)) throw error
+        folder = await find()
+        if (!folder) throw error
+      }
+    }
     this.snoozedFolderId = folder.id
     return folder.id
   }

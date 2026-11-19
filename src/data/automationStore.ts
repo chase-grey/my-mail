@@ -53,10 +53,36 @@ export class AutomationStore {
     return result
   }
 
+  private pending?: StoredAutomation
+  private writing?: Promise<void>
+
   async save(value: Automation, now = new Date().toISOString()): Promise<StoredAutomation> {
     const stored = { ...value, updatedAt: now }
     saveLocalAutomation(stored)
-    if (this.folder) await this.folder.writeJson(automationFile, stored)
+    if (!this.folder) return stored
+    this.pending = stored
+    this.writing ??= this.drain(this.folder)
+    await this.writing
     return stored
+  }
+
+  /** One upload at a time, always of the latest copy. OneDrive answers 409 when two writes to the same file overlap. */
+  private async drain(folder: AppFolder): Promise<void> {
+    let failure: unknown
+    try {
+      while (this.pending) {
+        const next = this.pending
+        this.pending = undefined
+        try {
+          await folder.writeJson(automationFile, next)
+          failure = undefined
+        } catch (error) {
+          failure = error
+        }
+      }
+    } finally {
+      this.writing = undefined
+    }
+    if (failure) throw failure
   }
 }

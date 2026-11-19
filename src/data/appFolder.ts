@@ -20,11 +20,20 @@ export class AppFolder {
     }
   }
 
-  async writeJson(path: string, value: unknown): Promise<void> {
-    await this.graph.request(itemPath(path), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: `${JSON.stringify(value, null, 2)}\n`,
-    })
+  /** A 409 means another write to the same file (the other device, another tab) was in flight; it is tried again. */
+  async writeJson(path: string, value: unknown, retryDelayMs = 600): Promise<void> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await this.graph.request(itemPath(path), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+          body: `${JSON.stringify(value, null, 2)}\n`,
+        })
+        return
+      } catch (error) {
+        if (!(error instanceof GraphError && error.status === 409) || attempt >= 2) throw error
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs * (attempt + 1)))
+      }
+    }
   }
 }
