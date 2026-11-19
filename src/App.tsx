@@ -508,8 +508,9 @@ export default function App() {
         const scanned = await services.mail.scanInbox((count) => setCleanup((current) => ({ ...current, scanned: count })))
         scanRef.current = scanned
         const groups = groupBySender(scanned)
-        setCleanup({ scanned: scanned.length, total: scanned.length, groups, staleCount: staleIds(scanned, staleDays).length, done: true })
         const jevKey = settingsRef.current.jevApiKey
+        // The lists stay hidden until the senders are sorted, so none of them changes section after it is on screen.
+        setCleanup({ scanned: scanned.length, total: scanned.length, groups, staleCount: staleIds(scanned, staleDays).length, done: !jevKey })
         if (!jevKey) return
         // One cheap question per sender, on the newest message only, to tell newsletters from people.
         const client = new JevClient(jevKey)
@@ -519,7 +520,7 @@ export default function App() {
           try { return [group.address, await kindOf(client, group.sample)] as const } catch { return [group.address, undefined] as const }
         }))
         const byAddress = new Map(kinds)
-        setCleanup((current) => ({ ...current, working: undefined, groups: current.groups.map((group) => {
+        setCleanup((current) => ({ ...current, done: true, working: undefined, groups: current.groups.map((group) => {
           const kind = byAddress.get(group.address)
           return kind ? { ...group, kind: kind.category, kindConfidence: kind.confidence } : group
         }) }))
@@ -566,7 +567,7 @@ export default function App() {
       await move(group.ids, (done) => setCleanup((current) => ({ ...current, working: `${done} of ${group.count} from ${group.name}` })))
       const gone = new Set(group.ids)
       scanRef.current = scanRef.current.filter((message) => !gone.has(message.id))
-      setCleanup((current) => ({ ...current, working: undefined, total: (current.total ?? current.scanned) - group.count, groups: current.groups.filter((item) => item.address !== group.address), staleCount: staleIds(scanRef.current, staleDays).length }))
+      setCleanup((current) => ({ ...current, working: undefined, total: (current.total ?? current.scanned) - group.count, groups: current.groups.map((item) => item.address === group.address ? { ...item, cleared: action } : item), staleCount: staleIds(scanRef.current, staleDays).length }))
       drop(messages.filter((message) => gone.has(message.id)))
       await persistAutomation({ ...automationRef.current, decisions: rememberDecision(automationRef.current.decisions, asMessage(group.sample), action, new Date().toISOString()) })
     } finally {

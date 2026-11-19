@@ -25,6 +25,8 @@ export type SenderGroup = {
   /** A classifier's read of the sample, when one has run. */
   kind?: Category
   kindConfidence?: number
+  /** Already put away this visit. The row stays where it was so the list does not move under the pointer. */
+  cleared?: 'archive' | 'delete'
 }
 
 export function groupBySender(messages: ScanMessage[]): SenderGroup[] {

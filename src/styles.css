@@ -54,7 +54,7 @@ a { color: var(--accent); }
 .progress { position: sticky; top: 3.25rem; z-index: 5; height: 2px; margin-bottom: -2px; overflow: hidden; }
 .progress.is-busy::after { content: ""; display: block; width: 40%; height: 100%; border-radius: 2px; background: var(--accent); animation: slide 1.1s var(--ease) infinite; }
 .content { display: flex; flex: 1; flex-direction: column; gap: 0.9rem; padding-top: 0.25rem; animation: rise var(--move) var(--ease); }
-.status { min-height: 1.4rem; color: var(--muted); font-size: 0.9rem; }
+.status { min-height: 1.4rem; overflow: hidden; color: var(--muted); font-size: 0.9rem; white-space: nowrap; text-overflow: ellipsis; }
 .status.is-busy::after { content: "\2026"; }
 .lone { width: 100%; max-width: 26rem; margin-inline: auto; }
 
@@ -101,7 +101,8 @@ a { color: var(--accent); }
 .row-buttons > button:hover { background: var(--surface-2); color: var(--text); }
 .row-buttons > button.is-suggested { color: var(--accent); font-weight: 600; }
 .sender { transition: opacity var(--move); }
-.sender.is-working { opacity: 0.45; }
+.sender.is-working, .sender.is-cleared { opacity: 0.45; }
+.sender.is-cleared .row-buttons { visibility: hidden; }
 .suggest { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; padding: 0.5rem 0; border-top: 1px solid var(--border); }
 .suggest span { flex: 1 1 14rem; }
 .card > .suggest:first-child { border-top: 0; }

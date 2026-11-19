@@ -30,10 +30,10 @@ function SenderRow({ group, onError, actions }: { group: SenderGroup; onError: (
     setWorking(true); onError(undefined)
     void work().catch((error: unknown) => onError(error instanceof Error ? error.message.toLowerCase() : 'that failed')).finally(() => setWorking(false))
   }
-  return <li className={`row sender${working ? ' is-working' : ''}`}>
+  return <li className={`row sender${working ? ' is-working' : ''}${group.cleared ? ' is-cleared' : ''}`}>
     <div className="row-main">
       <span className="row-title" title={group.address}>{group.name}{group.kind && <span className={`chip${noise ? '' : ' is-quiet'}`}>{categoryLabel[group.kind]}</span>}</span>
-      <small>{[describeGroup(group), note].filter(Boolean).join(' · ')}</small>
+      <small>{[describeGroup(group), note, group.cleared && (group.cleared === 'archive' ? 'archived' : 'deleted')].filter(Boolean).join(' · ')}</small>
     </div>
     <div className="row-buttons">
       <button type="button" className={noise ? 'is-suggested' : ''} disabled={working} onClick={() => perform(() => actions.blockSender(group, 'archive'))}>archive all + rule</button>
@@ -51,6 +51,7 @@ function SenderRow({ group, onError, actions }: { group: SenderGroup; onError: (
 export function CleanupView({ state, error, actions, onError }: { state: CleanupState; error?: string; actions: CleanupActions; onError: (text?: string) => void }) {
   const [showAll, setShowAll] = useState(false)
   const noise = state.groups.filter(likelyNoise)
+  const left = (groups: SenderGroup[]) => groups.filter((group) => !group.cleared)
   const rest = state.groups.filter((group) => !likelyNoise(group))
   const shown = showAll ? rest : rest.slice(0, 15)
 
@@ -62,7 +63,7 @@ export function CleanupView({ state, error, actions, onError }: { state: Cleanup
   }
 
   return <>
-    <p className="status" aria-live="polite">{state.working ?? `${state.total ?? state.scanned} in inbox · ${state.groups.length} senders`}</p>
+    <p className="status" aria-live="polite">{state.working ?? `${state.total ?? state.scanned} in inbox · ${left(state.groups).length} senders`}</p>
     {error && <p className="note is-error" role="alert">{error}</p>}
 
     {state.staleCount > 0 && <Card title="old and already read">
@@ -72,13 +73,13 @@ export function CleanupView({ state, error, actions, onError }: { state: Cleanup
       </div>
     </Card>}
 
-    <Card title="probably noise" aside={noise.length > 0 && <span className="count">{noise.reduce((sum, group) => sum + group.count, 0)} messages</span>}>
+    <Card title="probably noise" aside={left(noise).length > 0 && <span className="count">{left(noise).reduce((sum, group) => sum + group.count, 0)} messages</span>}>
       {noise.length
         ? <ul className="rows">{noise.map((group) => <SenderRow key={group.address} group={group} onError={onError} actions={actions} />)}</ul>
         : <Empty>nothing looks like noise</Empty>}
     </Card>
 
-    <Card title="everyone else" aside={rest.length > 0 && <span className="count">{rest.length} senders</span>}>
+    <Card title="everyone else" aside={left(rest).length > 0 && <span className="count">{left(rest).length} senders</span>}>
       {rest.length
         ? <>
           <ul className="rows">{shown.map((group) => <SenderRow key={group.address} group={group} onError={onError} actions={actions} />)}</ul>
