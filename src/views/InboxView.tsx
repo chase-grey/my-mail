@@ -308,14 +308,19 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
         </div>)}
       </details>}
 
-      {groups.needsMe.length > 0 && groups.probablyFine.length > 0 && <h2 className="group-title">needs me</h2>}
-      {needsRows.length > 0 && rows(needsRows, false)}
-
-      {groups.probablyFine.length > 0 && <div className="group-head">
-        <h2 className="group-title">probably fine</h2>
-        <button className="link" type="button" onClick={() => archiveAll(groups.probablyFine.filter((item) => !leaving[item.message.id]))}>archive all {groups.probablyFine.length}</button>
+      {(needsRows.length > 0 || fineRows.length > 0) && <div className="lanes">
+        {needsRows.length > 0 && <section className="lane">
+          {groups.needsMe.length > 0 && groups.probablyFine.length > 0 && <h2 className="group-title">needs me</h2>}
+          {rows(needsRows, false)}
+        </section>}
+        {fineRows.length > 0 && <section className="lane">
+          {groups.probablyFine.length > 0 && <div className="group-head">
+            <h2 className="group-title">probably fine</h2>
+            <button className="link" type="button" onClick={() => archiveAll(groups.probablyFine.filter((item) => !leaving[item.message.id]))}>archive all {groups.probablyFine.length}</button>
+          </div>}
+          {rows(fineRows, true)}
+        </section>}
       </div>}
-      {fineRows.length > 0 && rows(fineRows, true)}
 
       {more && <div className="actions"><button ref={moreRef} className="secondary" type="button" disabled={Boolean(busy)} onClick={onMore}>load more</button></div>}
 

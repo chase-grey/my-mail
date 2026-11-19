@@ -18,8 +18,8 @@
   color: var(--text);
   background: var(--bg);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", sans-serif;
-  /* Everything is sized in rem, so the whole interface grows with a big monitor instead of shrinking into its middle. */
-  font-size: clamp(16px, 0.42vw + 8.5px, 22px);
+  /* Everything is sized in rem, so the whole interface grows with a big monitor. Height counts too: an ultrawide is no denser than the same monitor cut narrower. */
+  font-size: clamp(16px, min(0.42vw, 0.75vh) + 8.5px, 22px);
   line-height: 1.4;
   -webkit-text-size-adjust: 100%;
 }
@@ -120,8 +120,9 @@ a { color: var(--accent); }
 .group-head .link { min-height: 1.5rem; }
 
 /* inbox */
-.inbox, .list { display: flex; flex-direction: column; gap: 0.75rem; }
-.list > .group-title, .list > .group-head { margin-top: 0.35rem; }
+.inbox, .list, .lane { display: flex; flex-direction: column; gap: 0.75rem; }
+.lanes { display: flex; flex-direction: column; gap: 1.1rem; margin-top: 0.35rem; }
+.lane > .group-title { display: flex; align-items: center; min-height: 1.5rem; }
 .items { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
 .item { display: grid; grid-template-rows: 1fr; transition: grid-template-rows var(--move) var(--ease), opacity var(--move) var(--ease); transition-delay: calc(var(--d, 0) * 28ms); animation: rise var(--move) var(--ease) backwards; animation-delay: calc(var(--i, 0) * 22ms); }
 .item.is-leaving { grid-template-rows: 0fr; opacity: 0; pointer-events: none; }
@@ -217,33 +218,37 @@ a { color: var(--accent); }
 .sheet-body .field textarea { min-height: 10rem; }
 @keyframes sheet-up { from { translate: 0 100%; } }
 
-/* wide: a rail, the list, and the open message side by side */
+/* wide: a rail at the screen edge, the list, and the open message filling the rest */
 @media (min-width: 60rem) {
-  .shell { display: grid; grid-template-columns: 11.5rem minmax(0, 1fr); height: 100dvh; max-width: 118rem; margin-inline: auto; }
+  .shell { display: grid; grid-template-columns: 11.5rem minmax(0, 1fr); height: 100dvh; }
   .rail { display: flex; flex-direction: column; gap: 0.15rem; padding: 1.1rem 0.75rem 1rem; border-right: 1px solid var(--border); }
   .rail button { display: flex; align-items: center; gap: 0.65rem; min-height: 2.5rem; padding: 0 0.75rem; border-radius: 9px; color: var(--muted); text-align: left; transition: background var(--quick), color var(--quick); }
   .rail button:hover { background: var(--surface-2); color: var(--text); }
   .rail button.is-current { background: var(--surface-2); color: var(--text); font-weight: 600; }
   .rail-links { display: flex; flex-direction: column; gap: 0.15rem; margin-top: auto; }
-  .main { max-width: none; height: 100dvh; min-height: 0; padding: 0; overflow: hidden; }
-  .topbar { position: static; padding: 1rem 1.25rem 0.4rem 1.5rem; }
+  /* Every other screen is one column of cards, centred in whatever the rail leaves. */
+  .main { --w: 96rem; --gutter: max(1.5rem, (100% - var(--w)) / 2); max-width: none; height: 100dvh; min-height: 0; padding: 0; overflow: hidden; }
+  .main:has(> .is-settings, > .is-rules) { --w: 72rem; }
+  .topbar { position: static; padding: 1rem var(--gutter) 0.4rem; }
   .topbar .back, .topbar .menu { display: none; }
   .progress { position: static; flex: none; }
-  .content { min-height: 0; overflow-y: auto; padding: 0.5rem 1.5rem 2rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); align-items: start; align-content: start; gap: 1rem; max-width: 96rem; }
+  .content { min-height: 0; overflow-y: auto; padding: 0.5rem var(--gutter) 2rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); align-items: start; align-content: start; gap: 1rem; }
   .content > .status, .content > .note, .content > .actions { grid-column: 1 / -1; }
-  .content.is-settings, .content.is-rules { max-width: 72rem; }
-  .content.is-inbox { display: block; max-width: none; padding: 0; overflow: hidden; }
-  .inbox { display: grid; grid-template-columns: clamp(21rem, 36%, 30rem) minmax(0, 1fr); gap: 0; height: 100%; min-height: 0; }
-  .list { min-height: 0; overflow-y: auto; padding: 0.25rem 1rem 5rem 1.5rem; scrollbar-width: thin; }
+  /* The inbox: title and list share a column, the message runs the full height beside them. */
+  .main:has(> .is-inbox) { --list: clamp(21rem, 36%, 30rem); display: grid; grid-template-columns: var(--list) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
+  .content.is-inbox, .inbox { display: contents; }
+  .main:has(> .is-inbox) .topbar { grid-area: 1 / 1; padding-inline: 1.5rem 0.75rem; }
+  .main:has(> .is-inbox) .progress { grid-area: 2 / 1; }
+  .list { grid-area: 3 / 1; min-height: 0; overflow-y: auto; padding: 0.25rem 1rem 5rem 1.5rem; scrollbar-width: thin; }
   .list > * { flex: none; }
-  .lone { margin-top: 0.5rem; margin-left: 1.5rem; }
+  .lone { grid-column: 1 / -1; justify-self: start; margin-top: 0.5rem; margin-left: 1.5rem; }
   .item .mail::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--accent); scale: 1 0; transition: scale var(--move) var(--ease); }
   .item.is-open .mail::before { scale: 1 1; }
   .item.is-open .mail-subject, .item.is-open .mail-summary { white-space: nowrap; }
-  .reader { min-height: 0; overflow-y: auto; border: 1px solid var(--border); border-width: 1px 0 0 1px; border-radius: var(--radius) 0 0 0; background: var(--surface); scrollbar-width: thin; }
-  .reader-inner { max-width: 50rem; padding: 0.75rem 2rem 3rem; animation: rise var(--move) var(--ease); }
+  .reader { grid-area: 1 / 2 / -1 / 3; min-height: 0; overflow-y: auto; border-left: 1px solid var(--border); background: var(--surface); scrollbar-width: thin; }
+  .reader-inner { max-width: 54rem; margin-inline: auto; padding: 0.6rem 2rem 3rem; animation: rise var(--move) var(--ease); }
   .reader .detail { gap: 0.5rem; padding: 0; }
-  .reader .mail-actions { position: sticky; top: 0; z-index: 2; margin: 0 -0.5rem 0.5rem; padding: 0.4rem 0; background: var(--surface); }
+  .reader .mail-actions { position: sticky; top: 0; z-index: 2; margin: 0 -0.5rem 0.75rem; padding: 0.4rem 0; background: var(--surface); }
   .detail-subject { font-size: 1.35rem; letter-spacing: -0.01em; line-height: 1.25; overflow-wrap: anywhere; }
   .detail-summary { color: var(--muted); }
   .reader .mail-body { margin-top: 0.75rem; padding: 0; background: none; font-size: 1rem; line-height: 1.6; }
@@ -252,11 +257,16 @@ a { color: var(--accent); }
   .sheet-body { padding: 1.25rem; }
 }
 
-/* very wide: the list gets its full width and the message stays a readable column */
 @media (min-width: 100rem) {
-  .shell { grid-template-columns: 13rem minmax(0, 1fr); border-inline: 1px solid var(--border); }
-  .inbox { grid-template-columns: 32rem minmax(0, 1fr); }
+  .shell { grid-template-columns: 13rem minmax(0, 1fr); }
+  .main:has(> .is-inbox) { --list: 32rem; }
   .reader-inner { padding-inline: 3rem; }
+}
+
+/* very wide: needs me and probably fine sit side by side */
+@media (min-width: 150rem) {
+  .main:has(.lane + .lane) { --list: 62rem; }
+  .lanes { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); align-items: start; gap: 1.25rem; }
 }
 
 @media (hover: none) {
