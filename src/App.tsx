@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { InteractionRequiredAuthError } from '@azure/msal-browser'
 import { AnthropicClient } from './ai/anthropicClient'
 import { JevClient, classifyWithJev, kindOf } from './ai/jev'
+import { answerFromMail, translateQuery } from './ai/search'
 import { draftReply, readMessages, type ReadItem } from './ai/triage'
 import { AppFolder } from './data/appFolder'
 import { AutomationStore } from './data/automationStore'
 import { GraphClient, GraphError } from './data/graphClient'
 import { MailProvider, inboxPageSize, mailDefaultHeaders } from './data/mailProvider'
+import { MailSearch } from './data/mailSearch'
 import { MicrosoftAuth, configuredClientId } from './data/microsoftAuth'
 import { TodoProvider } from './data/todoProvider'
 import { groupBySender, staleIds, type ScanMessage, type SenderGroup } from './domain/cleanup'
@@ -22,6 +24,7 @@ import { CleanupView, type CleanupActions, type CleanupState } from './views/Cle
 import { InboxView } from './views/InboxView'
 import { ReceiptsView, type ReceiptActions } from './views/ReceiptsView'
 import { RulesView } from './views/RulesView'
+import { SearchView, type SearchActions } from './views/SearchView'
 import { Shell, type ShellLink, type View } from './views/Shell'
 import { SettingsView, type ConnectionStatus } from './views/SettingsView'
 
@@ -29,7 +32,7 @@ const triageKey = 'my-mail.triage.v1'
 const keptKey = 'my-mail.kept.v1'
 const staleDays = 30
 
-type Services = { auth: MicrosoftAuth; mail: MailProvider; todo: TodoProvider; store: AutomationStore }
+type Services = { auth: MicrosoftAuth; mail: MailProvider; search: MailSearch; todo: TodoProvider; store: AutomationStore }
 type Sorted = { inbox: Message[]; cache: Record<string, Triage>; byRules: number; autoArchived: number; filed: number; newRules: number; withoutModel: number }
 
 /** The earliest received time in a page, which is where the next page starts. */
@@ -64,7 +67,7 @@ const notMoved = (count: number) => `${count} did not move`
 async function createServices(clientId: string): Promise<Services> {
   const auth = await MicrosoftAuth.create(clientId)
   const graph = new GraphClient(() => auth.accessToken(), undefined, undefined, mailDefaultHeaders)
-  return { auth, mail: new MailProvider(graph), todo: new TodoProvider(graph), store: new AutomationStore(new AppFolder(graph)) }
+  return { auth, mail: new MailProvider(graph), search: new MailSearch(graph), todo: new TodoProvider(graph), store: new AutomationStore(new AppFolder(graph)) }
 }
 
 /** Write what Outlook can run to Outlook, and read back what was changed or made there. */
@@ -405,8 +408,10 @@ export default function App() {
 
   function drop(removedMessages: Message[]): void {
     const gone = new Set(removedMessages.map((message) => message.id))
+    // Search acts on mail that may not be in the loaded inbox; only what was here comes off the counts.
+    const here = messagesRef.current.filter((message) => gone.has(message.id))
     setMessages((current) => current.filter((item) => !gone.has(item.id)))
-    setSummary((current) => current ? { ...current, inbox: current.inbox - gone.size, needReply: current.needReply - removedMessages.filter((message) => triageRef.current[message.id]?.needsReply).length } : current)
+    setSummary((current) => current ? { ...current, inbox: current.inbox - here.length, needReply: current.needReply - here.filter((message) => triageRef.current[message.id]?.needsReply).length } : current)
   }
 
   /** A receipt leaves the inbox for the receipts folder, not the archive. */
@@ -676,6 +681,26 @@ export default function App() {
   const suggestions = useMemo<RuleSuggestion[]>(() => suggestRules(automation.decisions, automation.rules).filter((item) => !dismissed.includes(`${item.from}|${item.action}`)), [automation, dismissed])
   const triaged = useMemo<Triaged[]>(() => rankTriaged(messages.map((message) => ({ message, triage: triage[message.id] }))), [messages, triage])
   const connected = connection === 'connected' && Boolean(services)
+  const searchActions: SearchActions = {
+    find: (query, count) => services!.search.search(query, count),
+    more: (next) => services!.search.more(next),
+    translate: (question) => translateQuery(anthropic(), settingsRef.current.strongModel, question, new Date().toLocaleDateString('en-CA')),
+    answer: (question, hits) => answerFromMail(anthropic(), settingsRef.current.strongModel, question, hits, { aboutMe: settingsRef.current.aboutMe, today: new Date().toLocaleDateString('en-CA') }),
+  }
+
+  // `/` opens search from anywhere outside a text field.
+  useEffect(() => {
+    if (!connected) return
+    const listen = (event: KeyboardEvent) => {
+      if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return
+      if ((event.target as HTMLElement).closest?.('input, textarea, select, dialog')) return
+      event.preventDefault()
+      setView('search')
+    }
+    window.addEventListener('keydown', listen)
+    return () => window.removeEventListener('keydown', listen)
+  }, [connected])
+
   function go(next: View): void {
     setView(next)
     if (next === 'cleanup' && !cleanup.done && !cleanup.scanned) void cleanupActions.scan()
@@ -686,9 +711,10 @@ export default function App() {
     ...(settings.brainUrl ? [{ label: 'open my brain', onSelect: () => window.open(settings.brainUrl, '_blank', 'noreferrer') }] : []),
   ]
 
-  return <Shell view={view} views={connected ? ['inbox', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })}>
+  return <Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })}>
     {view === 'inbox' && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} hasModel={Boolean(settings.anthropicApiKey)} suggestions={suggestions} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
       onConnect={connect} onSettings={() => setView('settings')} onDismissSuggestion={(item) => setDismissed((current) => [...current, `${item.from}|${item.action}`])} />}
+    {view === 'search' && connected && <SearchView search={searchActions} actions={actions} hasModel={Boolean(settings.anthropicApiKey)} />}
     {view === 'receipts' && connected && <ReceiptsView actions={receiptActions} />}
     {view === 'rules' && <RulesView rules={automation.rules} outlookRules={outlookRules} snoozes={automation.snoozes} error={error} onRules={updateRules} />}
     {view === 'cleanup' && <CleanupView state={cleanup} error={error} actions={cleanupActions} onError={setError} />}

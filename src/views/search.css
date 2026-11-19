@@ -1,0 +1,20 @@
+/* search: the field, the answer, and the same list-and-message split as the inbox */
+.search { display: flex; flex-direction: column; gap: 0.75rem; }
+.search-form { display: flex; flex-direction: column; gap: 0.5rem; }
+.search-form input { width: 100%; min-height: 2.75rem; padding: 0.55rem 1rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font-size: max(16px, 1rem); transition: border-color var(--quick); }
+.search-form input:focus { outline: none; border-color: var(--accent); }
+.answer { padding-bottom: 0.4rem; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cite { min-width: 1.4rem; margin: 0 0.1rem; padding: 0 0.3rem; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.5; }
+.cite:hover { background: var(--accent); color: var(--on-accent); }
+
+@media (min-width: 60rem) {
+  .main:has(> .is-search) { --list: clamp(21rem, 36%, 30rem); display: grid; grid-template-columns: var(--list) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
+  .content.is-search, .search { display: contents; }
+  .main:has(> .is-search) .topbar { grid-area: 1 / 1; padding-inline: 1.5rem 0.75rem; }
+  .main:has(> .is-search) .progress { grid-area: 2 / 1; }
+  .topbar .to-search { display: none; }
+}
+
+@media (min-width: 100rem) {
+  .main:has(> .is-search) { --list: 32rem; }
+}

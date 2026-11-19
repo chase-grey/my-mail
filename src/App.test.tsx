@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { renderToStaticMarkup } from 'react-dom/server'
 import App from './App'
 import { InboxView } from './views/InboxView'
+import { SearchView } from './views/SearchView'
 import { message } from './domain/fixtures'
 import type { MessageActions } from './App'
 
@@ -38,4 +39,19 @@ it('shows triaged mail with the suggested action highlighted and kept mail folde
   expect(html).not.toContain('90% sure')
   expect(html).not.toContain('class="mail-body"')
   expect(html).toContain('archive all 1')
+})
+
+it('offers one search field, with find or ask only when there is a model', () => {
+  vi.stubGlobal('localStorage', { getItem: () => '["property tax"]', setItem: () => {} })
+  const noop = async () => {}
+  const actions: MessageActions = { archive: noop, archiveAll: noop, remove: noop, task: noop, reply: noop, draft: async () => '', snooze: noop, isReceipt: () => false, keep: noop, flag: noop, unsubscribe: async () => '', makeRule: noop, restore: noop }
+  const search = { find: async () => ({ hits: [] }), more: async () => ({ hits: [] }), translate: async () => '', answer: async () => '' }
+  const withModel = renderToStaticMarkup(<SearchView search={search} actions={actions} hasModel />)
+  expect(withModel).toContain('placeholder="search or ask"')
+  expect(withModel).toMatch(/aria-pressed="true"[^>]*>find</)
+  expect(withModel).toContain('>ask<')
+  expect(withModel).toContain('>property tax<')
+  const without = renderToStaticMarkup(<SearchView search={search} actions={actions} hasModel={false} />)
+  expect(without).toContain('placeholder="search"')
+  expect(without).not.toContain('>ask<')
 })

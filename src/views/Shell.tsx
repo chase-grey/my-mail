@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react'
 import { Icon, Menu, type IconName } from '../ui'
 
-export type View = 'inbox' | 'receipts' | 'cleanup' | 'rules' | 'settings'
+export type View = 'inbox' | 'search' | 'receipts' | 'cleanup' | 'rules' | 'settings'
 export type ShellLink = { label: string; onSelect: () => void }
 
-export const viewLabel: Record<View, string> = { inbox: 'inbox', receipts: 'receipts', cleanup: 'clean up', rules: 'rules', settings: 'settings' }
-const viewIcon: Record<View, IconName> = { inbox: 'inbox', receipts: 'receipt', cleanup: 'clean', rules: 'rules', settings: 'settings' }
+export const viewLabel: Record<View, string> = { inbox: 'inbox', search: 'search', receipts: 'receipts', cleanup: 'clean up', rules: 'rules', settings: 'settings' }
+const viewIcon: Record<View, IconName> = { inbox: 'inbox', search: 'search', receipts: 'receipt', cleanup: 'clean', rules: 'rules', settings: 'settings' }
 
 /** The frame around every screen: a side rail on wide screens, a top bar with a menu on a phone. */
 export function Shell({ view, views, busy, canRefresh, links, onView, onRefresh, children }: {
@@ -29,9 +29,10 @@ export function Shell({ view, views, busy, canRefresh, links, onView, onRefresh,
       <header className="topbar">
         {view !== 'inbox' && <button className="back icon-button" type="button" aria-label="back to inbox" onClick={() => onView('inbox')}><Icon name="back" /></button>}
         <h1>{viewLabel[view]}</h1>
+        {view === 'inbox' && views.includes('search') && <button className="icon-button to-search" type="button" aria-label="search" title="search" onClick={() => onView('search')}><Icon name="search" /></button>}
         {view === 'inbox' && <button className={`icon-button${busy ? ' is-spinning' : ''}`} type="button" aria-label="check mail" title="check mail" disabled={!canRefresh} onClick={onRefresh}><Icon name="refresh" /></button>}
         <Menu items={[
-          ...views.filter((item) => item !== view && item !== 'inbox').map((item) => ({ label: viewLabel[item], onSelect: () => onView(item) })),
+          ...views.filter((item) => item !== view && item !== 'inbox' && item !== 'search').map((item) => ({ label: viewLabel[item], onSelect: () => onView(item) })),
           ...links,
         ]} />
       </header>
