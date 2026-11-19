@@ -18,13 +18,12 @@ import { autoArchivable, needsReading, outlookTriage, pruneTriage, rankTriaged, 
 import { emptyAutomation, type Action, type Automation, type Message, type OutlookRule, type Rule, type RuleAction, type Triage } from './domain/types'
 import { parseUnsubscribe, unsubscribeMethod } from './domain/unsubscribe'
 import { loadSettings, saveSettings, type Settings } from './settings'
-import { Icon, Menu } from './ui'
 import { CleanupView, type CleanupActions, type CleanupState } from './views/CleanupView'
 import { InboxView } from './views/InboxView'
 import { RulesView } from './views/RulesView'
+import { Shell, type ShellLink, type View } from './views/Shell'
 import { SettingsView, type ConnectionStatus } from './views/SettingsView'
 
-type View = 'inbox' | 'rules' | 'settings' | 'cleanup'
 const triageKey = 'my-mail.triage.v1'
 const keptKey = 'my-mail.kept.v1'
 const staleDays = 30
@@ -98,6 +97,8 @@ export type MessageActions = {
   /** Follows the sender's List-Unsubscribe header. Returns a short note on what happened. */
   unsubscribe: (message: Message) => Promise<string>
   makeRule: (input: { from?: string; subject?: string; action: RuleAction }) => Promise<void>
+  /** Undo: bring a message that was just archived, deleted, or snoozed back to the inbox. */
+  restore: (message: Message) => Promise<void>
 }
 
 const emptyCleanup: CleanupState = { scanned: 0, groups: [], staleCount: 0, done: false }
@@ -476,6 +477,20 @@ export default function App() {
       const rule = newRule(input, crypto.randomUUID(), new Date().toISOString())
       await updateRules([...automationRef.current.rules, rule])
     },
+    restore: async (message) => {
+      if (!services) throw new Error('connect microsoft first')
+      setError(undefined)
+      try {
+        await services.mail.move(message.id, 'inbox')
+        setMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message])
+        setSummary((current) => current ? { ...current, inbox: current.inbox + 1, needReply: current.needReply + (triageRef.current[message.id]?.needsReply ? 1 : 0) } : current)
+        const state = automationRef.current
+        await persistAutomation({ ...state, snoozes: withoutSnoozes(state.snoozes, [message.id]), decisions: state.decisions.filter((decision) => decision.messageId !== message.id) })
+      } catch (failure) {
+        setError(errorText(failure))
+        throw failure
+      }
+    },
   }
 
   async function updateRules(rules: Rule[]): Promise<void> {
@@ -562,33 +577,21 @@ export default function App() {
   const suggestions = useMemo<RuleSuggestion[]>(() => suggestRules(automation.decisions, automation.rules).filter((item) => !dismissed.includes(`${item.from}|${item.action}`)), [automation, dismissed])
   const triaged = useMemo<Triaged[]>(() => rankTriaged(messages.map((message) => ({ message, triage: triage[message.id] }))), [messages, triage])
   const connected = connection === 'connected' && Boolean(services)
-  const title = view === 'inbox' ? 'inbox' : view === 'cleanup' ? 'clean up' : view
-
-  function openCleanup(): void {
-    setView('cleanup')
-    if (!cleanup.done && !cleanup.scanned) void cleanupActions.scan()
+  function go(next: View): void {
+    setView(next)
+    if (next === 'cleanup' && !cleanup.done && !cleanup.scanned) void cleanupActions.scan()
   }
 
-  return <div className="main">
-    <header className="topbar">
-      {view !== 'inbox' && <button className="back icon-button" type="button" aria-label="back to inbox" onClick={() => setView('inbox')}><Icon name="back" /></button>}
-      <h1>{title}</h1>
-      {view === 'inbox' && <button className={`icon-button${busy ? ' is-spinning' : ''}`} type="button" aria-label="check mail" title="check mail" disabled={!connected || Boolean(busy)} onClick={() => services && void run(services, { settings })}><Icon name="refresh" /></button>}
-      <Menu items={[
-        ...(view !== 'cleanup' && connected ? [{ label: 'clean up', onSelect: openCleanup }] : []),
-        ...(view !== 'rules' ? [{ label: 'rules', onSelect: () => setView('rules') }] : []),
-        ...(view !== 'settings' ? [{ label: 'settings', onSelect: () => setView('settings') }] : []),
-        { label: 'open outlook', onSelect: () => window.open('https://outlook.live.com/mail/0/', '_blank', 'noreferrer') },
-        ...(settings.brainUrl ? [{ label: 'open my brain', onSelect: () => window.open(settings.brainUrl, '_blank', 'noreferrer') }] : []),
-      ]} />
-    </header>
+  const links: ShellLink[] = [
+    { label: 'open outlook', onSelect: () => window.open('https://outlook.live.com/mail/0/', '_blank', 'noreferrer') },
+    ...(settings.brainUrl ? [{ label: 'open my brain', onSelect: () => window.open(settings.brainUrl, '_blank', 'noreferrer') }] : []),
+  ]
 
-    <div className="content">
-      {view === 'inbox' && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} hasModel={Boolean(settings.anthropicApiKey)} suggestions={suggestions} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
-        onConnect={connect} onSettings={() => setView('settings')} onDismissSuggestion={(item) => setDismissed((current) => [...current, `${item.from}|${item.action}`])} />}
-      {view === 'rules' && <RulesView rules={automation.rules} outlookRules={outlookRules} snoozes={automation.snoozes} error={error} onRules={updateRules} />}
-      {view === 'cleanup' && <CleanupView state={cleanup} error={error} actions={cleanupActions} onError={setError} />}
-      {view === 'settings' && <SettingsView settings={settings} connection={connection} accountName={accountName} busy={Boolean(busy)} error={error} onSettings={setSettings} onConnect={connect} onDisconnect={disconnect} />}
-    </div>
-  </div>
+  return <Shell view={view} views={connected ? ['inbox', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })}>
+    {view === 'inbox' && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} hasModel={Boolean(settings.anthropicApiKey)} suggestions={suggestions} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
+      onConnect={connect} onSettings={() => setView('settings')} onDismissSuggestion={(item) => setDismissed((current) => [...current, `${item.from}|${item.action}`])} />}
+    {view === 'rules' && <RulesView rules={automation.rules} outlookRules={outlookRules} snoozes={automation.snoozes} error={error} onRules={updateRules} />}
+    {view === 'cleanup' && <CleanupView state={cleanup} error={error} actions={cleanupActions} onError={setError} />}
+    {view === 'settings' && <SettingsView settings={settings} connection={connection} accountName={accountName} busy={Boolean(busy)} error={error} onSettings={setSettings} onConnect={connect} onDisconnect={disconnect} />}
+  </Shell>
 }
