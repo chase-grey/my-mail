@@ -29,6 +29,7 @@ export const messageSelect = 'id,conversationId,subject,from,receivedDateTime,bo
 export const scanSelect = 'id,subject,from,receivedDateTime,bodyPreview,isRead,flag'
 export const bodyLimit = 1500
 export const snoozedFolderName = 'snoozed'
+export const inboxPageSize = 50
 export const scanPageSize = 500
 export const batchLimit = 20
 
@@ -86,10 +87,28 @@ export class MailProvider {
 
   constructor(private readonly graph: GraphClient) {}
 
-  async inbox(top = 50): Promise<Message[]> {
-    const query = new URLSearchParams({ '$top': String(top), '$orderby': 'receivedDateTime desc', '$select': messageSelect })
-    const page = await this.graph.request<{ value: GraphMessage[] }>(`/me/mailFolders/inbox/messages?${query}`)
-    return page.value.map(fromGraph)
+  /**
+   * The newest `count` inbox messages, or the next `count` received at or before `before`.
+   * Older pages are asked for by date, not by position, so mail archived in between does not shift the window.
+   * The message at the boundary comes back again; the caller drops what it already has.
+   */
+  async inbox(count = inboxPageSize, before?: string): Promise<{ messages: Message[]; more: boolean }> {
+    const query = new URLSearchParams({ '$top': String(Math.min(count, inboxPageSize)), '$orderby': 'receivedDateTime desc', '$select': messageSelect })
+    if (before) query.set('$filter', `receivedDateTime le ${before}`)
+    const all: Message[] = []
+    let next: string | undefined = `/me/mailFolders/inbox/messages?${query}`
+    while (next && all.length < count) {
+      const page: { value: GraphMessage[]; '@odata.nextLink'?: string } = await this.graph.request(next)
+      all.push(...page.value.map(fromGraph))
+      next = page['@odata.nextLink']
+    }
+    return { messages: all.slice(0, count), more: Boolean(next) || all.length > count }
+  }
+
+  /** How many messages the inbox holds, loaded or not. */
+  async inboxCount(): Promise<number> {
+    const folder = await this.graph.request<{ totalItemCount: number }>('/me/mailFolders/inbox?$select=totalItemCount')
+    return folder.totalItemCount
   }
 
   /** Every inbox message's headers only, page by page, for the cleanup view. Stops at the cap. */

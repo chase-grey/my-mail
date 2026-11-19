@@ -6,7 +6,7 @@ import { draftReply, readMessages, type ReadItem } from './ai/triage'
 import { AppFolder } from './data/appFolder'
 import { AutomationStore } from './data/automationStore'
 import { GraphClient, GraphError } from './data/graphClient'
-import { MailProvider, mailDefaultHeaders } from './data/mailProvider'
+import { MailProvider, inboxPageSize, mailDefaultHeaders } from './data/mailProvider'
 import { MicrosoftAuth, configuredClientId } from './data/microsoftAuth'
 import { TodoProvider } from './data/todoProvider'
 import { groupBySender, staleIds, type ScanMessage, type SenderGroup } from './domain/cleanup'
@@ -30,6 +30,12 @@ const keptKey = 'my-mail.kept.v1'
 const staleDays = 30
 
 type Services = { auth: MicrosoftAuth; mail: MailProvider; todo: TodoProvider; store: AutomationStore }
+type Sorted = { inbox: Message[]; cache: Record<string, Triage>; byRules: number; autoArchived: number; withoutModel: number }
+
+/** The earliest received time in a page, which is where the next page starts. */
+function oldestOf(messages: Message[]): string | undefined {
+  return messages.reduce<string | undefined>((oldest, message) => !oldest || message.receivedAt < oldest ? message.receivedAt : oldest, undefined)
+}
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -103,6 +109,7 @@ export default function App() {
   const [connection, setConnection] = useState<ConnectionStatus>(configuredClientId() ? 'disconnected' : 'unconfigured')
   const [accountName, setAccountName] = useState<string>()
   const [messages, setMessages] = useState<Message[]>([])
+  const [more, setMore] = useState(false)
   const [triage, setTriage] = useState<Record<string, Triage>>(() => readJson(triageKey, {}))
   const [kept, setKept] = useState<Record<string, string>>(() => readJson(keptKey, {}))
   const [automation, setAutomation] = useState<Automation>(emptyAutomation)
@@ -113,6 +120,9 @@ export default function App() {
   const [dismissed, setDismissed] = useState<string[]>([])
   const [cleanup, setCleanup] = useState<CleanupState>(emptyCleanup)
   const scanRef = useRef<ScanMessage[]>([])
+  const messagesRef = useRef(messages)
+  messagesRef.current = messages
+  const oldestRef = useRef<string | undefined>(undefined)
   const started = useRef(false)
   const automationRef = useRef(automation)
   automationRef.current = automation
@@ -148,6 +158,91 @@ export default function App() {
     }
   }, [])
 
+  /** Rules, verdicts, reading, categories, and auto-archive for one batch of fetched mail. Used for the first load and for every older page. */
+  const sortBatch = useCallback(async (current: Services, batch: Message[], startCache: Record<string, Triage>, startAutomation: Automation, settings: Settings, now: string): Promise<Sorted> => {
+    let inbox = batch
+    let automationState = startAutomation
+    const hits = applyRules(inbox, automationState.rules)
+    for (const hit of hits) {
+      if (hit.rule.action === 'archive') await current.mail.archive(hit.message.id)
+      else if (hit.rule.action === 'delete') await current.mail.delete(hit.message.id)
+      else if (hit.rule.action === 'read') await current.mail.markRead(hit.message.id)
+      else if (hit.rule.action === 'flag') await current.mail.flag(hit.message.id)
+      else if (hit.rule.action === 'task') { await current.todo.createTask({ title: hit.message.subject, message: hit.message }); await current.mail.archive(hit.message.id) }
+    }
+    const removed = new Set(hits.filter((hit) => hit.rule.action !== 'read' && hit.rule.action !== 'flag').map((hit) => hit.message.id))
+    inbox = inbox.filter((message) => !removed.has(message.id)).map((message) => {
+      const hit = hits.find((item) => item.message.id === message.id)
+      if (!hit) return message
+      return hit.rule.action === 'read' ? { ...message, isRead: true } : { ...message, flagged: true }
+    })
+    if (hits.length) automationState = { ...automationState, rules: recordHits(automationState.rules, hits) }
+    if (automationState !== automationRef.current) await persistAutomation(automationState, current)
+
+    // Verdicts, cheapest source first: this device's cache, the category Outlook already carries, the sender's history, then Jev.
+    let cache = { ...startCache }
+    const before = new Set(Object.keys(cache))
+    let withoutModel = 0
+    const noise = noiseSenders(automationState.decisions)
+    for (const message of inbox) {
+      if (cache[message.id]) continue
+      const verdict = outlookTriage(message, now) ?? historyTriage(message, noise, now)
+      if (verdict) { cache[message.id] = verdict; withoutModel++ }
+    }
+    const history = (message: Message) => senderHistoryLine(automationState.decisions, message.from.address)
+    const unsorted = inbox.filter((message) => !cache[message.id])
+    if (settings.jevApiKey && unsorted.length) {
+      setBusy(`sorting ${unsorted.length} new ${unsorted.length === 1 ? 'message' : 'messages'}`)
+      try {
+        const results = await classifyWithJev(new JevClient(settings.jevApiKey), unsorted, history)
+        for (const result of results) cache[result.messageId] = result
+        withoutModel += results.length
+      } catch (failure) {
+        setError(errorText(failure))
+      }
+    }
+
+    // The language model reads only what needs me, or what nothing else could settle.
+    if (settings.anthropicApiKey) {
+      const toRead = inbox.filter((message) => needsReading(message, cache[message.id]))
+      if (toRead.length) {
+        setBusy(`reading ${toRead.length} ${toRead.length === 1 ? 'message' : 'messages'}`)
+        const items: ReadItem[] = toRead.map((message) => {
+          const prior = cache[message.id]
+          return { message, known: prior && prior.confidence >= unsureBelow ? { category: prior.category, needsReply: prior.needsReply } : undefined }
+        })
+        const results = await readMessages(new AnthropicClient(settings.anthropicApiKey), settings.anthropicModel, items, { aboutMe: settings.aboutMe, today: new Date().toLocaleDateString('en-CA'), history })
+        for (const result of results) {
+          const prior = cache[result.messageId]
+          cache[result.messageId] = prior && prior.confidence >= unsureBelow ? { ...result, source: prior.source, confidence: prior.confidence } : result
+        }
+      }
+    }
+
+    // New verdicts go onto the message as a category so the other device, and Outlook, can see them.
+    if (settings.writeCategories) {
+      for (const message of inbox) {
+        const verdict = cache[message.id]
+        if (!verdict || before.has(message.id) || verdict.source === 'outlook' || message.categories.includes(verdict.category)) continue
+        try { await current.mail.setVerdict(message.id, message.categories, verdict.category) } catch { /* a missing scope only costs the shared category */ }
+      }
+    }
+
+    let autoArchived = 0
+    if (settings.autoArchive) {
+      const quiet = inbox.filter((message) => cache[message.id] && autoArchivable(message, cache[message.id]))
+      if (quiet.length) {
+        await current.mail.archiveMany(quiet.map((message) => message.id))
+        autoArchived = quiet.length
+        const gone = new Set(quiet.map((message) => message.id))
+        inbox = inbox.filter((message) => !gone.has(message.id))
+        cache = Object.fromEntries(Object.entries(cache).filter(([id]) => !gone.has(id)))
+      }
+    }
+
+    return { inbox, cache, byRules: removed.size, autoArchived, withoutModel }
+  }, [persistAutomation])
+
   const run = useCallback(async (current: Services, options: { settings: Settings }) => {
     setBusy('checking mail')
     setError(undefined)
@@ -160,99 +255,67 @@ export default function App() {
       for (const snooze of due) if (await current.mail.unsnooze(snooze.messageId)) returned++
       if (due.length) automationState = { ...automationState, snoozes: withoutSnoozes(automationState.snoozes, due.map((item) => item.messageId)) }
 
-      let inbox = await current.mail.inbox()
+      // A refresh reads as deep as was already loaded, so older pages and their verdicts are not thrown away.
+      const [page, total] = await Promise.all([
+        current.mail.inbox(Math.max(inboxPageSize, messagesRef.current.length)),
+        current.mail.inboxCount().catch(() => undefined),
+      ])
+      oldestRef.current = oldestOf(page.messages)
 
       // Outlook has had its turn on anything that arrived while the app was closed; rules run here too for what it missed.
       automationState = await pushRules(current, automationState)
-      const hits = applyRules(inbox, automationState.rules)
-      for (const hit of hits) {
-        if (hit.rule.action === 'archive') await current.mail.archive(hit.message.id)
-        else if (hit.rule.action === 'delete') await current.mail.delete(hit.message.id)
-        else if (hit.rule.action === 'read') await current.mail.markRead(hit.message.id)
-        else if (hit.rule.action === 'flag') await current.mail.flag(hit.message.id)
-        else if (hit.rule.action === 'task') { await current.todo.createTask({ title: hit.message.subject, message: hit.message }); await current.mail.archive(hit.message.id) }
-      }
-      const removed = new Set(hits.filter((hit) => hit.rule.action !== 'read' && hit.rule.action !== 'flag').map((hit) => hit.message.id))
-      inbox = inbox.filter((message) => !removed.has(message.id)).map((message) => {
-        const hit = hits.find((item) => item.message.id === message.id)
-        if (!hit) return message
-        return hit.rule.action === 'read' ? { ...message, isRead: true } : { ...message, flagged: true }
-      })
-      if (hits.length) automationState = { ...automationState, rules: recordHits(automationState.rules, hits) }
-      if (automationState !== automationRef.current) await persistAutomation(automationState, current)
-
-      // Verdicts, cheapest source first: this device's cache, the category Outlook already carries, the sender's history, then Jev.
-      let cache = pruneTriage(triageRef.current, inbox)
-      const before = new Set(Object.keys(cache))
-      let withoutModel = 0
-      const noise = noiseSenders(automationState.decisions)
-      for (const message of inbox) {
-        if (cache[message.id]) continue
-        const verdict = outlookTriage(message, now) ?? historyTriage(message, noise, now)
-        if (verdict) { cache[message.id] = verdict; withoutModel++ }
-      }
-      const history = (message: Message) => senderHistoryLine(automationState.decisions, message.from.address)
-      const unsorted = inbox.filter((message) => !cache[message.id])
-      if (options.settings.jevApiKey && unsorted.length) {
-        setBusy(`sorting ${unsorted.length} new ${unsorted.length === 1 ? 'message' : 'messages'}`)
-        try {
-          const results = await classifyWithJev(new JevClient(options.settings.jevApiKey), unsorted, history)
-          for (const result of results) cache[result.messageId] = result
-          withoutModel += results.length
-        } catch (failure) {
-          setError(errorText(failure))
-        }
-      }
-
-      // The language model reads only what needs me, or what nothing else could settle.
-      if (options.settings.anthropicApiKey) {
-        const toRead = inbox.filter((message) => needsReading(message, cache[message.id]))
-        if (toRead.length) {
-          setBusy(`reading ${toRead.length} ${toRead.length === 1 ? 'message' : 'messages'}`)
-          const items: ReadItem[] = toRead.map((message) => {
-            const prior = cache[message.id]
-            return { message, known: prior && prior.confidence >= unsureBelow ? { category: prior.category, needsReply: prior.needsReply } : undefined }
-          })
-          const results = await readMessages(new AnthropicClient(options.settings.anthropicApiKey), options.settings.anthropicModel, items, { aboutMe: options.settings.aboutMe, today: new Date().toLocaleDateString('en-CA'), history })
-          for (const result of results) {
-            const prior = cache[result.messageId]
-            cache[result.messageId] = prior && prior.confidence >= unsureBelow ? { ...result, source: prior.source, confidence: prior.confidence } : result
-          }
-        }
-      }
-
-      // New verdicts go onto the message as a category so the other device, and Outlook, can see them.
-      if (options.settings.writeCategories) {
-        for (const message of inbox) {
-          const verdict = cache[message.id]
-          if (!verdict || before.has(message.id) || verdict.source === 'outlook' || message.categories.includes(verdict.category)) continue
-          try { await current.mail.setVerdict(message.id, message.categories, verdict.category) } catch { /* a missing scope only costs the shared category */ }
-        }
-      }
-
-      let autoArchived = 0
-      if (options.settings.autoArchive) {
-        const quiet = inbox.filter((message) => cache[message.id] && autoArchivable(message, cache[message.id]))
-        if (quiet.length) {
-          await current.mail.archiveMany(quiet.map((message) => message.id))
-          autoArchived = quiet.length
-          const gone = new Set(quiet.map((message) => message.id))
-          inbox = inbox.filter((message) => !gone.has(message.id))
-          cache = pruneTriage(cache, inbox)
-        }
-      }
+      const sorted = await sortBatch(current, page.messages, triageRef.current, automationState, options.settings, now)
+      const inbox = sorted.inbox
+      const cache = pruneTriage(sorted.cache, inbox)
 
       triageRef.current = cache
       setTriage(cache)
+      messagesRef.current = inbox
       setMessages(inbox)
+      setMore(page.more)
       setKept((current) => Object.fromEntries(Object.entries(current).filter(([id]) => inbox.some((message) => message.id === id))))
-      setSummary(summarize(inbox.map((message) => ({ message, triage: cache[message.id] })), { byRules: removed.size, autoArchived, returned, withoutModel }))
+      const counted = summarize(inbox.map((message) => ({ message, triage: cache[message.id] })), { byRules: sorted.byRules, autoArchived: sorted.autoArchived, returned, withoutModel: sorted.withoutModel })
+      setSummary({ ...counted, inbox: Math.max(inbox.length, (total ?? 0) - sorted.byRules - sorted.autoArchived) })
     } catch (failure) {
       setError(errorText(failure))
     } finally {
       setBusy(undefined)
     }
-  }, [persistAutomation, pushRules])
+  }, [pushRules, sortBatch])
+
+  /** The next page of older mail, put through the same sorting as the first. */
+  const loadMore = useCallback(async (current: Services, options: { settings: Settings }) => {
+    const before = oldestRef.current
+    if (!before) return
+    setBusy('loading more')
+    setError(undefined)
+    try {
+      const page = await current.mail.inbox(inboxPageSize, before)
+      const have = new Set(messagesRef.current.map((message) => message.id))
+      const fresh = page.messages.filter((message) => !have.has(message.id))
+      const sorted = await sortBatch(current, fresh, triageRef.current, automationRef.current, options.settings, new Date().toISOString())
+      oldestRef.current = oldestOf(page.messages) ?? before
+
+      triageRef.current = sorted.cache
+      setTriage(sorted.cache)
+      messagesRef.current = [...messagesRef.current, ...sorted.inbox]
+      setMessages(messagesRef.current)
+      // A page of nothing new means the date window did not move; stop instead of asking again.
+      setMore(page.more && fresh.length > 0)
+      setSummary((summary) => summary ? {
+        ...summary,
+        inbox: summary.inbox - sorted.byRules - sorted.autoArchived,
+        needReply: summary.needReply + sorted.inbox.filter((message) => sorted.cache[message.id]?.needsReply).length,
+        byRules: summary.byRules + sorted.byRules,
+        autoArchived: summary.autoArchived + sorted.autoArchived,
+        withoutModel: summary.withoutModel + sorted.withoutModel,
+      } : summary)
+    } catch (failure) {
+      setError(errorText(failure))
+    } finally {
+      setBusy(undefined)
+    }
+  }, [sortBatch])
 
   useEffect(() => {
     const clientId = configuredClientId()
@@ -303,6 +366,7 @@ export default function App() {
       setConnection('disconnected')
       setAccountName(undefined)
       setMessages([])
+      setMore(false)
       setSummary(undefined)
     } catch (failure) {
       setError(errorText(failure))
@@ -520,7 +584,7 @@ export default function App() {
     </header>
 
     <div className="content">
-      {view === 'inbox' && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} hasModel={Boolean(settings.anthropicApiKey)} suggestions={suggestions} snoozes={automation.snoozes} actions={actions}
+      {view === 'inbox' && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} hasModel={Boolean(settings.anthropicApiKey)} suggestions={suggestions} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
         onConnect={connect} onSettings={() => setView('settings')} onDismissSuggestion={(item) => setDismissed((current) => [...current, `${item.from}|${item.action}`])} />}
       {view === 'rules' && <RulesView rules={automation.rules} outlookRules={outlookRules} snoozes={automation.snoozes} error={error} onRules={updateRules} />}
       {view === 'cleanup' && <CleanupView state={cleanup} error={error} actions={cleanupActions} onError={setError} />}

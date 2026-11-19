@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { MessageActions } from '../App'
 import { ruleActionLabel, senderDomain, type RuleSuggestion } from '../domain/rules'
 import { snoozeOptions, type SnoozeOption } from '../domain/snooze'
@@ -75,7 +75,7 @@ function MessageCard({ item, kept, quiet, actions, onSheet, onError }: { item: T
   </article>
 }
 
-export function InboxView({ items, kept, summary, busy, error, connection, hasModel, suggestions, snoozes, actions, onConnect, onSettings, onDismissSuggestion }: {
+export function InboxView({ items, kept, summary, busy, error, connection, hasModel, suggestions, snoozes, actions, more, onMore, onConnect, onSettings, onDismissSuggestion }: {
   items: Triaged[]
   kept: Record<string, string>
   summary?: RunSummary
@@ -86,6 +86,8 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
   suggestions: RuleSuggestion[]
   snoozes: Snooze[]
   actions: MessageActions
+  more?: boolean
+  onMore?: () => void
   onConnect: () => Promise<void>
   onSettings: () => void
   onDismissSuggestion: (item: RuleSuggestion) => void
@@ -96,6 +98,18 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
   const keptItems = items.filter((item) => kept[item.message.id])
   const groups = groupInbox(live)
   const shownError = error ?? localError
+  const moreRef = useRef<HTMLButtonElement>(null)
+  const onMoreRef = useRef(onMore)
+  onMoreRef.current = onMore
+
+  // Older mail loads as the end of the list scrolls into view. A failed load waits for a tap instead of retrying.
+  useEffect(() => {
+    const target = moreRef.current
+    if (!target || busy || error || typeof IntersectionObserver === 'undefined') return
+    const observer = new IntersectionObserver((entries) => { if (entries.some((entry) => entry.isIntersecting)) onMoreRef.current?.() }, { rootMargin: '600px' })
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [more, busy, error, items.length])
 
   if (connection !== 'connected') {
     return <Card title="microsoft account">
@@ -126,7 +140,9 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
     </div>}
     {groups.probablyFine.map((item) => <MessageCard key={item.message.id} item={item} kept={false} quiet actions={actions} onSheet={setSheet} onError={setLocalError} />)}
 
-    {!busy && items.length === 0 && summary && <Card><Empty>inbox zero{snoozes.length ? ` · ${snoozes.length} snoozed` : ''}</Empty></Card>}
+    {more && <div className="actions"><button ref={moreRef} className="secondary" type="button" disabled={Boolean(busy)} onClick={onMore}>load more</button></div>}
+
+    {!busy && items.length === 0 && !more && summary && <Card><Empty>inbox zero{snoozes.length ? ` · ${snoozes.length} snoozed` : ''}</Empty></Card>}
 
     {keptItems.length > 0 && <details className="card group">
       <summary>{keptItems.length} kept in inbox</summary>

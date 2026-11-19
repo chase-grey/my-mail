@@ -19,6 +19,24 @@ describe('mail provider', () => {
     expect(new Headers(init.headers).get('Prefer')).toBe(mailDefaultHeaders.Prefer)
   })
 
+  it('follows pages until it has the count asked for, and asks for older mail by date', async () => {
+    const graphMessage = (id: string) => ({ id, receivedDateTime: '2026-11-02T15:00:00Z', isRead: true, webLink: 'w' })
+    const request = vi.fn(async (path: string) => path === 'next'
+      ? { value: [graphMessage('c'), graphMessage('d')] }
+      : { value: [graphMessage('a'), graphMessage('b')], '@odata.nextLink': 'next' })
+    const provider = new MailProvider({ request } as unknown as GraphClient)
+
+    const first = await provider.inbox(3)
+    expect(first.messages.map((message) => message.id)).toEqual(['a', 'b', 'c'])
+    expect(first.more).toBe(true)
+
+    const all = await provider.inbox(4)
+    expect(all.more).toBe(false)
+
+    await provider.inbox(50, '2026-11-01T09:00:00Z')
+    expect(new URLSearchParams(request.mock.calls.at(-2)![0].split('?')[1]).get('$filter')).toBe('receivedDateTime le 2026-11-01T09:00:00Z')
+  })
+
   it('moves messages with the well-known folder names and finds or creates the snoozed folder once', async () => {
     const request = vi.fn(async (path: string, init?: RequestInit) => {
       if (path.startsWith('/me/mailFolders?')) return { value: [] }
