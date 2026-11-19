@@ -12,7 +12,7 @@ import { TodoProvider } from './data/todoProvider'
 import { groupBySender, staleIds, type ScanMessage, type SenderGroup } from './domain/cleanup'
 import { historyTriage, noiseSenders, senderHistoryLine } from './domain/history'
 import { compileRule, planRuleSync } from './domain/outlookRules'
-import { applyRules, newRule, recordHits, rememberDecision, suggestRules, type RuleSuggestion } from './domain/rules'
+import { applyRules, autoRuleSenders, newRule, recordHits, rememberDecision, retiredSenders, suggestRules, type RuleSuggestion } from './domain/rules'
 import { dueSnoozes, snoozeRecord, snoozeUntil, withoutSnoozes, type SnoozeOption } from './domain/snooze'
 import { autoArchivable, needsReading, outlookTriage, pruneTriage, rankTriaged, summarize, unsureBelow, type RunSummary, type Triaged } from './domain/triage'
 import { emptyAutomation, type Action, type Automation, type Message, type OutlookRule, type Rule, type RuleAction, type Triage } from './domain/types'
@@ -29,7 +29,7 @@ const keptKey = 'my-mail.kept.v1'
 const staleDays = 30
 
 type Services = { auth: MicrosoftAuth; mail: MailProvider; todo: TodoProvider; store: AutomationStore }
-type Sorted = { inbox: Message[]; cache: Record<string, Triage>; byRules: number; autoArchived: number; withoutModel: number }
+type Sorted = { inbox: Message[]; cache: Record<string, Triage>; byRules: number; autoArchived: number; newRules: number; withoutModel: number }
 
 /** The earliest received time in a page, which is where the next page starts. */
 function oldestOf(messages: Message[]): string | undefined {
@@ -152,7 +152,7 @@ export default function App() {
     try {
       const synced = await syncOutlookRules(current.mail, state.rules)
       setOutlookRules(synced.foreign)
-      return synced.changed ? { ...state, rules: synced.rules } : state
+      return synced.changed ? { ...state, rules: synced.rules, noRules: retiredSenders(state.rules, synced.rules, state.noRules) } : state
     } catch (failure) {
       setError(errorText(failure))
       return state
@@ -230,19 +230,30 @@ export default function App() {
     }
 
     let autoArchived = 0
+    let newRules = 0
     if (settings.autoArchive) {
       const quiet = inbox.filter((message) => cache[message.id] && autoArchivable(message, cache[message.id]))
       if (quiet.length) {
         await current.mail.archiveMany(quiet.map((message) => message.id))
         autoArchived = quiet.length
         const gone = new Set(quiet.map((message) => message.id))
+        const sure = quiet.map((message) => ({ message, triage: cache[message.id] }))
         inbox = inbox.filter((message) => !gone.has(message.id))
         cache = Object.fromEntries(Object.entries(cache).filter(([id]) => !gone.has(id)))
+
+        // A sender the sorter just cleared gets a rule, so Outlook archives the next one on arrival without a model.
+        const state = automationRef.current
+        const senders = autoRuleSenders(sure, state, [...messagesRef.current.filter((message) => !gone.has(message.id)), ...inbox])
+        if (senders.length) {
+          const made = senders.map((from) => newRule({ from, action: 'archive', auto: true }, crypto.randomUUID(), now))
+          await persistAutomation(await pushRules(current, { ...state, rules: [...state.rules, ...made] }), current)
+          newRules = made.length
+        }
       }
     }
 
-    return { inbox, cache, byRules: removed.size, autoArchived, withoutModel }
-  }, [persistAutomation])
+    return { inbox, cache, byRules: removed.size, autoArchived, newRules, withoutModel }
+  }, [persistAutomation, pushRules])
 
   const run = useCallback(async (current: Services, options: { settings: Settings }) => {
     setBusy('checking mail')
@@ -276,7 +287,7 @@ export default function App() {
       setMore(page.more)
       setKept((current) => Object.fromEntries(Object.entries(current).filter(([id]) => inbox.some((message) => message.id === id))))
       const counted = summarize(inbox.map((message) => ({ message, triage: cache[message.id] })), { byRules: sorted.byRules, autoArchived: sorted.autoArchived, returned, withoutModel: sorted.withoutModel })
-      setSummary({ ...counted, inbox: Math.max(inbox.length, (total ?? 0) - sorted.byRules - sorted.autoArchived) })
+      setSummary({ ...counted, inbox: Math.max(inbox.length, (total ?? 0) - sorted.byRules - sorted.autoArchived), newRules: sorted.newRules })
     } catch (failure) {
       setError(errorText(failure))
     } finally {
@@ -309,6 +320,7 @@ export default function App() {
         needReply: summary.needReply + sorted.inbox.filter((message) => sorted.cache[message.id]?.needsReply).length,
         byRules: summary.byRules + sorted.byRules,
         autoArchived: summary.autoArchived + sorted.autoArchived,
+        newRules: (summary.newRules ?? 0) + sorted.newRules,
         withoutModel: summary.withoutModel + sorted.withoutModel,
       } : summary)
     } catch (failure) {
@@ -494,7 +506,7 @@ export default function App() {
   }
 
   async function updateRules(rules: Rule[]): Promise<void> {
-    let next: Automation = { ...automationRef.current, rules }
+    let next: Automation = { ...automationRef.current, rules, noRules: retiredSenders(automationRef.current.rules, rules, automationRef.current.noRules) }
     if (services) next = await pushRules(services, next)
     await persistAutomation(next)
   }

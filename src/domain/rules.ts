@@ -1,4 +1,4 @@
-import type { Action, Decision, Message, Rule, RuleAction } from './types'
+import type { Action, Category, Decision, Message, Rule, RuleAction, Triage } from './types'
 
 const normalize = (value: string) => value.trim().toLowerCase()
 
@@ -67,8 +67,42 @@ export function rememberDecision(decisions: Decision[], message: Message, action
   return next.slice(-keep)
 }
 
-export function newRule(input: { from?: string; subject?: string; action: RuleAction }, id: string, createdAt: string): Rule {
-  return { id, from: input.from?.trim() || undefined, subject: input.subject?.trim() || undefined, action: input.action, enabled: true, createdAt, hits: 0 }
+export function newRule(input: { from?: string; subject?: string; action: RuleAction; auto?: boolean }, id: string, createdAt: string): Rule {
+  return { id, from: input.from?.trim() || undefined, subject: input.subject?.trim() || undefined, action: input.action, enabled: true, createdAt, hits: 0, auto: input.auto || undefined }
+}
+
+/** Kinds that earn their sender a rule once the sorter is sure. Notifications stay out: the same address sends login codes and security alerts. */
+export const ruleCategories: Category[] = ['newsletter', 'promo', 'receipt']
+
+const engaged: Action[] = ['reply', 'task', 'keep', 'flag', 'snooze']
+
+/**
+ * Senders of mail that was just auto-archived who should get an archive rule, so Outlook clears the next one on arrival.
+ * A sender is skipped when a rule already names them, when I deleted the rule made for them before,
+ * when I have ever replied to, kept, flagged, snoozed, or made a task from their mail, or when other mail of theirs stayed in the inbox.
+ */
+export function autoRuleSenders(archived: { message: Message; triage: Triage }[], state: { rules: Rule[]; decisions: Decision[]; noRules?: string[] }, staying: Message[]): string[] {
+  const address = (message: Message) => message.from.address.trim().toLowerCase()
+  const blocked = new Set([
+    ...(state.noRules ?? []),
+    ...state.decisions.filter((decision) => engaged.includes(decision.action)).map((decision) => decision.from),
+    ...staying.map(address),
+  ])
+  const senders = new Set<string>()
+  for (const { message, triage } of archived) {
+    const from = address(message)
+    if (!from.includes('@') || !ruleCategories.includes(triage.category) || blocked.has(from)) continue
+    if (state.rules.some((rule) => rule.from && !rule.subject && from.includes(normalize(rule.from)))) continue
+    senders.add(from)
+  }
+  return [...senders]
+}
+
+/** Remember the senders whose auto-made rule was deleted, here or in Outlook. */
+export function retiredSenders(before: Rule[], after: Rule[], known: string[] = []): string[] {
+  const kept = new Set(after.map((rule) => rule.id))
+  const gone = before.filter((rule) => rule.auto && rule.from && !kept.has(rule.id)).map((rule) => normalize(rule.from!))
+  return gone.length ? [...new Set([...known, ...gone])] : known
 }
 
 export function describeRule(rule: Rule): string {

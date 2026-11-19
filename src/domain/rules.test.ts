@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { applyRules, matchesRule, newRule, recordHits, rememberDecision, senderDomain, suggestRules } from './rules'
+import { applyRules, autoRuleSenders, matchesRule, newRule, recordHits, rememberDecision, retiredSenders, senderDomain, suggestRules } from './rules'
 import { message } from './fixtures'
-import type { Decision, Rule } from './types'
+import type { Category, Decision, Rule, Triage } from './types'
 
 
 const rule = (overrides: Partial<Rule>): Rule => ({ id: 'r', action: 'archive', enabled: true, createdAt: '2026-11-01T00:00:00Z', hits: 0, ...overrides })
@@ -43,5 +43,28 @@ describe('rules', () => {
   it('builds a rule from a form, trimming blanks away', () => {
     expect(newRule({ from: ' deals@shop.example.com ', subject: '  ', action: 'archive' }, 'id', 'now')).toEqual({ id: 'id', from: 'deals@shop.example.com', subject: undefined, action: 'archive', enabled: true, createdAt: 'now', hits: 0 })
     expect(senderDomain('Deals@Shop.Example.com')).toBe('@shop.example.com')
+  })
+})
+
+describe('rules the sorter makes', () => {
+  const sure = (id: string, address: string, category: Category) => ({ message: message(id, address), triage: { messageId: id, category, summary: '', needsReply: false, suggested: 'archive', confidence: 0.95, source: 'jev', triagedAt: 'now' } satisfies Triage })
+  const decision = (from: string, action: Decision['action']): Decision => ({ messageId: 'd', from, action, at: 'then' })
+
+  it('gives one rule to each sender of an auto-archived newsletter, promo, or receipt', () => {
+    const archived = [sure('m1', 'News@daily.example.com', 'newsletter'), sure('m2', 'news@daily.example.com', 'newsletter'), sure('m3', 'deals@shop.example.com', 'promo'), sure('m4', 'orders@shop.example.com', 'receipt'), sure('m5', 'alerts@bank.example.com', 'notification')]
+    expect(autoRuleSenders(archived, { rules: [], decisions: [] }, [])).toEqual(['news@daily.example.com', 'deals@shop.example.com', 'orders@shop.example.com'])
+  })
+
+  it('skips senders with a rule, a deleted auto rule, mail I acted on, or mail still in the inbox', () => {
+    const archived = [sure('m1', 'a@one.example.com', 'promo'), sure('m2', 'b@two.example.com', 'promo'), sure('m3', 'c@three.example.com', 'promo'), sure('m4', 'd@four.example.com', 'promo'), sure('m5', 'e@five.example.com', 'promo')]
+    const state = { rules: [rule({ from: '@one.example.com', enabled: false })], decisions: [decision('c@three.example.com', 'reply'), decision('e@five.example.com', 'archive')], noRules: ['b@two.example.com'] }
+    expect(autoRuleSenders(archived, state, [message('m9', 'D@four.example.com')])).toEqual(['e@five.example.com'])
+  })
+
+  it('remembers a sender whose auto rule was deleted, and only an auto rule', () => {
+    const before = [rule({ id: 'a', from: 'News@daily.example.com', auto: true }), rule({ id: 'b', from: 'deals@shop.example.com' }), rule({ id: 'c', from: 'x@y.example.com', auto: true })]
+    expect(retiredSenders(before, [before[2]], ['old@example.com'])).toEqual(['old@example.com', 'news@daily.example.com'])
+    expect(retiredSenders(before, before, ['old@example.com'])).toEqual(['old@example.com'])
+    expect(newRule({ from: 'a@b.example.com', action: 'archive', auto: true }, 'id', 'now').auto).toBe(true)
   })
 })

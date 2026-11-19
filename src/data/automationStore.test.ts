@@ -33,7 +33,7 @@ describe('automation uploads', () => {
 
 describe('automation store', () => {
   it('repairs a half-formed file into empty lists', () => {
-    expect(parseAutomation({ rules: 'nope', updatedAt: 5 })).toEqual({ rules: [], decisions: [], snoozes: [], updatedAt: '' })
+    expect(parseAutomation({ rules: 'nope', updatedAt: 5 })).toEqual({ rules: [], decisions: [], snoozes: [], noRules: [], updatedAt: '' })
     expect(parseAutomation(null)).toBeUndefined()
   })
 

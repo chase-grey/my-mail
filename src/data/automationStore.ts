@@ -14,6 +14,7 @@ export function parseAutomation(value: unknown): StoredAutomation | undefined {
     rules: list(record.rules),
     decisions: list(record.decisions),
     snoozes: list(record.snoozes),
+    noRules: list(record.noRules),
     updatedAt: typeof record.updatedAt === 'string' ? record.updatedAt : '',
   }
 }

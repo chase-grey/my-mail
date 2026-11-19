@@ -29,7 +29,7 @@ export function SettingsView({ settings, connection, accountName, busy, error, o
       <div className="stack">
         <Field label="jev api key"><input type="password" autoComplete="off" value={settings.jevApiKey} onChange={set('jevApiKey')} /></Field>
         <Switch label="write each verdict to the message as an outlook category" checked={settings.writeCategories} onChange={toggle('writeCategories')} />
-        <Switch label="archive newsletters, promos, and receipts it is sure about" checked={settings.autoArchive} onChange={toggle('autoArchive')} />
+        <Switch label="archive newsletters, promos, and receipts it is sure about and make rules for them" checked={settings.autoArchive} onChange={toggle('autoArchive')} />
       </div>
     </Card>
 

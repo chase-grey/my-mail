@@ -50,6 +50,8 @@ export type Rule = {
   enabled: boolean
   createdAt: string
   hits: number
+  /** Made by the sorter after it auto-archived this sender, not by me. */
+  auto?: boolean
   /** Set when the rule has been written to Outlook and runs on the server while the app is closed. */
   outlookId?: string
 }
@@ -83,6 +85,8 @@ export type Automation = {
   rules: Rule[]
   decisions: Decision[]
   snoozes: Snooze[]
+  /** Senders whose auto-made rule I deleted. The sorter does not make them another. */
+  noRules?: string[]
 }
 
 export const emptyAutomation: Automation = { rules: [], decisions: [], snoozes: [] }

@@ -59,6 +59,8 @@ export type RunSummary = {
   returned: number
   /** How many verdicts came without a language model this run: Outlook categories, sender history, Jev. */
   withoutModel: number
+  /** Sender rules the sorter made this run from what it auto-archived. */
+  newRules?: number
 }
 
 export function summarize(items: Triaged[], counts: Pick<RunSummary, 'byRules' | 'autoArchived' | 'returned' | 'withoutModel'>): RunSummary {
@@ -74,6 +76,7 @@ export function summaryLine(summary: RunSummary): string {
   if (summary.needReply) parts.push(`${summary.needReply} need a reply`)
   if (summary.byRules) parts.push(`${summary.byRules} by rules`)
   if (summary.autoArchived) parts.push(`${summary.autoArchived} auto-archived`)
+  if (summary.newRules) parts.push(`${summary.newRules} new ${summary.newRules === 1 ? 'rule' : 'rules'}`)
   if (summary.returned) parts.push(`${summary.returned} back from snooze`)
   return parts.join(' · ')
 }

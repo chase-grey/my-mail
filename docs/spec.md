@@ -389,7 +389,11 @@ The icon is an envelope outline on teal, matching the violet brain and the track
    sorter put under 60%: batches of twelve, numbered, trimmed bodies, known category passed in, low
    effort, summary and task title back, no draft. Then write each new verdict to the message as a
    category. Then **auto-archive** where enabled: quiet category, confidence at or above the gate,
-   not flagged, not high importance. Recorded as `handled` with undo.
+   not flagged, not high importance. Recorded as `handled` with undo. The sender of an auto-archived
+   newsletter, promo, or receipt then gets an `archive from <address>` rule marked `auto`, written to
+   Outlook like any other, unless a rule already names them, I have replied to, kept, flagged,
+   snoozed, or made a task from their mail, other mail of theirs stayed in the inbox, or I deleted
+   the rule made for them before (kept as `noRules` in `automation.json`). Notifications get no rule.
 9. **Render** needs me, probably fine, handled, snoozed, kept. Refresh button repeats from step 3.
 
 Budget: step 1 under 300ms; steps 2 to 6 under two seconds on a phone; the model fills in as batches

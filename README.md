@@ -40,7 +40,11 @@ The product specification, including why this is built rather than forked, lives
   you never open or Jev calls a list as `probably noise`, and clears a sender in one tap with
   `archive all + rule`. Also offers to archive everything read and older than 30 days.
 - **auto-archive** · off by default. When on, quiet categories the sorter is at least 85% sure
-  about are archived on their own. Flagged or high-importance mail never is.
+  about are archived on their own. Flagged or high-importance mail never is. The sender of an
+  auto-archived newsletter, promo, or receipt also gets an archive rule in Outlook, so the next one
+  never reaches the inbox or a model. No rule is made for a sender you have replied to, kept,
+  flagged, snoozed, or made a task from, one with other mail still in the inbox, or one whose
+  auto-made rule you deleted.
 - **snooze** · moves the message to a `snoozed` folder and brings it back unread when the time
   comes. Snooze times sync through the OneDrive app folder, so phone and PC agree.
 

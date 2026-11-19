@@ -28,6 +28,7 @@ export function RulesView({ rules, outlookRules, snoozes, error, onRules }: {
   const replace = (rule: Rule) => onRules(rules.map((item) => item.id === rule.id ? rule : item))
   const meta = (rule: Rule) => [
     rule.enabled ? undefined : 'off',
+    rule.auto ? 'auto' : undefined,
     ruleTier(rule) === 'outlook' ? (rule.outlookId ? 'runs in outlook' : 'going to outlook') : `runs here · ${rule.hits} ${rule.hits === 1 ? 'hit' : 'hits'}`,
   ].filter(Boolean).join(' · ')
 
