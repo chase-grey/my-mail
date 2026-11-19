@@ -77,6 +77,32 @@ describe('mail provider', () => {
     expect(request.mock.calls.some(([path]) => path === '/$batch')).toBe(false)
   })
 
+  it('sends throttled moves in a batch again, and reports the ones that never move', async () => {
+    type Sent = { requests: { id: string; url: string }[] }
+    const seen = new Map<string, number>()
+    const request = vi.fn(async (_path: string, init?: RequestInit) => ({
+      responses: (JSON.parse(init!.body as string) as Sent).requests.map(({ id, url }) => {
+        const message = url.split('/')[3]
+        const tries = (seen.get(message) ?? 0) + 1
+        seen.set(message, tries)
+        if (message === 'gone') return { id, status: 404 }
+        if (message === 'denied') return { id, status: 403 }
+        if (message === 'busy') return { id, status: 429, headers: { 'Retry-After': '7' } }
+        return message === 'slow' && tries < 3 ? { id, status: 429 } : { id, status: 201 }
+      }),
+    }))
+    const sleep = vi.fn(async () => undefined)
+    const progress: number[] = []
+    const left = await new MailProvider({ request } as unknown as GraphClient, sleep).archiveMany(['ok', 'slow', 'gone', 'denied', 'busy'], (done) => progress.push(done))
+    expect(left).toEqual(['denied', 'busy'])
+    expect(seen.get('ok')).toBe(1)
+    expect(seen.get('slow')).toBe(3)
+    expect(seen.get('denied')).toBe(1)
+    expect(seen.get('busy')).toBe(6)
+    expect(progress.at(-1)).toBe(3)
+    expect(sleep).toHaveBeenCalledWith(7000)
+  })
+
   it('treats a vanished snoozed message as already handled', async () => {
     const request = vi.fn(async () => { throw new GraphError(404, 'gone') })
     await expect(new MailProvider({ request } as unknown as GraphClient).unsnooze('m1')).resolves.toBe(false)

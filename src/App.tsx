@@ -59,6 +59,8 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message.toLowerCase() : 'something failed'
 }
 
+const notMoved = (count: number) => `${count} did not move`
+
 async function createServices(clientId: string): Promise<Services> {
   const auth = await MicrosoftAuth.create(clientId)
   const graph = new GraphClient(() => auth.accessToken(), undefined, undefined, mailDefaultHeaders)
@@ -585,7 +587,8 @@ export default function App() {
       if (taken?.ruleId) await updateRules(automationRef.current.rules.filter((item) => item.id !== taken.ruleId))
       setCleanup((current) => ({ ...current, working: `bringing back ${group.count} from ${group.name}` }))
       try {
-        await services.mail.moveMany(group.ids, 'inbox', (done) => setCleanup((current) => ({ ...current, working: `${done} of ${group.count} from ${group.name}` })))
+        const stuck = await services.mail.moveMany(group.ids, 'inbox', (done) => setCleanup((current) => ({ ...current, working: `${done} of ${group.count} from ${group.name}` })))
+        if (stuck.length) throw new Error(notMoved(stuck.length))
         clearedRef.current.delete(group.address)
         const back = new Set(scanRef.current.map((message) => message.id))
         scanRef.current = [...scanRef.current, ...(taken?.scan ?? []).filter((message) => !back.has(message.id))]
@@ -605,11 +608,20 @@ export default function App() {
       if (!services) return
       const ids = staleIds(scanRef.current, staleDays)
       setCleanup((current) => ({ ...current, working: `archiving ${ids.length}` }))
-      await services.mail.archiveMany(ids, (done) => setCleanup((current) => ({ ...current, working: `archived ${done} of ${ids.length}` })))
-      const gone = new Set(ids)
+      let stuck: string[]
+      try {
+        stuck = await services.mail.archiveMany(ids, (done) => setCleanup((current) => ({ ...current, working: `archived ${done} of ${ids.length}` })))
+      } catch (failure) {
+        setCleanup((current) => ({ ...current, working: undefined }))
+        setError(errorText(failure))
+        return
+      }
+      const kept = new Set(stuck)
+      const gone = new Set(ids.filter((id) => !kept.has(id)))
       scanRef.current = scanRef.current.filter((message) => !gone.has(message.id))
-      setCleanup((current) => ({ ...current, working: undefined, total: scanRef.current.length, groups: regroup(current.groups), staleCount: 0 }))
+      setCleanup((current) => ({ ...current, working: undefined, total: scanRef.current.length, groups: regroup(current.groups), staleCount: stuck.length }))
       drop(messages.filter((message) => gone.has(message.id)))
+      if (stuck.length) setError(notMoved(stuck.length))
     },
   }
 
@@ -629,7 +641,17 @@ export default function App() {
     setCleanup((current) => ({ ...current, working: `${action === 'archive' ? 'archiving' : 'deleting'} ${group.count} from ${group.name}` }))
     try {
       const move = action === 'archive' ? services.mail.archiveMany.bind(services.mail) : services.mail.deleteMany.bind(services.mail)
-      await move(group.ids, (done) => setCleanup((current) => ({ ...current, working: `${done} of ${group.count} from ${group.name}` })))
+      const stuck = await move(group.ids, (done) => setCleanup((current) => ({ ...current, working: `${done} of ${group.count} from ${group.name}` })))
+      if (stuck.length) {
+        // Some stayed in the inbox: the row keeps its buttons and shrinks to what is left, so another press finishes it.
+        const kept = new Set(stuck)
+        const moved = new Set(group.ids.filter((id) => !kept.has(id)))
+        scanRef.current = scanRef.current.filter((message) => !moved.has(message.id))
+        const rest = groupBySender(scanRef.current.filter((message) => kept.has(message.id)))[0]
+        setCleanup((current) => ({ ...current, total: (current.total ?? current.scanned) - moved.size, groups: current.groups.map((item) => item.address === group.address && rest ? { ...rest, kind: item.kind, kindConfidence: item.kindConfidence } : item), staleCount: staleIds(scanRef.current, staleDays).length }))
+        drop(messages.filter((message) => moved.has(message.id)))
+        throw new Error(notMoved(stuck.length))
+      }
       const gone = new Set(group.ids)
       clearedRef.current.set(group.address, { scan: scanRef.current.filter((message) => gone.has(message.id)), inbox: messagesRef.current.filter((message) => gone.has(message.id)), ruleId })
       scanRef.current = scanRef.current.filter((message) => !gone.has(message.id))

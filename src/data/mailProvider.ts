@@ -23,7 +23,7 @@ type GraphMessage = {
 }
 type GraphFolder = { id: string; displayName: string }
 type GraphRule = { id: string; displayName: string; isEnabled: boolean; sequence: number; conditions?: Record<string, unknown>; actions?: Record<string, unknown> }
-type BatchResponse = { responses: { id: string; status: number; body?: unknown }[] }
+type BatchResponse = { responses: { id: string; status: number; headers?: Record<string, string>; body?: unknown }[] }
 
 export const messageSelect = 'id,conversationId,subject,from,receivedDateTime,bodyPreview,body,isRead,flag,importance,hasAttachments,categories,webLink'
 export const scanSelect = 'id,subject,from,receivedDateTime,bodyPreview,isRead,flag'
@@ -33,6 +33,15 @@ export const receiptsFolderName = 'receipts'
 export const inboxPageSize = 50
 export const scanPageSize = 500
 export const batchLimit = 20
+export const moveAttempts = 6
+
+const retryable = (status: number) => status === 429 || status === 424 || status >= 500
+
+/** Seconds a throttled batch item asks to wait, when it says. */
+function retryAfter(headers?: Record<string, string>): number {
+  const value = Object.entries(headers ?? {}).find(([name]) => name.toLowerCase() === 'retry-after')?.[1]
+  return Number(value) || 0
+}
 
 /** Ask Graph for ids that survive moves, and for plain-text bodies. */
 export const mailDefaultHeaders = { Prefer: 'IdType="ImmutableId", outlook.body-content-type="text"' }
@@ -86,7 +95,10 @@ export class MailProvider {
   private archiveId?: string
   private masterCategoriesReady = false
 
-  constructor(private readonly graph: GraphClient) {}
+  constructor(
+    private readonly graph: GraphClient,
+    private readonly sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  ) {}
 
   /**
    * The newest `count` inbox messages, or the next `count` received at or before `before`.
@@ -147,23 +159,48 @@ export class MailProvider {
     return this.move(id, 'deleteditems')
   }
 
-  /** Many moves in one round trip each twenty. Returns how many Graph accepted. */
-  async moveMany(ids: string[], destinationId: string, onProgress?: (done: number) => void): Promise<number> {
+  /**
+   * Many moves in one round trip each twenty. Graph throttles part of a batch when the mailbox is busy,
+   * so those are sent again after the wait it asks for. Returns the ids that still did not move.
+   */
+  async moveMany(ids: string[], destinationId: string, onProgress?: (done: number) => void): Promise<string[]> {
     let done = 0
+    const left: string[] = []
     for (const group of chunk(ids, batchLimit)) {
-      const requests = group.map((id, index) => ({ id: String(index), method: 'POST', url: `/me/messages/${encodeURIComponent(id)}/move`, headers: { 'Content-Type': 'application/json' }, body: { destinationId } }))
-      const result = await this.graph.request<BatchResponse>('/$batch', { method: 'POST', body: JSON.stringify({ requests }) })
-      done += result.responses.filter((response) => response.status < 300 || response.status === 404).length
-      onProgress?.(done)
+      let pending = group
+      for (let attempt = 0; pending.length && attempt < moveAttempts; attempt++) {
+        const requests = pending.map((id, index) => ({ id: String(index), method: 'POST', url: `/me/messages/${encodeURIComponent(id)}/move`, headers: { 'Content-Type': 'application/json' }, body: { destinationId } }))
+        const again: string[] = []
+        let wait = 2 ** attempt
+        try {
+          const result = await this.graph.request<BatchResponse>('/$batch', { method: 'POST', body: JSON.stringify({ requests }) })
+          const byId = new Map(result.responses.map((response) => [response.id, response]))
+          pending.forEach((id, index) => {
+            const response = byId.get(String(index))
+            // 404: already gone, which is what was asked for.
+            if (response && (response.status < 300 || response.status === 404)) { done++; return }
+            if (response && !retryable(response.status)) { left.push(id); return }
+            again.push(id)
+            wait = Math.max(wait, retryAfter(response?.headers))
+          })
+        } catch (error) {
+          if (!(error instanceof GraphError && retryable(error.status))) throw error
+          again.push(...pending)
+        }
+        onProgress?.(done)
+        pending = again
+        if (pending.length && attempt < moveAttempts - 1) await this.sleep(Math.min(wait, 30) * 1000)
+      }
+      left.push(...pending)
     }
-    return done
+    return left
   }
 
-  archiveMany(ids: string[], onProgress?: (done: number) => void): Promise<number> {
+  archiveMany(ids: string[], onProgress?: (done: number) => void): Promise<string[]> {
     return this.moveMany(ids, 'archive', onProgress)
   }
 
-  deleteMany(ids: string[], onProgress?: (done: number) => void): Promise<number> {
+  deleteMany(ids: string[], onProgress?: (done: number) => void): Promise<string[]> {
     return this.moveMany(ids, 'deleteditems', onProgress)
   }
 
