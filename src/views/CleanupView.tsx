@@ -18,6 +18,8 @@ export type CleanupActions = {
   deleteSender: (group: SenderGroup) => Promise<void>
   /** Archive everything from the sender and add a rule so the next one never lands. */
   blockSender: (group: SenderGroup, action: 'archive' | 'delete') => Promise<void>
+  /** Put a cleared sender's mail back in the inbox and drop the rule made with it. */
+  undoSender: (group: SenderGroup) => Promise<void>
   unsubscribe: (group: SenderGroup) => Promise<string>
   archiveStale: () => Promise<void>
 }
@@ -35,7 +37,9 @@ function SenderRow({ group, onError, actions }: { group: SenderGroup; onError: (
       <span className="row-title" title={group.address}>{group.name}{group.kind && <span className={`chip${noise ? '' : ' is-quiet'}`}>{categoryLabel[group.kind]}</span>}</span>
       <small>{[describeGroup(group), note, group.cleared && (group.cleared === 'archive' ? 'archived' : 'deleted')].filter(Boolean).join(' · ')}</small>
     </div>
-    <div className="row-buttons">
+    {group.cleared ? <div className="row-buttons">
+      <button type="button" disabled={working} onClick={() => perform(() => actions.undoSender(group))}>undo</button>
+    </div> : <div className="row-buttons">
       <button type="button" className={noise ? 'is-suggested' : ''} disabled={working} onClick={() => perform(() => actions.blockSender(group, 'archive'))}>archive all + rule</button>
       <Menu label={`more for ${group.name}`} items={[
         { label: 'archive all', onSelect: () => perform(() => actions.archiveSender(group)) },
@@ -44,7 +48,7 @@ function SenderRow({ group, onError, actions }: { group: SenderGroup; onError: (
         { label: 'delete all + rule', danger: true, onSelect: () => perform(() => actions.blockSender(group, 'delete')) },
         { label: 'delete all', danger: true, onSelect: () => perform(() => actions.deleteSender(group)) },
       ]} />
-    </div>
+    </div>}
   </li>
 }
 

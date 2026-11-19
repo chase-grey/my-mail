@@ -121,6 +121,8 @@ export default function App() {
   const [dismissed, setDismissed] = useState<string[]>([])
   const [cleanup, setCleanup] = useState<CleanupState>(emptyCleanup)
   const scanRef = useRef<ScanMessage[]>([])
+  /** What each sender's clear took away this visit, by address, so undo can put it back. */
+  const clearedRef = useRef(new Map<string, { scan: ScanMessage[]; inbox: Message[]; ruleId?: string }>())
   const messagesRef = useRef(messages)
   messagesRef.current = messages
   const oldestRef = useRef<string | undefined>(undefined)
@@ -516,6 +518,7 @@ export default function App() {
       if (!services) return
       setError(undefined)
       setCleanup({ ...emptyCleanup })
+      clearedRef.current.clear()
       try {
         const scanned = await services.mail.scanInbox((count) => setCleanup((current) => ({ ...current, scanned: count })))
         scanRef.current = scanned
@@ -544,8 +547,36 @@ export default function App() {
     archiveSender: (group) => clearSender(group, 'archive'),
     deleteSender: (group) => clearSender(group, 'delete'),
     blockSender: async (group, action) => {
-      await updateRules([...automationRef.current.rules, newRule({ from: group.address, action }, crypto.randomUUID(), new Date().toISOString())])
-      await clearSender(group, action)
+      const rule = newRule({ from: group.address, action }, crypto.randomUUID(), new Date().toISOString())
+      await updateRules([...automationRef.current.rules, rule])
+      try {
+        await clearSender(group, action, rule.id)
+      } catch (failure) {
+        // The mail did not move, so the row keeps its buttons; the rule should not outlive it.
+        await updateRules(automationRef.current.rules.filter((item) => item.id !== rule.id))
+        throw failure
+      }
+    },
+    undoSender: async (group) => {
+      if (!services) return
+      const taken = clearedRef.current.get(group.address)
+      if (taken?.ruleId) await updateRules(automationRef.current.rules.filter((item) => item.id !== taken.ruleId))
+      setCleanup((current) => ({ ...current, working: `bringing back ${group.count} from ${group.name}` }))
+      try {
+        await services.mail.moveMany(group.ids, 'inbox', (done) => setCleanup((current) => ({ ...current, working: `${done} of ${group.count} from ${group.name}` })))
+        clearedRef.current.delete(group.address)
+        const back = new Set(scanRef.current.map((message) => message.id))
+        scanRef.current = [...scanRef.current, ...(taken?.scan ?? []).filter((message) => !back.has(message.id))]
+        setCleanup((current) => ({ ...current, working: undefined, total: (current.total ?? current.scanned) + group.count, groups: current.groups.map((item) => item.address === group.address ? { ...item, cleared: undefined } : item), staleCount: staleIds(scanRef.current, staleDays).length }))
+        const inbox = taken?.inbox ?? []
+        if (inbox.length) {
+          setMessages((current) => [...current, ...inbox.filter((message) => !current.some((item) => item.id === message.id))])
+          setSummary((current) => current ? { ...current, inbox: current.inbox + inbox.length, needReply: current.needReply + inbox.filter((message) => triageRef.current[message.id]?.needsReply).length } : current)
+        }
+        await persistAutomation({ ...automationRef.current, decisions: automationRef.current.decisions.filter((decision) => decision.messageId !== group.sample.id) })
+      } finally {
+        setCleanup((current) => ({ ...current, working: undefined }))
+      }
     },
     unsubscribe: (group) => unsubscribeFrom(group.sample.id, undefined, group.address),
     archiveStale: async () => {
@@ -571,13 +602,14 @@ export default function App() {
 
   const asMessage = (sample: ScanMessage): Message => ({ ...sample, body: '', importance: 'normal', hasAttachments: false, categories: [], webLink: '' })
 
-  async function clearSender(group: SenderGroup, action: 'archive' | 'delete'): Promise<void> {
+  async function clearSender(group: SenderGroup, action: 'archive' | 'delete', ruleId?: string): Promise<void> {
     if (!services) return
     setCleanup((current) => ({ ...current, working: `${action === 'archive' ? 'archiving' : 'deleting'} ${group.count} from ${group.name}` }))
     try {
       const move = action === 'archive' ? services.mail.archiveMany.bind(services.mail) : services.mail.deleteMany.bind(services.mail)
       await move(group.ids, (done) => setCleanup((current) => ({ ...current, working: `${done} of ${group.count} from ${group.name}` })))
       const gone = new Set(group.ids)
+      clearedRef.current.set(group.address, { scan: scanRef.current.filter((message) => gone.has(message.id)), inbox: messagesRef.current.filter((message) => gone.has(message.id)), ruleId })
       scanRef.current = scanRef.current.filter((message) => !gone.has(message.id))
       setCleanup((current) => ({ ...current, working: undefined, total: (current.total ?? current.scanned) - group.count, groups: current.groups.map((item) => item.address === group.address ? { ...item, cleared: action } : item), staleCount: staleIds(scanRef.current, staleDays).length }))
       drop(messages.filter((message) => gone.has(message.id)))
