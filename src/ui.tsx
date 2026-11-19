@@ -135,7 +135,7 @@ export function useMediaQuery(query: string): boolean {
   )
 }
 
-export type IconName = 'more' | 'refresh' | 'back' | 'inbox' | 'clean' | 'rules' | 'settings' | 'out'
+export type IconName = 'more' | 'refresh' | 'back' | 'inbox' | 'receipt' | 'clean' | 'rules' | 'settings' | 'out'
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   const common = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true }
@@ -148,6 +148,8 @@ export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
       return <svg {...common}><path d="M15 5l-7 7 7 7" /></svg>
     case 'inbox':
       return <svg {...common}><path d="M4 13l2.5-7h11L20 13v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z" /><path d="M4 13h4.5a3.5 3.5 0 0 0 7 0H20" /></svg>
+    case 'receipt':
+      return <svg {...common}><path d="M6 3h12v18l-3-2-3 2-3-2-3 2z" /><path d="M9 8h6M9 12h6" /></svg>
     case 'clean':
       return <svg {...common}><path d="M11 4l1.9 4.9L18 10.5l-5.1 1.9L11 17.5l-1.9-5.1L4 10.5l5.1-1.6z" /><path d="M18.5 16v4M16.5 18h4" /></svg>
     case 'rules':

@@ -59,6 +59,8 @@ export type RunSummary = {
   returned: number
   /** How many verdicts came without a language model this run: Outlook categories, sender history, Jev. */
   withoutModel: number
+  /** How many of the auto-archived went to the receipts folder instead of the archive. */
+  filed?: number
   /** Sender rules the sorter made this run from what it auto-archived. */
   newRules?: number
 }
@@ -75,7 +77,9 @@ export function summaryLine(summary: RunSummary): string {
   const parts = [`${summary.inbox} in inbox`]
   if (summary.needReply) parts.push(`${summary.needReply} need a reply`)
   if (summary.byRules) parts.push(`${summary.byRules} by rules`)
-  if (summary.autoArchived) parts.push(`${summary.autoArchived} auto-archived`)
+  const filed = summary.filed ?? 0
+  if (summary.autoArchived > filed) parts.push(`${summary.autoArchived - filed} auto-archived`)
+  if (filed) parts.push(`${filed} to receipts`)
   if (summary.newRules) parts.push(`${summary.newRules} new ${summary.newRules === 1 ? 'rule' : 'rules'}`)
   if (summary.returned) parts.push(`${summary.returned} back from snooze`)
   return parts.join(' · ')

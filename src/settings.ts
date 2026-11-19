@@ -13,6 +13,8 @@ export type Settings = {
   aboutMe: string
   autoArchive: boolean
   archiveAfterReply: boolean
+  /** Receipts go to their own folder instead of the archive, and the ones the sorter is sure about go there on their own. */
+  fileReceipts: boolean
   /** Write each verdict to the message as an Outlook category so other devices and Outlook rules can use it. */
   writeCategories: boolean
   brainUrl: string
@@ -26,6 +28,7 @@ export const defaultSettings: Settings = {
   aboutMe: '',
   autoArchive: false,
   archiveAfterReply: true,
+  fileReceipts: true,
   writeCategories: true,
   brainUrl: 'https://chase-grey.github.io/my-brain/',
 }
@@ -45,6 +48,7 @@ export function parseSettings(stored: unknown): Settings {
     aboutMe: text(value.aboutMe, ''),
     autoArchive: flag(value.autoArchive, defaultSettings.autoArchive),
     archiveAfterReply: flag(value.archiveAfterReply, defaultSettings.archiveAfterReply),
+    fileReceipts: flag(value.fileReceipts, defaultSettings.fileReceipts),
     writeCategories: flag(value.writeCategories, defaultSettings.writeCategories),
     brainUrl: text(value.brainUrl, defaultSettings.brainUrl),
   }

@@ -61,6 +61,8 @@ describe('triage', () => {
     const items = [{ message: message('m1', 'a@example.com'), triage: triage('m1', { needsReply: true }) }, { message: message('m2', 'b@example.com') }]
     expect(summaryLine(summarize(items, { byRules: 2, autoArchived: 0, returned: 1, withoutModel: 0 }))).toBe('2 in inbox · 1 need a reply · 2 by rules · 1 back from snooze')
     expect(summaryLine({ inbox: 4, needReply: 0, byRules: 0, autoArchived: 3, returned: 0, withoutModel: 3, newRules: 2 })).toBe('4 in inbox · 3 auto-archived · 2 new rules')
+    expect(summaryLine({ inbox: 4, needReply: 0, byRules: 0, autoArchived: 3, filed: 2, returned: 0, withoutModel: 3 })).toBe('4 in inbox · 1 auto-archived · 2 to receipts')
+    expect(summaryLine({ inbox: 4, needReply: 0, byRules: 0, autoArchived: 2, filed: 2, returned: 0, withoutModel: 2 })).toBe('4 in inbox · 2 to receipts')
     expect(summaryLine(summarize([], { byRules: 0, autoArchived: 0, returned: 0, withoutModel: 0 }))).toBe('0 in inbox')
   })
 

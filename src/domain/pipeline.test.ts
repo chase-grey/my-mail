@@ -59,6 +59,8 @@ describe('outlook rules', () => {
     expect(compilable(rule('e', {}))).toBe(false)
     const body = compileRule(rule('a', { from: '@shop.example.com', subject: 'sale' }), 'archive-id', 3)
     expect(body).toEqual({ displayName: 'my mail: archive anyone @shop.example.com and subject has “sale”', sequence: 3, isEnabled: true, conditions: { senderContains: ['@shop.example.com'], subjectContains: ['sale'] }, actions: { moveToFolder: 'archive-id', stopProcessingRules: true } })
+    expect(compilable(rule('f', { from: 'x', action: 'receipts' }))).toBe(true)
+    expect(compileRule(rule('f', { from: 'orders@shop.example.com', action: 'receipts' }), 'receipts-id', 2)).toMatchObject({ displayName: 'my mail: move to receipts from orders@shop.example.com', actions: { moveToFolder: 'receipts-id', stopProcessingRules: true } })
     expect(compileRule(rule('b', { from: 'x', action: 'delete' }), 'archive-id', 1).actions).toEqual({ delete: true, stopProcessingRules: true })
     expect(compileRule(rule('c', { from: 'x', action: 'read' }), 'archive-id', 1).actions).toEqual({ markAsRead: true, stopProcessingRules: true })
   })

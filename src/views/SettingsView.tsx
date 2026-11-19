@@ -15,7 +15,7 @@ export function SettingsView({ settings, connection, accountName, busy, error, o
 }) {
   const set = <K extends keyof Settings>(key: K) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     onSettings((current) => ({ ...current, [key]: event.target.value }))
-  const toggle = (key: 'autoArchive' | 'archiveAfterReply' | 'writeCategories') => (value: boolean) => onSettings((current) => ({ ...current, [key]: value }))
+  const toggle = (key: 'autoArchive' | 'archiveAfterReply' | 'writeCategories' | 'fileReceipts') => (value: boolean) => onSettings((current) => ({ ...current, [key]: value }))
 
   return <>
     <Card title="microsoft account">
@@ -30,6 +30,7 @@ export function SettingsView({ settings, connection, accountName, busy, error, o
         <Field label="jev api key"><input type="password" autoComplete="off" value={settings.jevApiKey} onChange={set('jevApiKey')} /></Field>
         <Switch label="write each verdict to the message as an outlook category" checked={settings.writeCategories} onChange={toggle('writeCategories')} />
         <Switch label="archive newsletters, promos, and receipts it is sure about and make rules for them" checked={settings.autoArchive} onChange={toggle('autoArchive')} />
+        <Switch label="move receipts to their own folder" checked={settings.fileReceipts} onChange={toggle('fileReceipts')} />
       </div>
     </Card>
 

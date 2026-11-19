@@ -40,6 +40,13 @@ describe('rules', () => {
     expect(decisions[0].action).toBe('archive')
   })
 
+  it('suggests a receipts rule for a sender whose archives went to the receipts folder', () => {
+    let decisions: Decision[] = []
+    for (const id of ['r1', 'r2', 'r3']) decisions = rememberDecision(decisions, message(id, 'orders@shop.example.com'), 'archive', 'now', undefined, true)
+    expect(decisions[0].receipt).toBe(true)
+    expect(suggestRules(decisions, [])).toEqual([{ from: 'orders@shop.example.com', action: 'receipts', count: 3 }])
+  })
+
   it('builds a rule from a form, trimming blanks away', () => {
     expect(newRule({ from: ' deals@shop.example.com ', subject: '  ', action: 'archive' }, 'id', 'now')).toEqual({ id: 'id', from: 'deals@shop.example.com', subject: undefined, action: 'archive', enabled: true, createdAt: 'now', hits: 0 })
     expect(senderDomain('Deals@Shop.Example.com')).toBe('@shop.example.com')

@@ -39,7 +39,7 @@ export type Triage = {
   triagedAt: string
 }
 
-export const ruleActions = ['archive', 'delete', 'read', 'task', 'flag'] as const
+export const ruleActions = ['archive', 'receipts', 'delete', 'read', 'task', 'flag'] as const
 export type RuleAction = typeof ruleActions[number]
 
 export type Rule = {
@@ -70,6 +70,8 @@ export type Decision = {
   from: string
   action: Action
   at: string
+  /** The archive went to the receipts folder. Three of these suggest a receipts rule for the sender, not an archive rule. */
+  receipt?: boolean
   /** The message had not been opened when the decision was made. Three unread archives from a sender settle the next one without a model. */
   unread?: boolean
 }

@@ -29,6 +29,7 @@ export const messageSelect = 'id,conversationId,subject,from,receivedDateTime,bo
 export const scanSelect = 'id,subject,from,receivedDateTime,bodyPreview,isRead,flag'
 export const bodyLimit = 1500
 export const snoozedFolderName = 'snoozed'
+export const receiptsFolderName = 'receipts'
 export const inboxPageSize = 50
 export const scanPageSize = 500
 export const batchLimit = 20
@@ -81,7 +82,7 @@ export function ruleFromGraph(rule: GraphRule): OutlookRule {
 }
 
 export class MailProvider {
-  private snoozedFolderId?: string
+  private readonly folderIds = new Map<string, string>()
   private archiveId?: string
   private masterCategoriesReady = false
 
@@ -92,11 +93,20 @@ export class MailProvider {
    * Older pages are asked for by date, not by position, so mail archived in between does not shift the window.
    * The message at the boundary comes back again; the caller drops what it already has.
    */
-  async inbox(count = inboxPageSize, before?: string): Promise<{ messages: Message[]; more: boolean }> {
+  inbox(count = inboxPageSize, before?: string): Promise<{ messages: Message[]; more: boolean }> {
+    return this.page('inbox', count, before)
+  }
+
+  /** The receipts folder, newest first, paged by date the same way as the inbox. */
+  async receipts(count = inboxPageSize, before?: string): Promise<{ messages: Message[]; more: boolean }> {
+    return this.page(await this.receiptsFolder(), count, before)
+  }
+
+  private async page(folder: string, count: number, before?: string): Promise<{ messages: Message[]; more: boolean }> {
     const query = new URLSearchParams({ '$top': String(Math.min(count, inboxPageSize)), '$orderby': 'receivedDateTime desc', '$select': messageSelect })
     if (before) query.set('$filter', `receivedDateTime le ${before}`)
     const all: Message[] = []
-    let next: string | undefined = `/me/mailFolders/inbox/messages?${query}`
+    let next: string | undefined = `/me/mailFolders/${encodeURIComponent(folder)}/messages?${query}`
     while (next && all.length < count) {
       const page: { value: GraphMessage[]; '@odata.nextLink'?: string } = await this.graph.request(next)
       all.push(...page.value.map(fromGraph))
@@ -216,23 +226,56 @@ export class MailProvider {
     return folder.id
   }
 
-  async snoozedFolder(): Promise<string> {
-    if (this.snoozedFolderId) return this.snoozedFolderId
-    const query = new URLSearchParams({ '$filter': `displayName eq '${snoozedFolderName}'`, '$select': 'id,displayName' })
+  /** A top-level folder of ours by name, made the first time it is needed. */
+  private async folderNamed(name: string): Promise<string> {
+    const known = this.folderIds.get(name)
+    if (known) return known
+    const query = new URLSearchParams({ '$filter': `displayName eq '${name}'`, '$select': 'id,displayName' })
     const find = async () => (await this.graph.request<{ value: GraphFolder[] }>(`/me/mailFolders?${query}`)).value[0]
     let folder = await find()
     if (!folder) {
       try {
-        folder = await this.graph.request<GraphFolder>('/me/mailFolders', { method: 'POST', body: JSON.stringify({ displayName: snoozedFolderName, isHidden: false }) })
+        folder = await this.graph.request<GraphFolder>('/me/mailFolders', { method: 'POST', body: JSON.stringify({ displayName: name, isHidden: false }) })
       } catch (error) {
-        // 409: the folder was made between the look and the create.
+        // 409: the folder was made between the look and the create, or one exists under another casing.
         if (!(error instanceof GraphError && error.status === 409)) throw error
-        folder = await find()
-        if (!folder) throw error
+        const all = await this.graph.request<{ value: GraphFolder[] }>('/me/mailFolders?$top=100&$select=id,displayName')
+        const match = all.value.find((item) => item.displayName.toLowerCase() === name)
+        if (!match) throw error
+        folder = match
       }
     }
-    this.snoozedFolderId = folder.id
+    this.folderIds.set(name, folder.id)
     return folder.id
+  }
+
+  snoozedFolder(): Promise<string> {
+    return this.folderNamed(snoozedFolderName)
+  }
+
+  receiptsFolder(): Promise<string> {
+    return this.folderNamed(receiptsFolderName)
+  }
+
+  async fileReceipt(id: string): Promise<void> {
+    await this.move(id, await this.receiptsFolder())
+  }
+
+  async fileReceipts(ids: string[], onProgress?: (done: number) => void): Promise<void> {
+    if (ids.length) await this.moveMany(ids, await this.receiptsFolder(), onProgress)
+  }
+
+  /** Ids of archived mail that carries the receipt category: receipts sorted before the folder existed. */
+  async archivedReceipts(cap = 5000): Promise<string[]> {
+    const query = new URLSearchParams({ '$filter': "categories/any(c:c eq 'receipt')", '$select': 'id', '$top': String(scanPageSize) })
+    const ids: string[] = []
+    let next: string | undefined = `/me/mailFolders/archive/messages?${query}`
+    while (next && ids.length < cap) {
+      const page: { value: { id: string }[]; '@odata.nextLink'?: string } = await this.graph.request(next)
+      ids.push(...page.value.map((message) => message.id))
+      next = page['@odata.nextLink']
+    }
+    return ids
   }
 
   async snooze(id: string): Promise<void> {

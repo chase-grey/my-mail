@@ -246,7 +246,7 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
 
   const on: Handlers = {
     open: (item) => setOpenId(pane || selectedId !== item.message.id ? item.message.id : undefined),
-    archive: (item) => clear(item, 'right', () => actions.archive(item.message), 'archived', true),
+    archive: (item) => clear(item, 'right', () => actions.archive(item.message), actions.isReceipt(item.message) ? 'moved to receipts' : 'archived', true),
     remove: (item) => clear(item, 'fade', () => actions.remove(item.message), 'deleted', true),
     keep: (item) => clear(item, 'fade', () => actions.keep(item.message)),
     flag: (item) => void actions.flag(item.message).catch(() => undefined),

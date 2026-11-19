@@ -46,7 +46,7 @@ const suggestible: Record<string, RuleAction | undefined> = { archive: 'archive'
 export function suggestRules(decisions: Decision[], rules: Rule[], minimum = 3): RuleSuggestion[] {
   const tally = new Map<string, { from: string; action: RuleAction; ids: Set<string> }>()
   for (const decision of decisions) {
-    const action = suggestible[decision.action]
+    const action = decision.receipt && decision.action === 'archive' ? 'receipts' : suggestible[decision.action]
     if (!action || !decision.from) continue
     const from = decision.from.toLowerCase()
     const key = `${from}|${action}`
@@ -61,9 +61,9 @@ export function suggestRules(decisions: Decision[], rules: Rule[], minimum = 3):
     .sort((a, b) => b.count - a.count)
 }
 
-export function rememberDecision(decisions: Decision[], message: Message, action: Action, at: string, keep = 400): Decision[] {
+export function rememberDecision(decisions: Decision[], message: Message, action: Action, at: string, keep = 400, receipt = false): Decision[] {
   const next = decisions.filter((decision) => decision.messageId !== message.id)
-  next.push({ messageId: message.id, from: message.from.address.toLowerCase(), action, at, unread: !message.isRead || undefined })
+  next.push({ messageId: message.id, from: message.from.address.toLowerCase(), action, at, unread: !message.isRead || undefined, receipt: receipt || undefined })
   return next.slice(-keep)
 }
 
@@ -112,6 +112,7 @@ export function describeRule(rule: Rule): string {
 
 export const ruleActionLabel: Record<RuleAction, string> = {
   archive: 'archive',
+  receipts: 'move to receipts',
   delete: 'delete',
   read: 'mark read',
   task: 'make a task',

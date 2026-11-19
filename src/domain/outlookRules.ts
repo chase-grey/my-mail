@@ -15,14 +15,15 @@ export type OutlookRuleBody = {
 
 export function compilable(rule: Rule): boolean {
   if (!rule.from && !rule.subject) return false
-  return rule.action === 'archive' || rule.action === 'delete' || rule.action === 'read'
+  return rule.action === 'archive' || rule.action === 'receipts' || rule.action === 'delete' || rule.action === 'read'
 }
 
 export function outlookRuleName(rule: Rule): string {
   return `${outlookRulePrefix}${ruleActionLabel[rule.action]} ${describeRule(rule)}`.slice(0, 256)
 }
 
-export function compileRule(rule: Rule, archiveFolderId: string, sequence: number): OutlookRuleBody {
+/** `folderId` is where a rule that moves mail sends it: the archive, or the receipts folder for a receipts rule. */
+export function compileRule(rule: Rule, folderId: string, sequence: number): OutlookRuleBody {
   return {
     displayName: outlookRuleName(rule),
     sequence,
@@ -32,7 +33,7 @@ export function compileRule(rule: Rule, archiveFolderId: string, sequence: numbe
       ...(rule.subject ? { subjectContains: [rule.subject.trim()] } : {}),
     },
     actions: {
-      ...(rule.action === 'archive' ? { moveToFolder: archiveFolderId } : {}),
+      ...(rule.action === 'archive' || rule.action === 'receipts' ? { moveToFolder: folderId } : {}),
       ...(rule.action === 'delete' ? { delete: true } : {}),
       ...(rule.action === 'read' ? { markAsRead: true } : {}),
       stopProcessingRules: true,

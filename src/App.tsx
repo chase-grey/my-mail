@@ -20,6 +20,7 @@ import { parseUnsubscribe, unsubscribeMethod } from './domain/unsubscribe'
 import { loadSettings, saveSettings, type Settings } from './settings'
 import { CleanupView, type CleanupActions, type CleanupState } from './views/CleanupView'
 import { InboxView } from './views/InboxView'
+import { ReceiptsView, type ReceiptActions } from './views/ReceiptsView'
 import { RulesView } from './views/RulesView'
 import { Shell, type ShellLink, type View } from './views/Shell'
 import { SettingsView, type ConnectionStatus } from './views/SettingsView'
@@ -29,7 +30,7 @@ const keptKey = 'my-mail.kept.v1'
 const staleDays = 30
 
 type Services = { auth: MicrosoftAuth; mail: MailProvider; todo: TodoProvider; store: AutomationStore }
-type Sorted = { inbox: Message[]; cache: Record<string, Triage>; byRules: number; autoArchived: number; newRules: number; withoutModel: number }
+type Sorted = { inbox: Message[]; cache: Record<string, Triage>; byRules: number; autoArchived: number; filed: number; newRules: number; withoutModel: number }
 
 /** The earliest received time in a page, which is where the next page starts. */
 function oldestOf(messages: Message[]): string | undefined {
@@ -71,13 +72,13 @@ async function syncOutlookRules(mail: MailProvider, rules: Rule[]): Promise<{ ru
   let next = rules.filter((rule) => !plan.dropped.includes(rule.id))
   let changed = plan.dropped.length > 0
   if (plan.create.length || plan.update.length) {
-    const archiveId = await mail.archiveFolderId()
+    const folder = (rule: Rule) => rule.action === 'receipts' ? mail.receiptsFolder() : mail.archiveFolderId()
     for (const rule of plan.create) {
-      const id = await mail.createRule(compileRule(rule, archiveId, next.indexOf(rule) + 1))
+      const id = await mail.createRule(compileRule(rule, await folder(rule), next.indexOf(rule) + 1))
       next = next.map((item) => item.id === rule.id ? { ...item, outlookId: id } : item)
       changed = true
     }
-    for (const rule of plan.update) await mail.updateRule(rule.outlookId!, compileRule(rule, archiveId, next.indexOf(rule) + 1))
+    for (const rule of plan.update) await mail.updateRule(rule.outlookId!, compileRule(rule, await folder(rule), next.indexOf(rule) + 1))
   }
   for (const id of plan.remove) await mail.deleteRule(id)
   return { rules: next, foreign: plan.foreign, changed }
@@ -92,6 +93,8 @@ export type MessageActions = {
   /** Write a reply on request. The strong model is for when the first one is not good enough. */
   draft: (message: Message, strong: boolean, instruction?: string) => Promise<string>
   snooze: (message: Message, option: SnoozeOption) => Promise<void>
+  /** Archiving this message sends it to the receipts folder. */
+  isReceipt: (message: Message) => boolean
   keep: (message: Message) => Promise<void>
   flag: (message: Message) => Promise<void>
   /** Follows the sender's List-Unsubscribe header. Returns a short note on what happened. */
@@ -168,6 +171,7 @@ export default function App() {
     const hits = applyRules(inbox, automationState.rules)
     for (const hit of hits) {
       if (hit.rule.action === 'archive') await current.mail.archive(hit.message.id)
+      else if (hit.rule.action === 'receipts') await current.mail.fileReceipt(hit.message.id)
       else if (hit.rule.action === 'delete') await current.mail.delete(hit.message.id)
       else if (hit.rule.action === 'read') await current.mail.markRead(hit.message.id)
       else if (hit.rule.action === 'flag') await current.mail.flag(hit.message.id)
@@ -232,12 +236,20 @@ export default function App() {
     }
 
     let autoArchived = 0
+    let filed = 0
     let newRules = 0
-    if (settings.autoArchive) {
-      const quiet = inbox.filter((message) => cache[message.id] && autoArchivable(message, cache[message.id]))
+    {
+      // Receipts the sorter is sure about go to their folder whether or not auto-archive is on.
+      const verdicts = cache
+      const toReceipts = (message: Message) => settings.fileReceipts && verdicts[message.id]?.category === 'receipt'
+      const quiet = inbox.filter((message) => verdicts[message.id] && autoArchivable(message, verdicts[message.id]) && (settings.autoArchive || toReceipts(message)))
       if (quiet.length) {
-        await current.mail.archiveMany(quiet.map((message) => message.id))
+        const receipts = quiet.filter(toReceipts)
+        const receiptSenders = new Set(receipts.map((message) => message.from.address.trim().toLowerCase()))
+        await current.mail.fileReceipts(receipts.map((message) => message.id))
+        if (quiet.length > receipts.length) await current.mail.archiveMany(quiet.filter((message) => !toReceipts(message)).map((message) => message.id))
         autoArchived = quiet.length
+        filed = receipts.length
         const gone = new Set(quiet.map((message) => message.id))
         const sure = quiet.map((message) => ({ message, triage: cache[message.id] }))
         inbox = inbox.filter((message) => !gone.has(message.id))
@@ -247,14 +259,14 @@ export default function App() {
         const state = automationRef.current
         const senders = autoRuleSenders(sure, state, [...messagesRef.current.filter((message) => !gone.has(message.id)), ...inbox])
         if (senders.length) {
-          const made = senders.map((from) => newRule({ from, action: 'archive', auto: true }, crypto.randomUUID(), now))
+          const made = senders.map((from) => newRule({ from, action: receiptSenders.has(from) ? 'receipts' : 'archive', auto: true }, crypto.randomUUID(), now))
           await persistAutomation(await pushRules(current, { ...state, rules: [...state.rules, ...made] }), current)
           newRules = made.length
         }
       }
     }
 
-    return { inbox, cache, byRules: removed.size, autoArchived, newRules, withoutModel }
+    return { inbox, cache, byRules: removed.size, autoArchived, filed, newRules, withoutModel }
   }, [persistAutomation, pushRules])
 
   const run = useCallback(async (current: Services, options: { settings: Settings }) => {
@@ -289,7 +301,7 @@ export default function App() {
       setMore(page.more)
       setKept((current) => Object.fromEntries(Object.entries(current).filter(([id]) => inbox.some((message) => message.id === id))))
       const counted = summarize(inbox.map((message) => ({ message, triage: cache[message.id] })), { byRules: sorted.byRules, autoArchived: sorted.autoArchived, returned, withoutModel: sorted.withoutModel })
-      setSummary({ ...counted, inbox: Math.max(inbox.length, (total ?? 0) - sorted.byRules - sorted.autoArchived), newRules: sorted.newRules })
+      setSummary({ ...counted, inbox: Math.max(inbox.length, (total ?? 0) - sorted.byRules - sorted.autoArchived), filed: sorted.filed, newRules: sorted.newRules })
     } catch (failure) {
       setError(errorText(failure))
     } finally {
@@ -322,6 +334,7 @@ export default function App() {
         needReply: summary.needReply + sorted.inbox.filter((message) => sorted.cache[message.id]?.needsReply).length,
         byRules: summary.byRules + sorted.byRules,
         autoArchived: summary.autoArchived + sorted.autoArchived,
+        filed: (summary.filed ?? 0) + sorted.filed,
         newRules: (summary.newRules ?? 0) + sorted.newRules,
         withoutModel: summary.withoutModel + sorted.withoutModel,
       } : summary)
@@ -394,13 +407,20 @@ export default function App() {
     setSummary((current) => current ? { ...current, inbox: current.inbox - gone.size, needReply: current.needReply - removedMessages.filter((message) => triageRef.current[message.id]?.needsReply).length } : current)
   }
 
+  /** A receipt leaves the inbox for the receipts folder, not the archive. */
+  function isReceipt(message: Message): boolean {
+    if (!settingsRef.current.fileReceipts) return false
+    const verdict = triageRef.current[message.id]
+    return verdict ? verdict.category === 'receipt' : message.categories.includes('receipt')
+  }
+
   async function decide(message: Message, action: Action, work: () => Promise<void>, removes = true): Promise<void> {
     if (!services) throw new Error('connect microsoft first')
     setError(undefined)
     try {
       await work()
       if (removes) drop([message])
-      await persistAutomation({ ...automationRef.current, decisions: rememberDecision(automationRef.current.decisions, message, action, new Date().toISOString()) })
+      await persistAutomation({ ...automationRef.current, decisions: rememberDecision(automationRef.current.decisions, message, action, new Date().toISOString(), undefined, action === 'archive' && isReceipt(message)) })
     } catch (failure) {
       setError(errorText(failure))
       throw failure
@@ -431,15 +451,17 @@ export default function App() {
   }
 
   const actions: MessageActions = {
-    archive: (message) => decide(message, 'archive', () => services!.mail.archive(message.id)),
+    archive: (message) => decide(message, 'archive', () => isReceipt(message) ? services!.mail.fileReceipt(message.id) : services!.mail.archive(message.id)),
+    isReceipt,
     archiveAll: async (list) => {
       if (!services || !list.length) return
       setError(undefined)
       try {
-        await services.mail.archiveMany(list.map((message) => message.id))
+        await services.mail.fileReceipts(list.filter(isReceipt).map((message) => message.id))
+        await services.mail.archiveMany(list.filter((message) => !isReceipt(message)).map((message) => message.id))
         drop(list)
         const at = new Date().toISOString()
-        await persistAutomation({ ...automationRef.current, decisions: list.reduce((decisions, message) => rememberDecision(decisions, message, 'archive', at), automationRef.current.decisions) })
+        await persistAutomation({ ...automationRef.current, decisions: list.reduce((decisions, message) => rememberDecision(decisions, message, 'archive', at, undefined, isReceipt(message)), automationRef.current.decisions) })
       } catch (failure) {
         setError(errorText(failure))
       }
@@ -619,6 +641,16 @@ export default function App() {
     }
   }
 
+  const receiptActions: ReceiptActions = {
+    load: (before) => services!.mail.receipts(inboxPageSize, before),
+    fromArchive: async (onProgress) => {
+      const ids = await services!.mail.archivedReceipts()
+      await services!.mail.fileReceipts(ids, onProgress)
+      return ids.length
+    },
+    toInbox: (message) => actions.restore(message),
+  }
+
   const suggestions = useMemo<RuleSuggestion[]>(() => suggestRules(automation.decisions, automation.rules).filter((item) => !dismissed.includes(`${item.from}|${item.action}`)), [automation, dismissed])
   const triaged = useMemo<Triaged[]>(() => rankTriaged(messages.map((message) => ({ message, triage: triage[message.id] }))), [messages, triage])
   const connected = connection === 'connected' && Boolean(services)
@@ -632,9 +664,10 @@ export default function App() {
     ...(settings.brainUrl ? [{ label: 'open my brain', onSelect: () => window.open(settings.brainUrl, '_blank', 'noreferrer') }] : []),
   ]
 
-  return <Shell view={view} views={connected ? ['inbox', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })}>
+  return <Shell view={view} views={connected ? ['inbox', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })}>
     {view === 'inbox' && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} hasModel={Boolean(settings.anthropicApiKey)} suggestions={suggestions} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
       onConnect={connect} onSettings={() => setView('settings')} onDismissSuggestion={(item) => setDismissed((current) => [...current, `${item.from}|${item.action}`])} />}
+    {view === 'receipts' && connected && <ReceiptsView actions={receiptActions} />}
     {view === 'rules' && <RulesView rules={automation.rules} outlookRules={outlookRules} snoozes={automation.snoozes} error={error} onRules={updateRules} />}
     {view === 'cleanup' && <CleanupView state={cleanup} error={error} actions={cleanupActions} onError={setError} />}
     {view === 'settings' && <SettingsView settings={settings} connection={connection} accountName={accountName} busy={Boolean(busy)} error={error} onSettings={setSettings} onConnect={connect} onDisconnect={disconnect} />}

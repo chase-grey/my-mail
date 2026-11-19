@@ -53,6 +53,30 @@ describe('mail provider', () => {
     expect(request.mock.calls.filter(([path]) => path === '/me/mailFolders')).toHaveLength(1)
   })
 
+  it('files receipts in a receipts folder, using one that exists under another casing', async () => {
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path.startsWith('/me/mailFolders?%24filter') || path.startsWith('/me/mailFolders?$filter')) return { value: [] }
+      if (path === '/me/mailFolders' && init?.method === 'POST') throw new GraphError(409, 'exists')
+      if (path.startsWith('/me/mailFolders?$top')) return { value: [{ id: 'other', displayName: 'Travel' }, { id: 'receipts-id', displayName: 'Receipts' }] }
+      if (path.startsWith('/me/mailFolders/archive/messages?')) return { value: [{ id: 'old1' }, { id: 'old2' }] }
+      if (path.startsWith('/me/mailFolders/receipts-id/messages?')) return { value: [] }
+      return undefined
+    })
+    const provider = new MailProvider({ request } as unknown as GraphClient)
+    await provider.fileReceipt('m1')
+    await provider.fileReceipt('m2')
+    const moves = request.mock.calls.filter(([path]) => path.endsWith('/move')).map(([, init]) => JSON.parse(init!.body as string).destinationId)
+    expect(moves).toEqual(['receipts-id', 'receipts-id'])
+    expect(request.mock.calls.filter(([path]) => path === '/me/mailFolders')).toHaveLength(1)
+
+    expect(await provider.archivedReceipts()).toEqual(['old1', 'old2'])
+    const filter = request.mock.calls.find(([path]) => path.startsWith('/me/mailFolders/archive/messages?'))![0]
+    expect(new URLSearchParams(filter.split('?')[1]).get('$filter')).toBe("categories/any(c:c eq 'receipt')")
+    expect((await provider.receipts()).messages).toEqual([])
+    await provider.fileReceipts([])
+    expect(request.mock.calls.some(([path]) => path === '/$batch')).toBe(false)
+  })
+
   it('treats a vanished snoozed message as already handled', async () => {
     const request = vi.fn(async () => { throw new GraphError(404, 'gone') })
     await expect(new MailProvider({ request } as unknown as GraphClient).unsnooze('m1')).resolves.toBe(false)

@@ -38,6 +38,8 @@ export function RulesView({ rules, outlookRules, snoozes, error, onRules }: {
         <div className="row-main"><span className="row-title">{ruleActionLabel[rule.action]} {describeRule(rule)}</span><small>{meta(rule)}</small></div>
         <Menu label={`options for ${describeRule(rule)}`} items={[
           { label: rule.enabled ? 'turn off' : 'turn on', onSelect: () => void replace({ ...rule, enabled: !rule.enabled }) },
+          ...(rule.action === 'archive' ? [{ label: 'move to receipts', onSelect: () => void replace({ ...rule, action: 'receipts' }) }] : []),
+          ...(rule.action === 'receipts' ? [{ label: 'archive', onSelect: () => void replace({ ...rule, action: 'archive' }) }] : []),
           { label: 'delete', danger: true, onSelect: () => void onRules(rules.filter((item) => item.id !== rule.id)) },
         ]} />
       </li>)}</ul>}

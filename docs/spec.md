@@ -53,6 +53,7 @@ The 2026-11-02 build is phase 1 of this spec. Later phases are listed at the end
 | **Nothing speculative** | **No draft is written until a tap asks for it. No summary is written for mail in `probably fine`.** *Resolved 2026-11-04.* | Output tokens cost five times input, and most drafts were never opened. A summary of a newsletter nobody reads is waste twice over. |
 | **Unsubscribe** | **Honor `List-Unsubscribe` in the quietest form offered: a one-click POST (RFC 8058), else a mail through Graph, else the page.** Always offered beside a rule, never instead of one. *Resolved 2026-11-04.* | One tap that stops the mail beats a rule that hides it, but senders do not all honor it, so the rule is the guarantee. A browser-automation unsubscriber (Playwright) is not possible from a static site and not worth a server: the header covers the senders who will honor anything. |
 | **Backlog** | **A `clean up` screen that reads the inbox headers-only, groups by sender, and clears a sender in one tap with a rule attached.** *Resolved 2026-11-04.* | Inbox zero from thousands is a per-sender problem, not a per-message one. Twenty senders are most of the volume. Jev reads one sample per sender to tell lists from people for a fraction of a cent. |
+| **Receipts** | **Their own `receipts` folder, with the `receipt` category kept on the message.** Archiving a receipt files it there. A receipt the sorter is sure about is filed on its own, whether or not auto-archive is on, and its sender gets a `move to receipts` rule in Outlook. A `receipts` screen lists the folder. On by default, with a setting. *Resolved 2026-11-19.* | I go back over receipts, so they need one place to look, in this app and in Outlook on any device. A folder is one tap in every Outlook client; a category inside the archive needs a filter each time. The Outlook rule moves the next one on arrival, so it never sits in the inbox or notifies. |
 
 ## why not fork
 
@@ -89,8 +90,8 @@ Sources: [Inbox Zero](https://github.com/elie222/inbox-zero),
 - Not a calendar. Invitations can be accepted or declined from a message; the calendar lives in Outlook
   and My Brain.
 - Not a notifier. No badges, no push.
-- Not an archive browser. Folders other than inbox, archive, snoozed, drafts, and sent are reachable
-  through search, not navigation.
+- Not an archive browser. Folders other than inbox, receipts, archive, snoozed, drafts, and sent are
+  reachable through search, not navigation.
 
 ## screens
 
@@ -285,6 +286,12 @@ first, then archive all, unsubscribe, open latest, delete all + rule, delete all
 Graph's batch endpoint twenty at a time with progress in the status line. The inbox refreshes from
 what is left.
 
+### receipts
+
+Behind `…`. The `receipts` folder newest first: sender, date, subject, preview. A row opens to the
+text with `open in outlook` and `move to inbox`. `move receipts from archive` brings in archived mail
+that carries the `receipt` category, for receipts sorted before the folder existed.
+
 ### rules
 
 ```
@@ -309,11 +316,11 @@ what is left.
 
 A rule is conditions (all must match) and actions (all run). Conditions: from address, anyone at a
 domain, sender name contains, subject contains, body contains, has attachment, high importance, sent
-only to me, model category. Actions: archive, move to folder, delete, mark read, flag, add category,
+only to me, model category. Actions: archive, move to receipts, move to folder, delete, mark read, flag, add category,
 make a To Do task, stop processing. First matching rule wins unless it says continue; the list is
 ordered and can be reordered.
 
-A rule with no model-category condition and an archive, delete, or mark-read action is **compiled to an Outlook rule**
+A rule with no model-category condition and an archive, move to receipts, delete, or mark-read action is **compiled to an Outlook rule**
 named `my mail: <description>`, and its Outlook id is kept. Editing it here rewrites the Outlook rule.
 Editing or deleting it in Outlook is read back on the next open and wins. Rules made directly in
 Outlook are listed read-only with a link to Outlook settings. Rules that cannot be compiled run in the
@@ -330,7 +337,7 @@ sender.
 ### settings
 
 - microsoft: connected account, `disconnect`.
-- sorting: Jev key, write categories to outlook, auto-archive.
+- sorting: Jev key, write categories to outlook, auto-archive, move receipts to their own folder.
 - reading and drafting: Anthropic key, reading model, better-drafts model, about me (a few lines
   for reply voice), archive after reply. Later: `use my sent mail as voice samples`.
 - reading: load remote images for people only / always / never; signature.
@@ -389,7 +396,9 @@ The icon is an envelope outline on teal, matching the violet brain and the track
    sorter put under 60%: batches of twelve, numbered, trimmed bodies, known category passed in, low
    effort, summary and task title back, no draft. Then write each new verdict to the message as a
    category. Then **auto-archive** where enabled: quiet category, confidence at or above the gate,
-   not flagged, not high importance. Recorded as `handled` with undo. The sender of an auto-archived
+   not flagged, not high importance. A sure receipt goes to the `receipts` folder instead of the
+   archive, and goes even when auto-archive is off; its sender's rule is `move to receipts`.
+   Recorded as `handled` with undo. The sender of an auto-archived
    newsletter, promo, or receipt then gets an `archive from <address>` rule marked `auto`, written to
    Outlook like any other, unless a rule already names them, I have replied to, kept, flagged,
    snoozed, or made a task from their mail, other mail of theirs stayed in the inbox, or I deleted

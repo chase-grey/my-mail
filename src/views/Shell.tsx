@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react'
 import { Icon, Menu, type IconName } from '../ui'
 
-export type View = 'inbox' | 'cleanup' | 'rules' | 'settings'
+export type View = 'inbox' | 'receipts' | 'cleanup' | 'rules' | 'settings'
 export type ShellLink = { label: string; onSelect: () => void }
 
-export const viewLabel: Record<View, string> = { inbox: 'inbox', cleanup: 'clean up', rules: 'rules', settings: 'settings' }
-const viewIcon: Record<View, IconName> = { inbox: 'inbox', cleanup: 'clean', rules: 'rules', settings: 'settings' }
+export const viewLabel: Record<View, string> = { inbox: 'inbox', receipts: 'receipts', cleanup: 'clean up', rules: 'rules', settings: 'settings' }
+const viewIcon: Record<View, IconName> = { inbox: 'inbox', receipts: 'receipt', cleanup: 'clean', rules: 'rules', settings: 'settings' }
 
 /** The frame around every screen: a side rail on wide screens, a top bar with a menu on a phone. */
 export function Shell({ view, views, busy, canRefresh, links, onView, onRefresh, children }: {

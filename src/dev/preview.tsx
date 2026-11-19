@@ -50,6 +50,7 @@ function Preview() {
 
   const actions: MessageActions = {
     archive: gone,
+    isReceipt: () => false,
     archiveAll: async (messages) => { await wait(500); drop(messages.map((message) => message.id)) },
     remove: gone,
     task: gone,
