@@ -1,4 +1,4 @@
-const cacheName = 'my-mail-shell-v1'
+const cacheName = 'my-mail-shell-v2'
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(cacheName).then((cache) => cache.add('./')))
@@ -25,6 +25,23 @@ self.addEventListener('fetch', (event) => {
           return response
         })
         .catch(() => caches.match('./')),
+    )
+    return
+  }
+
+  // Only the hashed build files are safe to serve from the cache without asking. The manifest and
+  // icons keep their names across builds, so a cached copy would pin the old ones on the phone.
+  if (!new URL(event.request.url).pathname.includes('/assets/')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response.ok) {
+            const copy = response.clone()
+            caches.open(cacheName).then((cache) => cache.put(event.request, copy))
+          }
+          return response
+        })
+        .catch(() => caches.match(event.request).then((cached) => cached ?? Response.error())),
     )
     return
   }
