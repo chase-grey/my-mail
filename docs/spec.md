@@ -338,9 +338,10 @@ sender.
 ### settings
 
 - microsoft: connected account, `disconnect`.
-- sorting: Jev key, write categories to outlook, auto-archive, move receipts to their own folder.
-- reading and drafting: Anthropic key, reading model, better-drafts model, about me (a few lines
-  for reply voice), archive after reply. Later: `use my sent mail as voice samples`.
+- ai: Anthropic key, Jev key, reading model, better-drafts model, about me (a few lines for
+  reply voice). Later: `use my sent mail as voice samples`.
+- mail: write categories to outlook, auto-archive, move receipts to their own folder, archive
+  after reply.
 - reading: load remote images for people only / always / never; signature.
 - links: my brain url.
 

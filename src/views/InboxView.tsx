@@ -162,7 +162,7 @@ function Row({ item, index, kept, quiet, open, pane, leave, on }: { item: Triage
   </li>
 }
 
-export function InboxView({ items, kept, summary, busy, error, connection, hasModel, suggestions, snoozes, actions, more, onMore, onConnect, onSettings, onDismissSuggestion }: {
+export function InboxView({ items, kept, summary, busy, error, connection, hasModel, suggestions, snoozes, actions, more, onMore, onConnect, onDismissSuggestion }: {
   items: Triaged[]
   kept: Record<string, string>
   summary?: RunSummary
@@ -176,7 +176,6 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
   more?: boolean
   onMore?: () => void
   onConnect: () => Promise<void>
-  onSettings: () => void
   onDismissSuggestion: (item: RuleSuggestion) => void
 }) {
   const [sheet, setSheet] = useState<SheetState>()
@@ -297,7 +296,6 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
     <div className="list">
       <p className={`status${busy ? ' is-busy' : ''}`} aria-live="polite">{busy ?? (summary ? summaryLine(summary) : '')}</p>
       {shownError && <p className="note is-error" role="alert">{shownError}</p>}
-      {!hasModel && items.length > 0 && <p className="note">no summaries without an anthropic key · <button className="link" type="button" onClick={onSettings}>settings</button></p>}
 
       {suggestions.length > 0 && <details className="card group">
         <summary>{suggestions.length} {suggestions.length === 1 ? 'rule' : 'rules'} to add</summary>

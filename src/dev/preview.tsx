@@ -75,7 +75,7 @@ function Preview() {
 
   return <Shell view={view} views={['inbox', 'search', 'cleanup', 'rules', 'settings']} busy={params.has('busy')} canRefresh links={[{ label: 'open outlook', onSelect: () => {} }, { label: 'open my brain', onSelect: () => {} }]} onView={setView} onRefresh={() => setItems(seed)}>
     {view === 'inbox' && <InboxView items={items} kept={kept} summary={{ inbox: items.length, needReply: items.filter((item) => item.triage?.needsReply).length, byRules: 14, autoArchived: 0, returned: 0, withoutModel: 0 }} busy={params.has('busy') ? 'checking mail' : undefined} connection="connected" hasModel
-      suggestions={[{ from: 'news@weeklyfold.example.com', action: 'archive', count: 4 }]} snoozes={[]} actions={actions} onConnect={async () => {}} onSettings={() => setView('settings')} onDismissSuggestion={() => {}} />}
+      suggestions={[{ from: 'news@weeklyfold.example.com', action: 'archive', count: 4 }]} snoozes={[]} actions={actions} onConnect={async () => {}} onDismissSuggestion={() => {}} />}
     {view === 'search' && <SearchView search={search} actions={actions} hasModel />}
     {view === 'rules' && <RulesView rules={[{ id: 'r1', from: '@harbor.example.com', action: 'archive', enabled: true, createdAt: 'now', hits: 12, outlookId: 'o1' }, { id: 'r2', subject: 'receipt', action: 'read', enabled: true, createdAt: 'now', hits: 3 }]} outlookRules={[]} snoozes={[{ messageId: 's1', until: new Date(Date.now() + 86_400_000).toISOString(), subject: 'Renew passport', from: 'Travel Office' }]} onRules={async () => {}} />}
     {view === 'settings' && <SettingsView settings={defaultSettings} connection="connected" accountName="someone@example.com" busy={false} onSettings={() => {}} onConnect={async () => {}} onDisconnect={async () => {}} />}

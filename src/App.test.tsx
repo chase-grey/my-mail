@@ -24,7 +24,7 @@ it('shows triaged mail with the suggested action highlighted and kept mail folde
     { message: message('m2', 'news@daily.example.com', 'Daily digest'), triage: { messageId: 'm2', category: 'newsletter' as const, summary: 'daily digest', needsReply: false, suggested: 'archive' as const, confidence: 0.9, source: 'jev' as const, triagedAt: 'now' } },
     { message: message('m3', 'kept@example.com', 'Keep me') },
   ]
-  const html = renderToStaticMarkup(<InboxView items={items} kept={{ m3: 'now' }} summary={{ inbox: 3, needReply: 1, byRules: 2, autoArchived: 0, returned: 0, withoutModel: 1 }} connection="connected" hasModel suggestions={[{ from: 'news@daily.example.com', action: 'archive', count: 3 }]} snoozes={[]} actions={actions} onConnect={noop} onSettings={() => {}} onDismissSuggestion={() => {}} />)
+  const html = renderToStaticMarkup(<InboxView items={items} kept={{ m3: 'now' }} summary={{ inbox: 3, needReply: 1, byRules: 2, autoArchived: 0, returned: 0, withoutModel: 1 }} connection="connected" hasModel suggestions={[{ from: 'news@daily.example.com', action: 'archive', count: 3 }]} snoozes={[]} actions={actions} onConnect={noop} onDismissSuggestion={() => {}} />)
   expect(html).toContain('3 in inbox · 1 need a reply · 2 by rules')
   expect(html).toContain('mom asks about sunday dinner')
   expect(html).toContain('mail-summary is-loud')

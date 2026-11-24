@@ -25,23 +25,23 @@ export function SettingsView({ settings, connection, accountName, busy, error, o
       {error && <p className="note is-error" role="alert">{error}</p>}
     </Card>
 
-    <Card title="sorting">
-      <div className="stack">
-        <Field label="jev api key"><input type="password" autoComplete="off" value={settings.jevApiKey} onChange={set('jevApiKey')} /></Field>
-        <Switch label="write each verdict to the message as an outlook category" checked={settings.writeCategories} onChange={toggle('writeCategories')} />
-        <Switch label="archive newsletters, promos, and receipts it is sure about and make rules for them" checked={settings.autoArchive} onChange={toggle('autoArchive')} />
-        <Switch label="move receipts to their own folder" checked={settings.fileReceipts} onChange={toggle('fileReceipts')} />
-      </div>
-    </Card>
-
-    <Card title="reading and drafting">
+    <Card title="ai">
       <div className="stack">
         <Field label="anthropic api key"><input type="password" autoComplete="off" value={settings.anthropicApiKey} onChange={set('anthropicApiKey')} /></Field>
+        <Field label="jev api key"><input type="password" autoComplete="off" value={settings.jevApiKey} onChange={set('jevApiKey')} /></Field>
         <div className="grid-2">
           <Field label="reading"><select value={settings.anthropicModel} onChange={set('anthropicModel')}>{modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}</select></Field>
           <Field label="better drafts"><select value={settings.strongModel} onChange={set('strongModel')}>{modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}</select></Field>
         </div>
         <Field label="about me, for replies"><textarea value={settings.aboutMe} placeholder="who you are, how you sign off, what you usually say yes and no to" onChange={set('aboutMe')} /></Field>
+      </div>
+    </Card>
+
+    <Card title="mail">
+      <div className="stack">
+        <Switch label="write each verdict to the message as an outlook category" checked={settings.writeCategories} onChange={toggle('writeCategories')} />
+        <Switch label="archive newsletters, promos, and receipts it is sure about and make rules for them" checked={settings.autoArchive} onChange={toggle('autoArchive')} />
+        <Switch label="move receipts to their own folder" checked={settings.fileReceipts} onChange={toggle('fileReceipts')} />
         <Switch label="archive after sending a reply" checked={settings.archiveAfterReply} onChange={toggle('archiveAfterReply')} />
       </div>
     </Card>
