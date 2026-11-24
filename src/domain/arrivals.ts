@@ -5,6 +5,22 @@ export function newestOf(messages: Message[], seen?: string): string | undefined
   return messages.reduce<string | undefined>((newest, message) => !newest || message.receivedAt > newest ? message.receivedAt : newest, seen)
 }
 
+/** The earliest received time among these. */
+export function oldestOf(messages: Message[]): string | undefined {
+  return messages.reduce<string | undefined>((oldest, message) => !oldest || message.receivedAt < oldest ? message.receivedAt : oldest, undefined)
+}
+
+/**
+ * How far back a full check reads: to the oldest mail the list already reaches, and no further.
+ * Reading by count instead would pull older mail in to replace whatever was just cleared.
+ * Nothing read and nothing shown means there is no depth yet, and the check reads its first page.
+ */
+export function depthOf(read: string | undefined, shown: Message[]): string | undefined {
+  const oldest = oldestOf(shown)
+  if (!read) return oldest
+  return oldest && oldest < read ? oldest : read
+}
+
 /** What a look at the mailbox found that the screen does not have: not listed already, and not just sent away. */
 export function arrivals(found: Message[], held: Message[], left: ReadonlySet<string>): Message[] {
   const known = new Set(held.map((message) => message.id))

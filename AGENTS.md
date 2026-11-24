@@ -19,6 +19,10 @@ There is no junk folder. Every run moves what Outlook junked into the inbox befo
 
 The inbox is one list with one extra thing on top: a `needs me` section, its count beside the heading. All other mail follows below it with no heading and no category name. There is no `probably fine` group, no side by side columns, and no summary line of counts above the list; the line under search only says a check is running.
 
+## needs me gets shorter as I work
+
+Clearing mail never brings other mail in to take its place. A full check reads the inbox back to the oldest mail already on the list and no further (`depthOf`); it does not read by count. Older mail comes only from the end of the list (`load more`). Mail a model is about to sort waits below needs me until its verdict lands, and joins needs me only if the verdict says so (`pending`). Mail no model will sort (sorting off, a failed call) counts as needs me. A flag or high importance never waits.
+
 ## threads
 
 The inbox shows one row per conversation: its newest message, with a count when more of it is in the inbox. The row sits with the mail that needs me when any message in it does, not only the newest. What clears the row (archive, delete, snooze, keep, to do, a sent reply that archives) clears every inbox message in the conversation, and undo brings them all back. A message opened anywhere (inbox, search, receipts) shows its whole conversation from every folder, sent mail included, newest first. Do not go back to one row per message, and do not add a place that opens a message without its conversation.

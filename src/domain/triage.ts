@@ -2,7 +2,8 @@ import { actions, categories, type Action, type Category, type Message, type Sha
 
 const order: Record<Category, number> = Object.fromEntries(categories.map((category, index) => [category, index])) as Record<Category, number>
 
-export type Triaged = { message: Message; triage?: Triage }
+/** `pending` is mail with no verdict yet that a model is about to sort. */
+export type Triaged = { message: Message; triage?: Triage; pending?: boolean }
 
 /** Things that need me first, then things to know, then things to skim; newest first within a group. */
 export function rankTriaged(items: Triaged[]): Triaged[] {
@@ -23,12 +24,13 @@ export const unsureBelow = 0.6
 /**
  * Mail that still needs eyes: replies, actions, flagged, important, unread verdicts, and anything the classifier was unsure about.
  * Old mail never does, whatever flag, importance or category it still carries.
+ * Mail whose verdict is on its way waits for it; mail no model will sort needs me.
  */
 export function needsMe(item: Triaged, now = new Date().toISOString()): boolean {
   const { message, triage } = item
   if (isOld(message, now)) return false
   if (message.flagged || message.importance === 'high') return true
-  if (!triage) return true
+  if (!triage) return !item.pending
   if (needsMeCategories.includes(triage.category) || triage.needsReply) return true
   return triage.confidence < unsureBelow
 }

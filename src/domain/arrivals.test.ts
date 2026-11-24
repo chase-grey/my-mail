@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { arrivals, newestOf, withArrivals } from './arrivals'
+import { arrivals, depthOf, newestOf, withArrivals } from './arrivals'
 import { message } from './fixtures'
 
 const at = (id: string, receivedAt: string) => ({ ...message(id, 'someone@example.com', id), receivedAt })
@@ -26,5 +26,18 @@ describe('arrivals', () => {
     // The sorter archived n2, and n3 was archived by hand while it ran.
     const settled = withArrivals(first, batch, [at('n1', 'x'), at('n3', 'x')], new Set(['n3']))
     expect(settled.map((item) => item.id)).toEqual(['n1', 'old'])
+  })
+
+  it('reads a full check back to the oldest mail on the list and no further, so clearing mail pulls nothing older in', () => {
+    const shown = [at('a', '2026-11-02T09:00:00Z'), at('b', '2026-11-02T11:00:00Z')]
+    expect(depthOf('2026-11-02T09:00:00Z', shown)).toBe('2026-11-02T09:00:00Z')
+    // The oldest was cleared: the depth stays where the last read ended instead of moving with the count.
+    expect(depthOf('2026-11-02T09:00:00Z', [shown[1]])).toBe('2026-11-02T09:00:00Z')
+    // Everything was cleared.
+    expect(depthOf('2026-11-02T09:00:00Z', [])).toBe('2026-11-02T09:00:00Z')
+    // The saved list on open, before anything has been read, and a list that load more took deeper.
+    expect(depthOf(undefined, shown)).toBe('2026-11-02T09:00:00Z')
+    expect(depthOf('2026-11-02T10:00:00Z', shown)).toBe('2026-11-02T09:00:00Z')
+    expect(depthOf(undefined, [])).toBeUndefined()
   })
 })

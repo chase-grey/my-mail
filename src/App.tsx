@@ -13,7 +13,7 @@ import { MailProvider, inboxPageSize, mailDefaultHeaders } from './data/mailProv
 import { MailSearch } from './data/mailSearch'
 import { MicrosoftAuth, configuredClientId } from './data/microsoftAuth'
 import { TodoProvider } from './data/todoProvider'
-import { arrivals, dueHeld, newestOf, withArrivals } from './domain/arrivals'
+import { arrivals, depthOf, dueHeld, newestOf, oldestOf, withArrivals } from './domain/arrivals'
 import { groupBySender, keepSenderKinds, sendersToAsk, staleIds, type ScanMessage, type SenderGroup, type SenderKinds } from './domain/cleanup'
 import { historyTriage, noiseSenders, senderHistoryLine } from './domain/history'
 import { compileRule, planRuleSync } from './domain/outlookRules'
@@ -49,11 +49,6 @@ const staleDays = 30
 type Services = { auth: MicrosoftAuth; mail: MailProvider; compose: Composer; search: MailSearch; todo: TodoProvider; store: AutomationStore }
 /** `waiting` is mail that stayed and still wants a model, but was not allowed one this time. */
 type Sorted = { inbox: Message[]; cache: Record<string, Triage>; byRules: number; autoArchived: number; filed: number; newRules: number; withoutModel: number; waiting: string[] }
-
-/** The earliest received time in a page, which is where the next page starts. */
-function oldestOf(messages: Message[]): string | undefined {
-  return messages.reduce<string | undefined>((oldest, message) => !oldest || message.receivedAt < oldest ? message.receivedAt : oldest, undefined)
-}
 
 function readJson<T>(key: string, fallback: T): T {
   try {
@@ -177,6 +172,13 @@ export default function App() {
   const backRef = useRef(new Map<string, Message>())
   /** Mail shown but left unsorted because this device was not the one in use, by when it was first seen. */
   const heldRef = useRef(new Map<string, number>())
+  /** Mail on screen that a check is sorting right now. With the held mail, it is what waits below needs me for a verdict. */
+  const sortingRef = useRef(new Set<string>())
+  const [pending, setPending] = useState<ReadonlySet<string>>(() => new Set())
+  const syncPending = useCallback(() => {
+    const next = new Set([...heldRef.current.keys(), ...sortingRef.current])
+    setPending((held) => held.size === next.size && [...next].every((id) => held.has(id)) ? held : next)
+  }, [])
 
   useEffect(() => saveSettings(settings), [settings])
   useEffect(() => writeJson(triageKey, triage), [triage])
@@ -378,12 +380,18 @@ export default function App() {
         setError(errorText(failure))
       }
 
-      // A refresh reads as deep as was already loaded, so older pages and their verdicts are not thrown away.
+      // A refresh reads back to the oldest mail already loaded, so older pages and their verdicts are not thrown away,
+      // and no further: mail cleared from the list is not replaced with older mail. That comes from load more.
+      const since = depthOf(oldestRef.current, messagesRef.current)
+      const count = Math.max(inboxPageSize, messagesRef.current.length)
       const [page, total] = await Promise.all([
-        current.mail.inbox(Math.max(inboxPageSize, messagesRef.current.length)),
+        since ? current.mail.inboxSince(since, count) : current.mail.inbox(count),
         current.mail.inboxCount().catch(() => undefined),
       ])
-      oldestRef.current = oldestOf(page.messages)
+      // More new mail than the read holds pushes the oldest off the end; the list then reaches only as far as the read did.
+      oldestRef.current = since && !page.more ? since : oldestOf(page.messages)
+      // A read by date ends at the depth, not at the end of the inbox; the count says whether older mail lies past it.
+      const older = !since || page.more ? page.more : total === undefined ? undefined : total > page.messages.length
       newestSeenRef.current = newestOf(page.messages, newestSeenRef.current)
       // Rescued mail is sorted this run even when it is older than the page, or the inbox read has not caught up with the move.
       const inPage = new Set(page.messages.map((message) => message.id))
@@ -406,6 +414,8 @@ export default function App() {
       const sorted = await sortBatch(current, batch, triageRef.current, automationState, settings, now, () => sorting, (read) => {
         messagesRef.current = settle(read)
         setMessages(messagesRef.current)
+        sortingRef.current = new Set(sorting ? read.filter((message) => !triageRef.current[message.id]).map((message) => message.id) : [])
+        syncPending()
       })
       const inbox = settle(sorted.inbox)
       const cache = pruneTriage(sorted.cache, inbox)
@@ -414,16 +424,18 @@ export default function App() {
       setTriage(cache)
       messagesRef.current = inbox
       setMessages(inbox)
-      setMore(page.more)
+      setMore((was) => older ?? was)
       setKept((current) => Object.fromEntries(Object.entries(current).filter(([id]) => inbox.some((message) => message.id === id))))
       const counted = summarize(inbox.map((message) => ({ message, triage: cache[message.id] })), { byRules: sorted.byRules, autoArchived: sorted.autoArchived, returned, withoutModel: sorted.withoutModel })
       setSummary({ ...counted, inbox: Math.max(inbox.length, (total ?? 0) - sorted.byRules - sorted.autoArchived), filed: sorted.filed, newRules: sorted.newRules, fromJunk: rescued.length })
     } catch (failure) {
       setError(errorText(failure))
     } finally {
+      sortingRef.current = new Set()
+      syncPending()
       setBusy(undefined)
     }
-  }, [pushRules, sortBatch])
+  }, [pushRules, sortBatch, syncPending])
 
   /**
    * A quiet look for mail that arrived since the last read. Nothing on screen changes unless something came,
@@ -485,12 +497,14 @@ export default function App() {
       setBusy('checking mail')
       setError(undefined)
       const batch = new Set(fresh.map((message) => message.id))
+      const sorting = aiSorts(options.settings)
       const show = (inbox: Message[]) => {
         messagesRef.current = withArrivals(messagesRef.current, batch, inbox, leftRef.current)
         setMessages(messagesRef.current)
+        sortingRef.current = new Set(sorting ? inbox.filter((message) => !triageRef.current[message.id]).map((message) => message.id) : [])
+        syncPending()
       }
       try {
-        const sorting = aiSorts(options.settings)
         const sorted = await sortBatch(current, fresh, triageRef.current, automationRef.current, options.settings, new Date().toISOString(), (message) => sorting && (inUse || due.has(message.id)), show)
         show(sorted.inbox)
         if (sorting) for (const id of sorted.waiting) heldRef.current.set(id, Date.now())
@@ -515,12 +529,14 @@ export default function App() {
       } catch (failure) {
         setError(errorText(failure))
       } finally {
+        sortingRef.current = new Set()
         setBusy(undefined)
       }
     } finally {
+      syncPending()
       peekingRef.current = false
     }
-  }, [run, sortBatch])
+  }, [run, sortBatch, syncPending])
 
   /** The next page of older mail, put through the same sorting as the first. */
   const loadMore = useCallback(async (current: Services, options: { settings: Settings }) => {
@@ -920,7 +936,7 @@ export default function App() {
   }
 
   const suggestions = useMemo<RuleSuggestion[]>(() => suggestRules(automation.decisions, automation.rules).filter((item) => !dismissed.includes(`${item.from}|${item.action}`)), [automation, dismissed])
-  const triaged = useMemo<Triaged[]>(() => rankTriaged(messages.map((message) => ({ message, triage: triage[message.id] }))), [messages, triage])
+  const triaged = useMemo<Triaged[]>(() => rankTriaged(messages.map((message) => ({ message, triage: triage[message.id], pending: pending.has(message.id) }))), [messages, triage, pending])
   const connected = connection === 'connected' && Boolean(services)
   const install = useInstallPrompt()
   const [installSkipped, setInstallSkipped] = useState(false)

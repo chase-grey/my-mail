@@ -31,6 +31,17 @@ describe('triage', () => {
     expect(groups.probablyFine.map((item) => item.message.id).sort()).toEqual(['m1', 'm6'])
   })
 
+  it('keeps unsorted mail out of needs me while its verdict is on the way, and counts it once no verdict is coming', () => {
+    const now = '2026-11-05T00:00:00Z'
+    const fresh = message('m1', 'owen@example.com', 'cabin', { receivedAt: '2026-11-04T09:00:00Z' })
+    expect(groupInbox([{ message: fresh, pending: true }], now).needsMe).toHaveLength(0)
+    expect(groupInbox([{ message: fresh }], now).needsMe).toHaveLength(1)
+    // A flag or high importance does not wait for a verdict.
+    expect(groupInbox([{ message: { ...fresh, flagged: true }, pending: true }], now).needsMe).toHaveLength(1)
+    // Once the verdict lands it decides, whatever pending still says.
+    expect(groupInbox([{ message: fresh, triage: triage('m1', { category: 'reply', needsReply: true }), pending: true }], now).needsMe).toHaveLength(1)
+  })
+
   it('sends a language model only what needs me or is still unsummarized and unsure', () => {
     const plain = message('m1', 'a@example.com')
     const now = '2026-11-10T00:00:00Z'
