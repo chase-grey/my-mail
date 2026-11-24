@@ -115,6 +115,27 @@ export class MailProvider {
     return this.page('inbox', count, undefined, since)
   }
 
+  /**
+   * The cheapest look there is for new mail: how many messages sit in junk, and the ids alone of inbox mail
+   * received at or after `since`. One round trip, no bodies. The caller reads in full only when an id is new to it.
+   */
+  async glance(since?: string): Promise<{ junk: number; ids: string[] }> {
+    const query = new URLSearchParams({ '$top': String(inboxPageSize), '$orderby': 'receivedDateTime desc', '$select': 'id' })
+    if (since) query.set('$filter', `receivedDateTime ge ${since}`)
+    // Headers on the batch itself do not reach the requests inside it, and ids only match the ones held with this one.
+    const requests = [
+      { id: 'junk', method: 'GET', url: '/me/mailFolders/junkemail?$select=totalItemCount', headers: mailDefaultHeaders },
+      { id: 'inbox', method: 'GET', url: `/me/mailFolders/inbox/messages?${query}`, headers: mailDefaultHeaders },
+    ]
+    const result = await this.graph.request<BatchResponse>('/$batch', { method: 'POST', body: JSON.stringify({ requests }) })
+    const body = <T>(id: string): T => {
+      const response = result.responses.find((item) => item.id === id)
+      if (!response || response.status >= 300) throw new GraphError(response?.status ?? 500, `the look for new mail failed (${response?.status ?? 'no answer'})`)
+      return response.body as T
+    }
+    return { junk: body<{ totalItemCount: number }>('junk').totalItemCount, ids: body<{ value: { id: string }[] }>('inbox').value.map((message) => message.id) }
+  }
+
   /** The receipts folder, newest first, paged by date the same way as the inbox. */
   async receipts(count = inboxPageSize, before?: string): Promise<{ messages: Message[]; more: boolean }> {
     return this.page(await this.receiptsFolder(), count, before)

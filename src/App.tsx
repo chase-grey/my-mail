@@ -404,9 +404,14 @@ export default function App() {
       let found: Message[] = []
       try {
         // One inbox: junk is emptied before the inbox is read, here as in the full check.
-        rescued = await current.mail.rescueJunk()
+        // The look itself is ids and a count. Mail is read in full only when there is something to read.
         const since = newestSeenRef.current
-        found = (since ? await current.mail.inboxSince(since) : await current.mail.inbox()).messages
+        const glance = await current.mail.glance(since)
+        const held = new Set(messagesRef.current.map((message) => message.id))
+        const news = glance.ids.some((id) => !held.has(id) && !leftRef.current.has(id))
+        if (!glance.junk && !news) return
+        if (glance.junk) rescued = await current.mail.rescueJunk()
+        if (news) found = (since ? await current.mail.inboxSince(since) : await current.mail.inbox()).messages
       } catch {
         // A look that fails says nothing; the next one is seconds away, and a full check reports what is wrong.
         return

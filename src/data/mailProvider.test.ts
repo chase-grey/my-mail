@@ -45,6 +45,24 @@ describe('mail provider', () => {
     expect(new URLSearchParams(query).get('$filter')).toBe('receivedDateTime ge 2026-11-02T15:00:00Z')
   })
 
+  it('glances for new mail in one request that carries no bodies', async () => {
+    const request = vi.fn(async (_path: string, _init?: RequestInit) => ({ responses: [
+      { id: 'inbox', status: 200, body: { value: [{ id: 'n1' }, { id: 'n2' }] } },
+      { id: 'junk', status: 200, body: { totalItemCount: 3 } },
+    ] }))
+    const provider = new MailProvider({ request } as unknown as GraphClient)
+    expect(await provider.glance('2026-11-02T15:00:00Z')).toEqual({ junk: 3, ids: ['n1', 'n2'] })
+    expect(request).toHaveBeenCalledTimes(1)
+    const sent = JSON.parse(String(request.mock.calls[0][1]!.body)) as { requests: { id: string; url: string; headers: Record<string, string> }[] }
+    const inbox = new URLSearchParams(sent.requests.find((item) => item.id === 'inbox')!.url.split('?')[1])
+    expect(inbox.get('$select')).toBe('id')
+    expect(inbox.get('$filter')).toBe('receivedDateTime ge 2026-11-02T15:00:00Z')
+    expect(sent.requests.every((item) => item.headers.Prefer === mailDefaultHeaders.Prefer)).toBe(true)
+
+    const refused = async () => ({ responses: [{ id: 'inbox', status: 429 }, { id: 'junk', status: 200, body: { totalItemCount: 0 } }] })
+    await expect(new MailProvider({ request: refused } as unknown as GraphClient).glance()).rejects.toBeInstanceOf(GraphError)
+  })
+
   it('moves everything in junk to the inbox and returns what moved', async () => {
     const graphMessage = (id: string) => ({ id, receivedDateTime: '2026-11-02T15:00:00Z', isRead: false, webLink: 'w' })
     const request = vi.fn(async (path: string, init?: RequestInit) => {
