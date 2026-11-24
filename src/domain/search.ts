@@ -57,6 +57,46 @@ export function fromSender(text: string, address: string): string {
   return text.replace(/\S+$/, `from:${address}`)
 }
 
+/** What has been typed, when it is plain words long enough to look for in mail: three letters or more and no operator or phrase. */
+export function subjectText(text: string): string {
+  const value = text.trim().toLowerCase()
+  return value.length < 3 || /[:"<>=()]/.test(value) ? '' : value
+}
+
+/** A subject without the reply and forward marks in front of it. */
+export function bareSubject(subject: string): string {
+  return subject.replace(/^((re|fw|fwd)\s*:\s*)+/i, '').trim()
+}
+
+/**
+ * Subjects to offer for what has been typed. Those at hand are kept when every word typed starts a word in them;
+ * those the mailbox found are kept as they are, since it may have matched the body. One of each, in the order given.
+ */
+export function suggestSubjects(text: string, atHand: string[], found: string[] = [], limit = 4): string[] {
+  const typed = subjectText(text)
+  if (!typed) return []
+  const words = typed.split(/\s+/)
+  const matches = (subject: string) => {
+    const parts = subject.toLowerCase().split(/[^\p{L}\p{N}]+/u)
+    return words.every((word) => parts.some((part) => part.startsWith(word)))
+  }
+  const seen = new Set<string>([typed])
+  const offered: string[] = []
+  for (const subject of [...atHand.map(bareSubject).filter(matches), ...found.map(bareSubject)]) {
+    const key = subject.toLowerCase()
+    if (!subject || subject === '(no subject)' || seen.has(key)) continue
+    seen.add(key)
+    offered.push(subject)
+    if (offered.length === limit) break
+  }
+  return offered
+}
+
+/** A search for mail with that subject. */
+export function subjectSearch(subject: string): string {
+  return `subject:"${subject.replace(/"/g, '')}"`
+}
+
 /** Newest first, no repeats, capped. */
 export function rememberSearch(recent: string[], text: string, limit = 8): string[] {
   const value = text.trim()

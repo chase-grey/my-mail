@@ -36,3 +36,12 @@ it('asks the mailbox who matches a word, reading only who sent each message', as
   expect(query.get('$select')).toBe('from')
   expect(found).toEqual([{ name: 'Ruth Okafor', address: 'ruth@example.com' }, { name: '', address: 'ruiz@example.com' }])
 })
+
+it('asks the mailbox for the subjects of mail holding the words, reading only subjects', async () => {
+  const request = vi.fn(async (_path: string) => ({ value: [{ subject: ' Property tax ' }, {}, { subject: 'Your receipt' }] }))
+  const found = await new MailSearch({ request } as unknown as GraphClient).subjects('tax')
+  const query = new URLSearchParams(request.mock.calls[0][0].split('?')[1])
+  expect(query.get('$search')).toBe('"tax"')
+  expect(query.get('$select')).toBe('subject')
+  expect(found).toEqual(['Property tax', 'Your receipt'])
+})

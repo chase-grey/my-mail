@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react'
 import type { MessageActions } from '../App'
-import { answerParts, fromSender, rememberSearch, searchMode, senderWord, suggestSenders, type SearchHit, type SearchMode, type SearchPage, type Sender } from '../domain/search'
+import { answerParts, fromSender, rememberSearch, searchMode, senderWord, subjectSearch, subjectText, suggestSenders, suggestSubjects, type SearchHit, type SearchMode, type SearchPage, type Sender } from '../domain/search'
 import type { Message } from '../domain/types'
 import { Card, Field, Fold, Menu, Segmented, Toast, useMediaQuery, type ToastState } from '../ui'
 import { Conversation } from './Thread'
@@ -15,6 +15,8 @@ export type SearchActions = {
   answer: (question: string, hits: SearchHit[]) => Promise<string>
   /** Who in the whole mailbox matches the word being typed. */
   senders?: (word: string) => Promise<Sender[]>
+  /** Subjects of mail anywhere in the mailbox that holds the words typed. */
+  subjects?: (text: string) => Promise<string[]>
 }
 
 /** What is on screen: what a find matched, or what an ask searched for, read, and said. */
@@ -45,6 +47,7 @@ function dated(receivedAt: string, long = false): string {
 }
 
 const noSenders: Sender[] = []
+const noSubjects: string[] = []
 const failed = (error: unknown) => error instanceof Error ? error.message.toLowerCase() : 'search failed'
 
 type Handlers = {
@@ -97,7 +100,7 @@ function Row({ hit, index, open, pane, on }: { hit: SearchHit; index: number; op
   </li>
 }
 
-export function SearchView({ search, actions, hasModel, senders = noSenders }: { search: SearchActions; actions: MessageActions; hasModel: boolean; senders?: Sender[] }) {
+export function SearchView({ search, actions, hasModel, senders = noSenders, subjects = noSubjects }: { search: SearchActions; actions: MessageActions; hasModel: boolean; senders?: Sender[]; subjects?: string[] }) {
   const [text, setText] = useState('')
   const [override, setOverride] = useState<SearchMode>()
   const [query, setQuery] = useState('')
@@ -126,6 +129,19 @@ export function SearchView({ search, actions, hasModel, senders = noSenders }: {
     const timer = setTimeout(() => void lookUp(word).then((found) => { if (current) setLooked({ word, senders: found }) }).catch(() => {}), 300)
     return () => { current = false; clearTimeout(timer) }
   }, [word, lookUp])
+
+  // Subjects work the same way, on everything typed and not only the last word.
+  const [lookedSubjects, setLookedSubjects] = useState<{ typed: string; subjects: string[] }>()
+  const typed = mode === 'find' ? subjectText(text) : ''
+  const lookUpSubjects = search.subjects
+  const suggestedSubjects = typed ? suggestSubjects(text, [...subjects, ...hits.map((hit) => hit.message.subject)], lookedSubjects && typed.startsWith(lookedSubjects.typed) ? lookedSubjects.subjects : []) : []
+
+  useEffect(() => {
+    if (!typed || !lookUpSubjects) return
+    let current = true
+    const timer = setTimeout(() => void lookUpSubjects(typed).then((found) => { if (current) setLookedSubjects({ typed, subjects: found }) }).catch(() => {}), 300)
+    return () => { current = false; clearTimeout(timer) }
+  }, [typed, lookUpSubjects])
 
   useEffect(() => {
     if (!follow.current || !selectedId) return
@@ -244,8 +260,9 @@ export function SearchView({ search, actions, hasModel, senders = noSenders }: {
         <input type="search" aria-label="search" placeholder={hasModel ? 'search or ask' : 'search'} autoFocus enterKeyHint="search" value={text} onChange={(event) => { setText(event.target.value); if (!event.target.value.trim()) setOverride(undefined) }} />
         {hasModel && <Segmented label="how to search" options={modeOptions} value={mode} onChange={setOverride} />}
       </form>
-      {suggested.length > 0 && <div className="suggest">
+      {suggested.length + suggestedSubjects.length > 0 && <div className="suggest">
         {suggested.map((sender) => <button key={sender.address.toLowerCase()} type="button" title={sender.name} onClick={() => { const next = fromSender(text, sender.address); setText(next); setOverride(undefined); void run(next, 'find') }}>{sender.address}</button>)}
+        {suggestedSubjects.map((subject) => <button key={`subject ${subject}`} type="button" title={subject} onClick={() => { const next = subjectSearch(subject); setText(next); setOverride(undefined); void run(next, 'find') }}>{subject}</button>)}
       </div>}
       <p className={`status${busy ? ' is-busy' : ''}`} aria-live="polite">{status}</p>
       {error && <p className="note is-error" role="alert">{error}</p>}

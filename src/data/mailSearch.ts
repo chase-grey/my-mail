@@ -34,6 +34,12 @@ export class MailSearch {
     return page.value.flatMap(({ from }) => from?.emailAddress?.address ? { name: from.emailAddress.name ?? '', address: from.emailAddress.address } : [])
   }
 
+  /** The subjects of the newest mail that holds the words anywhere, for suggesting searches. Only the subject of each message is read. */
+  async subjects(text: string): Promise<string[]> {
+    const page = await this.graph.request<{ value: { subject?: string }[] }>(`/me/messages?${new URLSearchParams({ '$search': searchParam(text), '$top': '8', '$select': 'subject' })}`)
+    return page.value.flatMap(({ subject }) => subject?.trim() || [])
+  }
+
   /** The page after the one `search` returned. */
   more(next: string): Promise<SearchPage> {
     return this.page(next)

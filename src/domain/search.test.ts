@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { answerParts, fromSender, rememberSearch, searchMode, suggestSenders } from './search'
+import { answerParts, fromSender, rememberSearch, searchMode, subjectSearch, suggestSenders, suggestSubjects } from './search'
 
 describe('search', () => {
   it('finds on operators and bare words, asks on questions and sentences', () => {
@@ -36,6 +36,19 @@ describe('search', () => {
     expect(suggestSenders('ruth ', senders)).toEqual([])
     expect(suggestSenders('uth', senders)).toEqual([])
     expect(fromSender('invoice har', 'orders@harbor.example.com')).toBe('invoice from:orders@harbor.example.com')
+  })
+
+  it('suggests subjects that hold the words typed, and whatever the mailbox found', () => {
+    const atHand = ['Re: Property tax second installment', 'Dinner Friday', 'FW: RE: property tax second installment', '(no subject)']
+    expect(suggestSubjects('tax', atHand)).toEqual(['Property tax second installment'])
+    expect(suggestSubjects('inst prop', atHand)).toEqual(['Property tax second installment'])
+    expect(suggestSubjects('tax dinner', atHand)).toEqual([])
+    expect(suggestSubjects('ta', atHand)).toEqual([])
+    expect(suggestSubjects('subject:tax', atHand)).toEqual([])
+    expect(suggestSubjects('tax', atHand, ['Your receipt', 'RE: Property tax second installment', '(no subject)'])).toEqual(['Property tax second installment', 'Your receipt'])
+    expect(suggestSubjects('dinner friday', atHand, ['Dinner Friday', 'Menu'])).toEqual(['Menu'])
+    expect(suggestSubjects('tax', [], ['a', 'b', 'c'], 2)).toEqual(['a', 'b'])
+    expect(subjectSearch('The "big" one')).toBe('subject:"The big one"')
   })
 
   it('splits an answer at the message numbers it cites', () => {
