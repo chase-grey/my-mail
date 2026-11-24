@@ -27,7 +27,7 @@ describe('threads', () => {
       { message: message('m1', 'news@example.com', 'digest', { conversationId: 'c2', receivedAt: '2026-11-04T09:00:00Z' }), triage: triage('m1', { category: 'newsletter' }) },
       { message: message('m2', 'owen@example.com', 'Re: cabin', { conversationId: 'c1', receivedAt: '2026-11-03T09:00:00Z' }), triage: triage('m2', { category: 'notification' }) },
       { message: message('m3', 'owen@example.com', 'cabin', { conversationId: 'c1', receivedAt: '2026-11-01T09:00:00Z' }), triage: triage('m3', { category: 'reply', needsReply: true }) },
-    ])
+    ], '2026-11-05T00:00:00Z')
     // The owed reply puts the conversation first, and the row still shows its newest message.
     expect(rows.map((row) => [row.key, row.message.id, row.needsMe])).toEqual([['c1', 'm2', true], ['c2', 'm1', false]])
   })

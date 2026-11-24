@@ -26,7 +26,7 @@ describe('triage', () => {
       { message: message('m4', 'd@example.com') },
       { message: message('m5', 'e@example.com'), triage: triage('m5', { category: 'action' }) },
       { message: message('m6', 'f@example.com'), triage: triage('m6', { category: 'receipt', confidence: 0.95 }) },
-    ])
+    ], '2026-11-10T00:00:00Z')
     expect(groups.needsMe.map((item) => item.message.id).sort()).toEqual(['m2', 'm3', 'm4', 'm5'])
     expect(groups.probablyFine.map((item) => item.message.id).sort()).toEqual(['m1', 'm6'])
   })
@@ -55,6 +55,19 @@ describe('triage', () => {
     // It waits under probably fine and is never cleared on its own.
     expect(groupInbox([{ message: old, triage: verdict }]).probablyFine).toHaveLength(1)
     expect(autoArchivable(old, verdict!)).toBe(false)
+  })
+
+  it('never counts old mail as needing me, even flagged, important, or still marked as owing a reply', () => {
+    const now = '2026-11-24T00:00:00Z'
+    const old = { receivedAt: '2021-06-17T09:00:00Z' }
+    const groups = groupInbox([
+      { message: message('m1', 'a@example.com', 'rehearsal dinner', { ...old, flagged: true }) },
+      { message: message('m2', 'b@example.com', 'action required', { ...old, importance: 'high' }), triage: triage('m2', { category: 'action', suggested: 'task', source: 'outlook' }) },
+      { message: message('m3', 'c@example.com', 'can you call me?', old), triage: triage('m3', { category: 'reply', needsReply: true }) },
+      { message: message('m4', 'd@example.com', 'flagged last week', { receivedAt: '2026-11-18T09:00:00Z', flagged: true }), triage: triage('m4', { category: 'newsletter' }) },
+    ], now)
+    expect(groups.needsMe.map((item) => item.message.id)).toEqual(['m4'])
+    expect(groups.probablyFine).toHaveLength(3)
   })
 
   it('only auto-archives confident noise that is not flagged or important', () => {

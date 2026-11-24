@@ -207,7 +207,7 @@ export default function App() {
   const sortBatch = useCallback(async (current: Services, batch: Message[], startCache: Record<string, Triage>, startAutomation: Automation, settings: Settings, now: string, spend: (message: Message) => boolean, onShow?: (inbox: Message[]) => void): Promise<Sorted> => {
     let inbox = batch
     let automationState = startAutomation
-    const hits = applyRules(inbox, automationState.rules)
+    const hits = applyRules(inbox, automationState.rules, now)
     // Mail goes on screen as soon as it is known to be staying past the rules, which cost nothing to work out. Sorting follows.
     const removed = new Set(hits.filter((hit) => hit.rule.action !== 'read' && hit.rule.action !== 'flag').map((hit) => hit.message.id))
     onShow?.(inbox.filter((message) => !removed.has(message.id)))

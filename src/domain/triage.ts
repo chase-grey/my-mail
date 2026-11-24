@@ -20,9 +20,13 @@ export const needsMeCategories: Category[] = ['reply', 'action', 'waiting']
 /** Below this the verdict is shown to me instead of acted on, whoever made it. */
 export const unsureBelow = 0.6
 
-/** Mail that still needs eyes: replies, actions, flagged, important, unread verdicts, and anything the classifier was unsure about. */
-export function needsMe(item: Triaged): boolean {
+/**
+ * Mail that still needs eyes: replies, actions, flagged, important, unread verdicts, and anything the classifier was unsure about.
+ * Old mail never does, whatever flag, importance or category it still carries.
+ */
+export function needsMe(item: Triaged, now = new Date().toISOString()): boolean {
   const { message, triage } = item
+  if (isOld(message, now)) return false
   if (message.flagged || message.importance === 'high') return true
   if (!triage) return true
   if (needsMeCategories.includes(triage.category) || triage.needsReply) return true
@@ -30,9 +34,9 @@ export function needsMe(item: Triaged): boolean {
 }
 
 /** Split the inbox into what needs me and what is probably fine, each ranked. */
-export function groupInbox(items: Triaged[]): { needsMe: Triaged[]; probablyFine: Triaged[] } {
+export function groupInbox(items: Triaged[], now = new Date().toISOString()): { needsMe: Triaged[]; probablyFine: Triaged[] } {
   const ranked = rankTriaged(items)
-  return { needsMe: ranked.filter(needsMe), probablyFine: ranked.filter((item) => !needsMe(item)) }
+  return { needsMe: ranked.filter((item) => needsMe(item, now)), probablyFine: ranked.filter((item) => !needsMe(item, now)) }
 }
 
 /** Only sure verdicts clear mail on their own. Replies, actions, and anything flagged stay. */
@@ -62,7 +66,7 @@ export function needsReading(message: Message, triage: Triage | undefined, now =
   if (!triage) return true
   if (triage.summary) return false
   if (triage.source === 'history') return false
-  return needsMe({ message, triage })
+  return needsMe({ message, triage }, now)
 }
 
 export type RunSummary = {

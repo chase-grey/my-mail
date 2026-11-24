@@ -21,7 +21,7 @@ export type InboxThread = Triaged & {
  * The inbox as conversations. Each sits where its most pressing message would have sat,
  * so a reply that is owed is not buried under a newer note in the same thread.
  */
-export function inboxThreads(items: Triaged[]): InboxThread[] {
+export function inboxThreads(items: Triaged[], now = new Date().toISOString()): InboxThread[] {
   const byKey = new Map<string, Triaged[]>()
   for (const item of rankTriaged(items)) {
     const key = threadKey(item.message)
@@ -31,7 +31,7 @@ export function inboxThreads(items: Triaged[]): InboxThread[] {
   }
   return [...byKey].map(([key, members]) => {
     const newestFirst = [...members].sort((a, b) => b.message.receivedAt.localeCompare(a.message.receivedAt))
-    return { ...newestFirst[0], key, all: newestFirst.map((item) => item.message), needsMe: members.some(needsMe) }
+    return { ...newestFirst[0], key, all: newestFirst.map((item) => item.message), needsMe: members.some((item) => needsMe(item, now)) }
   })
 }
 

@@ -1,3 +1,4 @@
+import { isOld } from './triage'
 import type { Action, Category, Decision, Message, Rule, RuleAction, Triage } from './types'
 
 const normalize = (value: string) => value.trim().toLowerCase()
@@ -22,11 +23,15 @@ export function matchesRule(rule: Rule, message: Message): boolean {
 
 export type RuleHit = { message: Message; rule: Rule }
 
-/** First enabled rule wins, in the order the rules are kept. */
-export function applyRules(messages: Message[], rules: Rule[]): RuleHit[] {
+/**
+ * First enabled rule wins, in the order the rules are kept. A rule never flags old mail or makes a task of it:
+ * paging back through years of inbox must not fill To Do. Old mail still archives, files, and deletes by rule.
+ */
+export function applyRules(messages: Message[], rules: Rule[], now = new Date().toISOString()): RuleHit[] {
   const hits: RuleHit[] = []
   for (const message of messages) {
     const rule = rules.find((candidate) => matchesRule(candidate, message))
+    if (rule && (rule.action === 'task' || rule.action === 'flag') && isOld(message, now)) continue
     if (rule) hits.push({ message, rule })
   }
   return hits

@@ -18,9 +18,21 @@ describe('rules', () => {
 
   it('applies the first matching rule per message and counts hits', () => {
     const rules = [rule({ id: 'a', from: 'deals@' }), rule({ id: 'b', subject: 'sale', action: 'delete' })]
-    const hits = applyRules([message('m1', 'deals@shop.example.com', 'sale'), message('m2', 'mom@example.com', 'dinner'), message('m3', 'promo@other.example', 'big sale')], rules)
+    const hits = applyRules([message('m1', 'deals@shop.example.com', 'sale'), message('m2', 'mom@example.com', 'dinner'), message('m3', 'promo@other.example', 'big sale')], rules, '2026-11-10T00:00:00Z')
     expect(hits.map((hit) => [hit.message.id, hit.rule.id])).toEqual([['m1', 'a'], ['m3', 'b']])
     expect(recordHits(rules, hits).map((item) => item.hits)).toEqual([1, 1])
+  })
+
+  it('never flags old mail or makes a task of it, and still archives it', () => {
+    const now = '2026-11-24T00:00:00Z'
+    const rules = [rule({ id: 'task', from: 'school@', action: 'task' }), rule({ id: 'flag', from: 'bank@', action: 'flag' }), rule({ id: 'archive', from: 'deals@' })]
+    const old = { receivedAt: '2021-06-17T09:00:00Z' }
+    const recent = { receivedAt: '2026-11-20T09:00:00Z' }
+    const hits = applyRules([
+      message('m1', 'school@example.com', 'graduation', old), message('m2', 'bank@example.com', 'statement', old), message('m3', 'deals@example.com', 'sale', old),
+      message('m4', 'school@example.com', 'conference', recent), message('m5', 'bank@example.com', 'statement', recent),
+    ], rules, now)
+    expect(hits.map((hit) => [hit.message.id, hit.rule.id])).toEqual([['m3', 'archive'], ['m4', 'task'], ['m5', 'flag']])
   })
 
   it('suggests a rule after the same sender was archived three times, unless a rule already covers it', () => {

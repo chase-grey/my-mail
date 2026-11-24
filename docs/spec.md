@@ -141,7 +141,8 @@ The home screen and the cold-start screen. Everything that still needs me, group
 - **no summary line.** The line under search says only that a check is running.
 - **needs me**, with its count beside the heading: reply, action, and waiting categories, plus anything flagged or marked important by
   the sender, plus anything the model was under 60% sure about in any category. Ranked by category
-  (reply, action, waiting) then newest.
+  (reply, action, waiting) then newest. Mail older than 30 days is never here, whatever flag,
+  importance, or category it carries, and a rule never flags it or makes a task of it.
 - **everything else**, below needs me with no heading of its own: fyi, receipt, notification, newsletter, promo that auto-archive did not take
   (either because auto-archive is off for that category or confidence was under the gate). Each card
   shows the category and the confidence, and leads with archive.
