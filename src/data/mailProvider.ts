@@ -1,6 +1,7 @@
 import { chunk, type ScanMessage } from '../domain/cleanup'
 import { describeOutlookRule, type OutlookRuleBody } from '../domain/outlookRules'
 import { trimForModel } from '../domain/text'
+import type { MailContent } from '../domain/mailHtml'
 import type { Header } from '../domain/unsubscribe'
 import { categories, type Message, type OutlookRule } from '../domain/types'
 import { GraphError, type GraphClient } from './graphClient'
@@ -35,6 +36,7 @@ export const junkSweepCap = 200
 export const scanPageSize = 500
 export const batchLimit = 20
 export const moveAttempts = 6
+export const contentKept = 40
 
 const retryable = (status: number) => status === 429 || status === 424 || status >= 500
 
@@ -95,6 +97,7 @@ export class MailProvider {
   private readonly folderIds = new Map<string, string>()
   private archiveId?: string
   private masterCategoriesReady = false
+  private readonly contents = new Map<string, Promise<MailContent>>()
 
   constructor(
     private readonly graph: GraphClient,
@@ -279,6 +282,24 @@ export class MailProvider {
   async headers(id: string): Promise<Header[]> {
     const message = await this.graph.request<{ internetMessageHeaders?: Header[] }>(`/me/messages/${encodeURIComponent(id)}?$select=internetMessageHeaders`)
     return message.internetMessageHeaders ?? []
+  }
+
+  /**
+   * The message as it was written, for reading. Lists carry text cut down for a model; this asks for the markup itself.
+   * The last few are remembered so going back to one does not ask again.
+   */
+  content(id: string): Promise<MailContent> {
+    const known = this.contents.get(id)
+    if (known) return known
+    const asked = this.graph.request<{ body?: { contentType?: string; content?: string } }>(`/me/messages/${encodeURIComponent(id)}?$select=body`, { headers: { Prefer: 'IdType="ImmutableId", outlook.body-content-type="html"' } })
+      .then(({ body }): MailContent => body?.contentType?.toLowerCase() === 'html' ? { html: body.content ?? '', text: '' } : { text: (body?.content ?? '').replace(/\r/g, '').trim() })
+    asked.catch(() => this.contents.delete(id))
+    this.contents.set(id, asked)
+    for (const oldest of this.contents.keys()) {
+      if (this.contents.size <= contentKept) break
+      this.contents.delete(oldest)
+    }
+    return asked
   }
 
   /** Sends a plain-text reply to the sender right away. */

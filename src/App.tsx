@@ -24,6 +24,7 @@ import { useInstallPrompt } from './installPrompt'
 import { loadSettings, saveSettings, type Settings } from './settings'
 import { CleanupView, type CleanupActions, type CleanupState } from './views/CleanupView'
 import { InboxView } from './views/InboxView'
+import { BodySource } from './views/MailBody'
 import { InstallBanner, InstallStep, hasInstallStep } from './views/InstallOffer'
 import { ReceiptsView, type ReceiptActions } from './views/ReceiptsView'
 import { RulesView } from './views/RulesView'
@@ -883,13 +884,15 @@ export default function App() {
     if (next === 'cleanup' && !cleanup.done && !cleanup.scanned) void cleanupActions.scan()
   }
 
+  const readBody = useMemo(() => services && ((message: Message) => services.mail.content(message.id)), [services])
+
   const links: ShellLink[] = [
     { label: 'open outlook', onSelect: () => window.open('https://outlook.live.com/mail/0/', '_blank', 'noreferrer') },
     ...(settings.brainUrl ? [{ label: 'open my brain', onSelect: () => window.open(settings.brainUrl, '_blank', 'noreferrer') }] : []),
     ...(install.canPrompt ? [{ label: 'install app', onSelect: () => void install.install() }] : []),
   ]
 
-  return <Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe } : undefined} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })}>
+  return <BodySource value={connected ? readBody : undefined}><Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe } : undefined} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })}>
     {view === 'inbox' && installFirst && <InstallStep install={install} onSkip={() => setInstallSkipped(true)} />}
     {view === 'inbox' && connected && <InstallBanner install={install} />}
     {view === 'inbox' && !installFirst && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} hasModel={Boolean(settings.anthropicApiKey)} suggestions={suggestions} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
@@ -899,5 +902,5 @@ export default function App() {
     {view === 'rules' && <RulesView rules={automation.rules} outlookRules={outlookRules} snoozes={automation.snoozes} error={error} onRules={updateRules} />}
     {view === 'cleanup' && <CleanupView state={cleanup} error={error} actions={cleanupActions} onError={setError} />}
     {view === 'settings' && <SettingsView settings={settings} connection={connection} accountName={accountName} busy={Boolean(busy)} error={error} onSettings={setSettings} onConnect={connect} onDisconnect={disconnect} />}
-  </Shell>
+  </Shell></BodySource>
 }

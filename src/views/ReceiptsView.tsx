@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Message } from '../domain/types'
 import { Empty, Fold, useMediaQuery } from '../ui'
+import { MailBody } from './MailBody'
 
 export type ReceiptActions = {
   /** The newest receipts, or the next page received at or before `before`. */
@@ -26,7 +27,7 @@ function Detail({ message, pane, onInbox }: { message: Message; pane: boolean; o
     </div>
     {pane && <h2 className="detail-subject">{message.subject}</h2>}
     {pane && <p className="detail-meta"><span><b className="detail-from">{message.from.name}</b>{`<${message.from.address}>`}</span><span>{dated(message.receivedAt, true)}</span></p>}
-    <div className="mail-body">{message.body || message.preview || '(empty)'}</div>
+    <MailBody message={message} />
   </div>
 }
 

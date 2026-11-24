@@ -1,0 +1,5 @@
+.mail-body.is-html, .item .mail-body.is-html { padding: 0; background: none; white-space: normal; }
+.mail-body.is-waiting { min-height: 4rem; background: none; }
+.mail-body a { color: var(--accent); }
+.mail-frame { overflow-x: auto; overflow-y: hidden; border-radius: 8px; }
+.mail-frame iframe { display: block; width: 100%; height: 0; border: 0; transform-origin: 0 0; }

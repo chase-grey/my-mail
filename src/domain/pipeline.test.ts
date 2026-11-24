@@ -15,6 +15,7 @@ describe('text for the model', () => {
   it('drops quoted history, mailing footers, and raw links, then caps', () => {
     const body = ['Sunday at 6?', 'See https://example.com/x for the menu', '', 'On Mon, Nov 2, 2026 Chase wrote:', '> earlier words', '> more'].join('\n')
     expect(trimForModel(body)).toBe('Sunday at 6?\nSee [link] for the menu')
+    expect(trimForModel('Start a return<https://example.com/r?id=1> today, or see <https://example.com/help>.')).toBe('Start a return today, or see [link].')
     const promo = ['20% off everything', '', 'Unsubscribe here', 'You are receiving this because you signed up'].join('\n')
     expect(trimForModel(promo)).toBe('20% off everything')
     expect(trimForModel('> only a quote\nthen text')).toBe('> only a quote\nthen text')

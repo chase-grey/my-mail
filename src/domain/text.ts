@@ -24,6 +24,12 @@ const footerStarts = [
 
 const urlPattern = /https?:\/\/\S+/g
 
+/**
+ * Graph writes a link as its words and then the address in angle brackets: `return<https://…>`.
+ * The words stay and the address goes; an address with no words of its own becomes `[link]`.
+ */
+const shortLinks = (line: string) => line.replace(/(\S)?<https?:\/\/[^>\s]*>/g, (_, before?: string) => before ?? '[link]').replace(urlPattern, '[link]')
+
 /** The part of a body worth a model's attention: no quoted history, no mailing footer, no raw links, capped. */
 export function trimForModel(body: string, limit = 1500): string {
   const lines = body.replace(/\r/g, '').split('\n')
@@ -32,7 +38,7 @@ export function trimForModel(body: string, limit = 1500): string {
     const line = raw.trim()
     if (quoteStarts.some((pattern) => pattern.test(line)) && kept.length) break
     if (footerStarts.some((pattern) => pattern.test(line)) && kept.length) break
-    kept.push(line.replace(urlPattern, '[link]'))
+    kept.push(shortLinks(line))
   }
   const text = kept.join('\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
   return text.length > limit ? `${text.slice(0, limit)}…` : text

@@ -5,6 +5,7 @@ import { snoozeOptions, type SnoozeOption } from '../domain/snooze'
 import { categoryLabel, groupInbox, summaryLine, type RunSummary, type Triaged } from '../domain/triage'
 import type { Message, RuleAction, Snooze } from '../domain/types'
 import { Card, Field, Fold, Menu, Segmented, Sheet, Toast, useMediaQuery, usePresence, type ToastState } from '../ui'
+import { MailBody } from './MailBody'
 import type { ConnectionStatus } from './SettingsView'
 
 type SheetState =
@@ -86,7 +87,7 @@ function Detail({ item, kept, quiet, pane, on }: { item: Triaged; kept: boolean;
     {pane && triage?.summary && <p className={`detail-summary${isLoud(item) ? ' is-loud' : ''}`}>{triage.summary}</p>}
     <p className="detail-meta"><span>{pane && <b className="detail-from">{message.from.name}</b>}{`<${message.from.address}>`}</span><span>{when(message.receivedAt, true)}</span></p>
     {facts && <p className="detail-meta">{facts}</p>}
-    <div className="mail-body">{message.body || message.preview || '(empty)'}</div>
+    <MailBody message={message} />
   </div>
 }
 

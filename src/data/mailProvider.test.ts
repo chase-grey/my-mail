@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { GraphClient, GraphError } from './graphClient'
-import { MailProvider, fromGraph, mailDefaultHeaders, tidyBody } from './mailProvider'
+import { MailProvider, contentKept, fromGraph, mailDefaultHeaders, tidyBody } from './mailProvider'
 
 describe('mail provider', () => {
   it('maps a graph message, lowercasing the address and trimming the body', () => {
@@ -17,6 +17,31 @@ describe('mail provider', () => {
     const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toContain('/me/mailFolders/inbox/messages?')
     expect(new Headers(init.headers).get('Prefer')).toBe(mailDefaultHeaders.Prefer)
+  })
+
+  it('reads a message as it was written, asking for its markup once', async () => {
+    const fetcher = vi.fn(async (url: string) => new Response(JSON.stringify({ body: url.includes('/plain') ? { contentType: 'text', content: 'Sunday?\r\nMom\r\n' } : { contentType: 'html', content: '<p>Sunday?</p>' } }), { status: 200 }))
+    const mail = new MailProvider(new GraphClient(async () => 'token', fetcher as unknown as typeof fetch, 'https://graph.example', mailDefaultHeaders))
+    expect(await mail.content('a/b')).toEqual({ html: '<p>Sunday?</p>', text: '' })
+    expect(await mail.content('a/b')).toEqual({ html: '<p>Sunday?</p>', text: '' })
+    expect(await mail.content('plain')).toEqual({ text: 'Sunday?\nMom' })
+    expect(fetcher).toHaveBeenCalledTimes(2)
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('https://graph.example/me/messages/a%2Fb?$select=body')
+    expect(new Headers(init.headers).get('Prefer')).toBe('IdType="ImmutableId", outlook.body-content-type="html"')
+  })
+
+  it('asks again for a message it failed to read, and forgets the oldest past the cap', async () => {
+    let fail = true
+    const fetcher = vi.fn(async () => fail ? new Response('{}', { status: 503 }) : new Response(JSON.stringify({ body: { contentType: 'html', content: '<p>x</p>' } }), { status: 200 }))
+    const mail = new MailProvider(new GraphClient(async () => 'token', fetcher as unknown as typeof fetch, 'https://graph.example'))
+    await expect(mail.content('a')).rejects.toBeInstanceOf(GraphError)
+    fail = false
+    expect((await mail.content('a')).html).toBe('<p>x</p>')
+    for (let at = 0; at < contentKept; at++) await mail.content(`m${at}`)
+    const before = fetcher.mock.calls.length
+    await mail.content('a')
+    expect(fetcher.mock.calls.length).toBe(before + 1)
   })
 
   it('follows pages until it has the count asked for, and asks for older mail by date', async () => {
