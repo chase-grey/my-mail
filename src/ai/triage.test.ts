@@ -59,6 +59,19 @@ describe('ai triage', () => {
     expect(await readMessages({ createMessage } as unknown as AnthropicClient, 'model', [], context)).toEqual([])
   })
 
+  it('hands over each batch as it lands, so a later failure keeps the earlier ones', async () => {
+    const messages = Array.from({ length: 25 }, (_, index) => message(`m${index}`, `p${index}@example.com`))
+    let calls = 0
+    const createMessage = vi.fn(async (request: MessagesRequest) => {
+      if (++calls === 2) throw new Error('overloaded')
+      const numbers = [...(request.messages[0].content as string).matchAll(/^### message (\d+)$/gm)].map((match) => Number(match[1]))
+      return { id: 'r', stop_reason: 'tool_use', content: [{ type: 'tool_use' as const, id: 't', name: 'triage_messages', input: { results: numbers.map((n) => ({ n, category: 'fyi', summary: String(n), needs_reply: false, suggested: 'archive', confidence: 0.9 })) } }] }
+    })
+    const kept: string[] = []
+    await expect(readMessages({ createMessage } as unknown as AnthropicClient, 'model', messages.map((item) => ({ message: item })), context, () => 'now', (results) => kept.push(...results.map((result) => result.messageId)))).rejects.toThrow('overloaded')
+    expect(kept).toEqual(messages.slice(0, 12).map((item) => item.id))
+  })
+
   it('drafts only on request, as plain text, with the instruction when there is one', async () => {
     const request = buildDraftRequest('claude-sonnet-5-5', message('m1', 'mom@example.com', 'Dinner?', { body: 'Sunday at 6?' }), { ...context, instruction: 'yes but 7' })
     expect(request.tools).toBeUndefined()

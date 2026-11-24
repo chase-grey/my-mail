@@ -48,6 +48,19 @@ export function groupBySender(messages: ScanMessage[]): SenderGroup[] {
   return [...groups.values()].sort((a, b) => b.count - a.count || b.latest.localeCompare(a.latest))
 }
 
+/** What Jev said about a sender's mail, kept on this device so another scan does not ask again. */
+export type SenderKinds = Record<string, { kind: Category; confidence: number }>
+
+/** Senders a scan still has to ask Jev about: two or more messages, the biggest first, and no answer remembered. */
+export function sendersToAsk(groups: SenderGroup[], known: SenderKinds, limit = 80): SenderGroup[] {
+  return groups.filter((group) => group.count >= 2).slice(0, limit).filter((group) => !known[group.address])
+}
+
+/** The remembered answers for senders still in the inbox. The rest are dropped, so the list empties as the inbox does. */
+export function keepSenderKinds(groups: SenderGroup[], known: SenderKinds): SenderKinds {
+  return Object.fromEntries(groups.filter((group) => known[group.address]).map((group) => [group.address, known[group.address]]))
+}
+
 export const noiseKinds: Category[] = ['newsletter', 'promo', 'notification', 'spam']
 
 /**

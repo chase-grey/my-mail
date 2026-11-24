@@ -134,12 +134,15 @@ export function batches<T>(items: T[], size = batchSize): T[][] {
 }
 
 /** Read messages in batches. Items with a known category get a summary and a suggestion; the rest get a full verdict. */
-export async function readMessages(client: AnthropicClient, model: string, items: ReadItem[], context: TriagePrompt, now = () => new Date().toISOString()): Promise<Triage[]> {
+export async function readMessages(client: AnthropicClient, model: string, items: ReadItem[], context: TriagePrompt, now = () => new Date().toISOString(), onBatch?: (results: Triage[]) => void): Promise<Triage[]> {
   const results: Triage[] = []
   for (const batch of batches(items)) {
     const response = await client.createMessage(buildRequest(model, batch, context))
     const use = toolUses(response.content).find((block) => block.name === triageTool.name)
-    results.push(...parseResults(use?.input, batch, now()))
+    const read = parseResults(use?.input, batch, now())
+    // Each batch is handed over as it lands, so a later batch failing does not throw away the ones already paid for.
+    onBatch?.(read)
+    results.push(...read)
   }
   return results
 }

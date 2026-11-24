@@ -22,8 +22,8 @@ export type Category = typeof categories[number]
 export const actions = ['archive', 'delete', 'task', 'reply', 'keep', 'snooze', 'read', 'flag', 'unsubscribe'] as const
 export type Action = typeof actions[number]
 
-/** Who decided the category: Claude read it, Jev scored it, Outlook already had it, or the sender's history settled it. */
-export type TriageSource = 'model' | 'jev' | 'outlook' | 'history'
+/** Who decided the category: Claude read it, Jev scored it, Outlook already had it, the sender's history settled it, or it was too old to spend a model on. */
+export type TriageSource = 'model' | 'jev' | 'outlook' | 'history' | 'age'
 
 export type Triage = {
   messageId: string

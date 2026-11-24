@@ -467,6 +467,12 @@ Rules the budget follows:
 - Messages are numbered 1 to 12 in a batch; immutable ids never cross the wire to a model.
 - Reading runs at `effort: low`. Haiku 5.5 thinks by default and a category does not need it.
 - A verdict is written once, as a category on the message, so a second device pays nothing to sort.
+  Sure verdicts are written while Claude reads, not after. The summary is not shared yet, so a second
+  device still pays Claude to read what needs me.
+- Mail older than thirty days is never sent to Jev or Claude. It gets an `fyi` verdict from its age,
+  sits under probably fine, is never auto-archived, and is not written to Outlook as a category.
+- A failed Claude call keeps Jev's verdicts and the batches already read.
+- Cleanup remembers what Jev said about a sender on this device and asks only about new senders.
 - Prompt caching is not used: the shared prefix is under Haiku's minimum cacheable size.
 - The Batch API is not used: it is asynchronous and this app runs while open. It would fit a
   phase 4 worker.

@@ -19,6 +19,10 @@ There is no junk folder. Every run moves what Outlook junked into the inbox befo
 
 Mail should show up about as fast as it does in Outlook. While the app is on screen it asks for new mail every few seconds (`peek`), and again the moment it comes back to the screen. What arrives is shown as soon as the rules have had their say, before any model sorts it; sorting then relabels it or takes it away. Do not hold fetched mail off screen until sorting finishes, and do not put a wait in front of the look for new mail. The quiet look changes nothing on screen when nothing came.
 
+## model spend
+
+Mail older than thirty days is never sent to Jev or Claude (`isOld`). It gets a free verdict and waits under probably fine; whatever it once asked for, the moment has passed. A verdict a model was paid for is kept: a failed call later in the same run does not throw it away, and what cleanup learns about a sender is remembered. Do not add a model call that runs on every message, on every scan, or on every device without a cheaper source in front of it.
+
 ## committing and deploying
 
 When a task is finished, commit the files you edited by name and push to main without asking. The push deploys the site.

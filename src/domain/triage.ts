@@ -43,8 +43,22 @@ export function autoArchivable(message: Message, triage: Triage, minimumConfiden
   return triage.confidence >= minimumConfidence
 }
 
-/** Messages a language model should read: what needs me, plus anything the cheaper classifier was unsure about. */
-export function needsReading(message: Message, triage: Triage | undefined): boolean {
+/** Mail older than this is never sent to Jev or Claude. Whatever it once asked for, the moment has passed. */
+export const oldAfterDays = 30
+
+export function isOld(message: Message, now: string, days = oldAfterDays): boolean {
+  return message.receivedAt < new Date(new Date(now).getTime() - days * 86_400_000).toISOString()
+}
+
+/** A verdict from age alone: old mail sits under probably fine without a model. It is never auto-archived and never written to Outlook. */
+export function ageTriage(message: Message, now: string): Triage | undefined {
+  if (!isOld(message, now)) return undefined
+  return { messageId: message.id, category: 'fyi', summary: '', needsReply: false, suggested: 'archive', confidence: 1, source: 'age', triagedAt: now }
+}
+
+/** Messages a language model should read: what needs me, plus anything the cheaper classifier was unsure about. Old mail is never read. */
+export function needsReading(message: Message, triage: Triage | undefined, now = new Date().toISOString()): boolean {
+  if (isOld(message, now)) return false
   if (!triage) return true
   if (triage.summary) return false
   if (triage.source === 'history') return false

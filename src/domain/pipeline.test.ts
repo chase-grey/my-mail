@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeGroup, groupBySender, likelyNoise, staleIds, type ScanMessage } from './cleanup'
+import { describeGroup, groupBySender, keepSenderKinds, likelyNoise, sendersToAsk, staleIds, type ScanMessage } from './cleanup'
 import { message } from './fixtures'
 import { historyTriage, noiseSenders, senderHistoryLine } from './history'
 import { compilable, compileRule, describeOutlookRule, outlookRuleName, planRuleSync } from './outlookRules'
@@ -142,5 +142,15 @@ describe('cleanup', () => {
 
   it('finds read, unflagged mail older than the cutoff', () => {
     expect(staleIds(messages, 30, new Date('2026-11-04T00:00:00Z')).sort()).toEqual(['4', '6'])
+  })
+
+  it('asks about a sender once, and forgets senders that have left the inbox', () => {
+    const groups = groupBySender(messages)
+    const repeat = groups.filter((group) => group.count >= 2)
+    expect(repeat.length).toBeGreaterThan(0)
+    expect(sendersToAsk(groups, {}).map((group) => group.address)).toEqual(repeat.map((group) => group.address))
+    const known = { [repeat[0].address]: { kind: 'newsletter' as const, confidence: 0.9 }, 'gone@example.com': { kind: 'promo' as const, confidence: 0.8 } }
+    expect(sendersToAsk(groups, known).map((group) => group.address)).toEqual(repeat.slice(1).map((group) => group.address))
+    expect(Object.keys(keepSenderKinds(groups, known))).toEqual([repeat[0].address])
   })
 })

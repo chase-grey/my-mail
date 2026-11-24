@@ -12,12 +12,12 @@ import { MailSearch } from './data/mailSearch'
 import { MicrosoftAuth, configuredClientId } from './data/microsoftAuth'
 import { TodoProvider } from './data/todoProvider'
 import { arrivals, newestOf, withArrivals } from './domain/arrivals'
-import { groupBySender, staleIds, type ScanMessage, type SenderGroup } from './domain/cleanup'
+import { groupBySender, keepSenderKinds, sendersToAsk, staleIds, type ScanMessage, type SenderGroup, type SenderKinds } from './domain/cleanup'
 import { historyTriage, noiseSenders, senderHistoryLine } from './domain/history'
 import { compileRule, planRuleSync } from './domain/outlookRules'
 import { applyRules, autoRuleSenders, newRule, recordHits, rememberDecision, retiredSenders, suggestRules, type RuleSuggestion } from './domain/rules'
 import { dueSnoozes, snoozeRecord, snoozeUntil, withoutSnoozes, type SnoozeOption } from './domain/snooze'
-import { autoArchivable, groupInbox, needsReading, outlookTriage, pruneTriage, rankTriaged, summarize, unsureBelow, type RunSummary, type Triaged } from './domain/triage'
+import { ageTriage, autoArchivable, groupInbox, needsReading, outlookTriage, pruneTriage, rankTriaged, summarize, unsureBelow, type RunSummary, type Triaged } from './domain/triage'
 import { emptyAutomation, type Action, type Automation, type Message, type OutlookRule, type Rule, type RuleAction, type Triage } from './domain/types'
 import { parseUnsubscribe, unsubscribeMethod } from './domain/unsubscribe'
 import { loadSettings, saveSettings, type Settings } from './settings'
@@ -32,6 +32,7 @@ import { SettingsView, type ConnectionStatus } from './views/SettingsView'
 const triageKey = 'my-mail.triage.v1'
 const keptKey = 'my-mail.kept.v1'
 const inboxKey = 'my-mail.inbox.v1'
+const senderKindsKey = 'my-mail.senderKinds.v1'
 /** How much of the inbox is kept on this device to show on the next open, before the mailbox has answered. */
 const savedInboxSize = 200
 const staleDays = 30
@@ -210,14 +211,15 @@ export default function App() {
     if (hits.length) automationState = { ...automationState, rules: recordHits(automationState.rules, hits) }
     if (automationState !== automationRef.current) await persistAutomation(automationState, current)
 
-    // Verdicts, cheapest source first: this device's cache, the category Outlook already carries, the sender's history, then Jev.
+    // Verdicts, cheapest source first: this device's cache, the category Outlook already carries, the sender's history,
+    // the message's age, then Jev. Mail too old to need anything never reaches a model.
     let cache = { ...startCache }
     const before = new Set(Object.keys(cache))
     let withoutModel = 0
     const noise = noiseSenders(automationState.decisions)
     for (const message of inbox) {
       if (cache[message.id]) continue
-      const verdict = outlookTriage(message, now) ?? historyTriage(message, noise, now)
+      const verdict = outlookTriage(message, now) ?? historyTriage(message, noise, now) ?? ageTriage(message, now)
       if (verdict) { cache[message.id] = verdict; withoutModel++ }
     }
     const history = (message: Message) => senderHistoryLine(automationState.decisions, message.from.address)
@@ -233,31 +235,45 @@ export default function App() {
       }
     }
 
+    // New verdicts go onto the message as a category so the other device, and Outlook, can see them. The sure ones go
+    // while Claude reads, so a second device looking at the same mail finds them sooner and a failed read does not lose them.
+    const shared = new Set<string>()
+    const share = async (sureOnly: boolean) => {
+      if (!settings.writeCategories) return
+      for (const message of inbox) {
+        const verdict = cache[message.id]
+        if (!verdict || before.has(message.id) || shared.has(message.id) || verdict.source === 'outlook' || verdict.source === 'age' || message.categories.includes(verdict.category)) continue
+        if (sureOnly && verdict.confidence < unsureBelow) continue
+        shared.add(message.id)
+        try { await current.mail.setVerdict(message.id, message.categories, verdict.category) } catch { /* a missing scope only costs the shared category */ }
+      }
+    }
+    const sharing = share(true)
+
     // The language model reads only what needs me, or what nothing else could settle.
     if (settings.anthropicApiKey) {
-      const toRead = inbox.filter((message) => needsReading(message, cache[message.id]))
+      const toRead = inbox.filter((message) => needsReading(message, cache[message.id], now))
       if (toRead.length) {
         setBusy(`reading ${toRead.length} ${toRead.length === 1 ? 'message' : 'messages'}`)
         const items: ReadItem[] = toRead.map((message) => {
           const prior = cache[message.id]
           return { message, known: prior && prior.confidence >= unsureBelow ? { category: prior.category, needsReply: prior.needsReply } : undefined }
         })
-        const results = await readMessages(new AnthropicClient(settings.anthropicApiKey), settings.anthropicModel, items, { aboutMe: settings.aboutMe, today: new Date().toLocaleDateString('en-CA'), history })
-        for (const result of results) {
-          const prior = cache[result.messageId]
-          cache[result.messageId] = prior && prior.confidence >= unsureBelow ? { ...result, source: prior.source, confidence: prior.confidence } : result
+        // A read that fails keeps what the cheaper sources and the earlier batches settled; throwing here would have Jev asked again next run.
+        try {
+          await readMessages(new AnthropicClient(settings.anthropicApiKey), settings.anthropicModel, items, { aboutMe: settings.aboutMe, today: new Date().toLocaleDateString('en-CA'), history }, undefined, (results) => {
+            for (const result of results) {
+              const prior = cache[result.messageId]
+              cache[result.messageId] = prior && prior.confidence >= unsureBelow ? { ...result, source: prior.source, confidence: prior.confidence } : result
+            }
+          })
+        } catch (failure) {
+          setError(errorText(failure))
         }
       }
     }
-
-    // New verdicts go onto the message as a category so the other device, and Outlook, can see them.
-    if (settings.writeCategories) {
-      for (const message of inbox) {
-        const verdict = cache[message.id]
-        if (!verdict || before.has(message.id) || verdict.source === 'outlook' || message.categories.includes(verdict.category)) continue
-        try { await current.mail.setVerdict(message.id, message.categories, verdict.category) } catch { /* a missing scope only costs the shared category */ }
-      }
-    }
+    await sharing
+    await share(false)
 
     let autoArchived = 0
     let filed = 0
@@ -693,21 +709,24 @@ export default function App() {
         scanRef.current = scanned
         const groups = groupBySender(scanned)
         const jevKey = settingsRef.current.jevApiKey
+        // A sender Jev has already been asked about is not asked again; a scan during a long cleanup costs only its new senders.
+        const known = keepSenderKinds(groups, readJson<SenderKinds>(senderKindsKey, {}))
+        const candidates = jevKey ? sendersToAsk(groups, known) : []
+        const labelled = (list: SenderGroup[], kinds: SenderKinds) => list.map((group) => kinds[group.address] ? { ...group, kind: kinds[group.address].kind, kindConfidence: kinds[group.address].confidence } : group)
         // The lists stay hidden until the senders are sorted, so none of them changes section after it is on screen.
-        setCleanup({ scanned: scanned.length, total: scanned.length, groups, staleCount: staleIds(scanned, staleDays).length, done: !jevKey })
-        if (!jevKey) return
+        setCleanup({ scanned: scanned.length, total: scanned.length, groups: labelled(groups, known), staleCount: staleIds(scanned, staleDays).length, done: !candidates.length })
+        writeJson(senderKindsKey, known)
+        if (!candidates.length) return
         // One cheap question per sender, on the newest message only, to tell newsletters from people.
         const client = new JevClient(jevKey)
-        const candidates = groups.filter((group) => group.count >= 2).slice(0, 80)
         setCleanup((current) => ({ ...current, working: `sorting ${candidates.length} senders` }))
-        const kinds = await Promise.all(candidates.map(async (group) => {
+        const asked = await Promise.all(candidates.map(async (group) => {
           try { return [group.address, await kindOf(client, group.sample)] as const } catch { return [group.address, undefined] as const }
         }))
-        const byAddress = new Map(kinds)
-        setCleanup((current) => ({ ...current, done: true, working: undefined, groups: current.groups.map((group) => {
-          const kind = byAddress.get(group.address)
-          return kind ? { ...group, kind: kind.category, kindConfidence: kind.confidence } : group
-        }) }))
+        const kinds: SenderKinds = { ...known }
+        for (const [address, kind] of asked) if (kind) kinds[address] = { kind: kind.category, confidence: kind.confidence }
+        writeJson(senderKindsKey, kinds)
+        setCleanup((current) => ({ ...current, done: true, working: undefined, groups: labelled(current.groups, kinds) }))
       } catch (failure) {
         setError(errorText(failure))
         setCleanup((current) => ({ ...current, done: true, working: undefined }))

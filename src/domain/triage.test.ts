@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { message } from './fixtures'
-import { autoArchivable, groupInbox, needsReading, outlookTriage, pruneTriage, rankTriaged, summarize, summaryLine } from './triage'
+import { ageTriage, autoArchivable, groupInbox, needsReading, outlookTriage, pruneTriage, rankTriaged, summarize, summaryLine } from './triage'
 import type { Triage } from './types'
 
 const triage = (messageId: string, overrides: Partial<Triage>): Triage => ({
@@ -33,12 +33,28 @@ describe('triage', () => {
 
   it('sends a language model only what needs me or is still unsummarized and unsure', () => {
     const plain = message('m1', 'a@example.com')
-    expect(needsReading(plain, undefined)).toBe(true)
-    expect(needsReading(plain, triage('m1', { category: 'reply', source: 'jev' }))).toBe(true)
-    expect(needsReading(plain, triage('m1', { category: 'reply', source: 'jev', summary: 'already read' }))).toBe(false)
-    expect(needsReading(plain, triage('m1', { category: 'promo', source: 'jev', confidence: 0.9 }))).toBe(false)
-    expect(needsReading(plain, triage('m1', { category: 'promo', source: 'jev', confidence: 0.3 }))).toBe(true)
-    expect(needsReading(plain, triage('m1', { category: 'newsletter', source: 'history' }))).toBe(false)
+    const now = '2026-11-10T00:00:00Z'
+    expect(needsReading(plain, undefined, now)).toBe(true)
+    expect(needsReading(plain, triage('m1', { category: 'reply', source: 'jev' }), now)).toBe(true)
+    expect(needsReading(plain, triage('m1', { category: 'reply', source: 'jev', summary: 'already read' }), now)).toBe(false)
+    expect(needsReading(plain, triage('m1', { category: 'promo', source: 'jev', confidence: 0.9 }), now)).toBe(false)
+    expect(needsReading(plain, triage('m1', { category: 'promo', source: 'jev', confidence: 0.3 }), now)).toBe(true)
+    expect(needsReading(plain, triage('m1', { category: 'newsletter', source: 'history' }), now)).toBe(false)
+  })
+
+  it('spends no model on mail older than thirty days, whatever it once asked for', () => {
+    const now = '2026-11-24T00:00:00Z'
+    const old = message('m1', 'a@example.com', 'can you call me?', { receivedAt: '2026-10-20T09:00:00Z' })
+    const recent = message('m2', 'a@example.com', 'can you call me?', { receivedAt: '2026-10-26T09:00:00Z' })
+    expect(ageTriage(recent, now)).toBeUndefined()
+    const verdict = ageTriage(old, now)
+    expect(verdict).toMatchObject({ category: 'fyi', needsReply: false, source: 'age', confidence: 1 })
+    expect(needsReading(old, undefined, now)).toBe(false)
+    expect(needsReading(old, triage('m1', { category: 'reply', needsReply: true, source: 'outlook' }), now)).toBe(false)
+    expect(needsReading({ ...old, flagged: true }, verdict, now)).toBe(false)
+    // It waits under probably fine and is never cleared on its own.
+    expect(groupInbox([{ message: old, triage: verdict }]).probablyFine).toHaveLength(1)
+    expect(autoArchivable(old, verdict!)).toBe(false)
   })
 
   it('only auto-archives confident noise that is not flagged or important', () => {
