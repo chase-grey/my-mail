@@ -11,6 +11,10 @@
 - When new copy is necessary and the wording is not obvious, ask the product owner what they would say or offer a few short lowercase options for them to choose from. Use their answer as the voice reference for similar copy.
 - Do not block straightforward implementation on a copy interview when an established label or existing product-owner phrasing already provides a clear answer.
 
+## color
+
+The only colors are the theme tokens at the top of `src/styles.css`: the neutrals and the one accent. No red, yellow, amber or green for errors, warnings, delete or success, and no new color tokens. Where something needs emphasis, use the accent or the text color. `src/styles.test.ts` fails on any other color.
+
 ## one inbox
 
 There is no junk folder. Every run moves what Outlook junked into the inbox before reading it (`rescueJunk`), and that mail goes through the same rules and sorting as the rest. Blocking is done with rules. Do not add a junk view, and do not read the inbox without emptying junk first.

@@ -40,7 +40,7 @@ export function RulesView({ rules, outlookRules, snoozes, error, onRules }: {
           { label: rule.enabled ? 'turn off' : 'turn on', onSelect: () => void replace({ ...rule, enabled: !rule.enabled }) },
           ...(rule.action === 'archive' ? [{ label: 'move to receipts', onSelect: () => void replace({ ...rule, action: 'receipts' }) }] : []),
           ...(rule.action === 'receipts' ? [{ label: 'archive', onSelect: () => void replace({ ...rule, action: 'archive' }) }] : []),
-          { label: 'delete', danger: true, onSelect: () => void onRules(rules.filter((item) => item.id !== rule.id)) },
+          { label: 'delete', onSelect: () => void onRules(rules.filter((item) => item.id !== rule.id)) },
         ]} />
       </li>)}</ul>}
       {error && <p className="note is-error" role="alert">{error}</p>}

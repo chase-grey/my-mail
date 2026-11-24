@@ -91,11 +91,11 @@ function Detail({ item, kept, quiet, pane, on }: { item: InboxThread; kept: bool
         { label: message.flagged ? 'unflag' : 'flag', onSelect: () => on.flag(item) },
         { label: 'unsubscribe', onSelect: () => on.unsubscribe(item) },
         { label: 'always do this for the sender', onSelect: () => on.rule(item) },
-        { label: 'delete', danger: true, onSelect: () => on.remove(item) },
+        { label: 'delete', onSelect: () => on.remove(item) },
       ]} />
     </div>
     {pane && <h2 className="detail-subject">{message.subject}</h2>}
-    {pane && triage?.summary && <p className={`detail-summary${isLoud(item) ? ' is-loud' : ''}`}>{triage.summary}</p>}
+    {pane && triage?.summary && <p className="detail-summary">{triage.summary}</p>}
     <p className="detail-meta"><span>{pane && <b className="detail-from">{message.from.name}</b>}{`<${message.from.address}>`}</span><span>{when(message.receivedAt, true)}</span></p>
     {facts && <p className="detail-meta">{facts}</p>}
     <Conversation message={message} />
@@ -163,7 +163,7 @@ function Row({ item, index, kept, quiet, open, pane, leave, on }: { item: InboxT
               <small>{kind ? `${kind} · ` : ''}{when(message.receivedAt)}</small>
             </span>
             <span className="mail-subject">{message.subject}</span>
-            {line && <span className={`mail-summary${loud ? ' is-loud' : ''}`}>{line}</span>}
+            {line && <span className="mail-summary">{line}</span>}
           </button>
           <button className={`quick${triage ? ' is-suggested' : ''}`} type="button" onClick={quick.run}>{quick.label}</button>
         </div>

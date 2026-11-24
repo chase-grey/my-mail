@@ -73,7 +73,7 @@ function Detail({ hit, pane, on }: { hit: SearchHit; pane: boolean; on: Handlers
         { label: 'forward', onSelect: () => on.compose(hit, 'forward') },
         { label: message.flagged ? 'unflag' : 'flag', onSelect: () => on.flag(hit) },
         ...(hit.inInbox ? [] : [{ label: 'move to inbox', onSelect: () => on.toInbox(hit) }]),
-        { label: 'delete', danger: true, onSelect: () => on.remove(hit) },
+        { label: 'delete', onSelect: () => on.remove(hit) },
       ]} />
     </div>
     {pane && <h2 className="detail-subject">{message.subject}</h2>}

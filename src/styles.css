@@ -8,8 +8,6 @@
   --muted: light-dark(#6b6b68, #9a9a98);
   --accent: light-dark(#1f6f5f, #5fc2a8);
   --on-accent: light-dark(#ffffff, #0f0f14);
-  --loud: light-dark(#b45309, #f0a23a);
-  --danger: light-dark(#b42318, #f08080);
   --accent-soft: color-mix(in srgb, var(--accent) 10%, var(--surface));
   --radius: 12px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -74,7 +72,6 @@ a { color: var(--accent); }
 .menu-start .menu-list { left: 0; transform-origin: top left; }
 .menu-list button { display: block; width: 100%; min-height: 2.6rem; padding: 0 0.75rem; border-radius: 7px; text-align: left; white-space: nowrap; }
 .menu-list button:hover:not(:disabled) { background: var(--surface-2); }
-.menu-list button.is-danger { color: var(--danger); }
 
 /* cards and rows */
 .card { padding: 0.85rem 1rem 0.5rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
@@ -89,11 +86,10 @@ a { color: var(--accent); }
 .row-meta { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .row .menu { margin-right: -0.6rem; }
 .note { padding: 0.25rem 0 0.5rem; color: var(--muted); font-size: 0.9rem; }
-.note.is-error { color: var(--danger); animation: rise var(--move) var(--ease); }
+.note.is-error { color: var(--text); animation: rise var(--move) var(--ease); }
 .empty { padding: 0.5rem 0 0.75rem; color: var(--muted); }
 .link { color: var(--accent); min-height: 2.5rem; padding: 0 0.25rem; }
 .chip { display: inline-block; flex: none; padding: 0.1rem 0.5rem; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
-.chip.is-loud { border-color: var(--loud); color: var(--loud); }
 .chip.is-quiet { opacity: 0.7; }
 .row-title .chip { margin-left: 0.5rem; vertical-align: middle; }
 .row-buttons { display: flex; align-items: center; gap: 0.25rem; margin-right: -0.6rem; }
@@ -150,7 +146,6 @@ a { color: var(--accent); }
 .mail-from.is-unread::before { content: ""; display: inline-block; width: 0.45rem; height: 0.45rem; margin-right: 0.45rem; border-radius: 50%; background: var(--accent); vertical-align: 0.1em; }
 .mail-subject { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mail-summary { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 0.9rem; }
-.mail-summary.is-loud, .detail-summary.is-loud { color: var(--loud); }
 .item.is-open .mail-subject, .item.is-open .mail-summary { white-space: normal; overflow-wrap: anywhere; }
 .quick { flex: none; min-height: 2.5rem; padding: 0 0.75rem; border-radius: 999px; color: var(--muted); font-size: 0.85rem; white-space: nowrap; transition: background var(--quick), color var(--quick), scale var(--quick); }
 .quick.is-suggested { color: var(--accent); font-weight: 600; }

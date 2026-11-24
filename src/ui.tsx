@@ -7,7 +7,7 @@ export function Card({ title, aside, children, className = '' }: { title?: React
   </section>
 }
 
-export type MenuItem = { label: string; onSelect: () => void; disabled?: boolean; danger?: boolean }
+export type MenuItem = { label: string; onSelect: () => void; disabled?: boolean }
 
 export function Menu({ label = 'more', items, align = 'end', children }: { label?: string; items: MenuItem[]; align?: 'start' | 'end'; children?: ReactNode }) {
   const details = useRef<HTMLDetailsElement>(null)
@@ -26,7 +26,7 @@ export function Menu({ label = 'more', items, align = 'end', children }: { label
   return <details className={`menu menu-${align}`} ref={details}>
     <summary aria-label={label} title={label}>{children ?? <Icon name="more" />}</summary>
     <div className="menu-list" role="menu">
-      {items.map((item) => <button key={item.label} role="menuitem" type="button" className={item.danger ? 'is-danger' : ''} disabled={item.disabled} onClick={() => { details.current!.open = false; item.onSelect() }}>{item.label}</button>)}
+      {items.map((item) => <button key={item.label} role="menuitem" type="button" disabled={item.disabled} onClick={() => { details.current!.open = false; item.onSelect() }}>{item.label}</button>)}
     </div>
   </details>
 }

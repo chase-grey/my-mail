@@ -27,7 +27,7 @@ it('shows triaged mail with the suggested action highlighted and kept mail folde
   const html = renderToStaticMarkup(<InboxView items={items} kept={{ m3: 'now' }} summary={{ inbox: 3, needReply: 1, byRules: 2, autoArchived: 0, returned: 0, withoutModel: 1 }} connection="connected" suggestions={[{ from: 'news@daily.example.com', action: 'archive', count: 3 }]} snoozes={[]} actions={actions} onConnect={noop} onDismissSuggestion={() => {}} />)
   expect(html).not.toContain('in inbox ·')
   expect(html).toContain('mom asks about sunday dinner')
-  expect(html).toContain('mail-summary is-loud')
+  expect(html).not.toContain('is-loud')
   expect(html).toMatch(/class="quick is-suggested"[^>]*>reply</)
   expect(html).toContain('archive everything from news@daily.example.com')
   expect(html).toContain('1 kept in inbox')
