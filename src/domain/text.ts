@@ -30,6 +30,20 @@ const urlPattern = /https?:\/\/\S+/g
  */
 const shortLinks = (line: string) => line.replace(/(\S)?<https?:\/\/[^>\s]*>/g, (_, before?: string) => before ?? '[link]').replace(urlPattern, '[link]')
 
+/**
+ * A whole message for reading, links shortened and nothing cut for length.
+ * `quoted` says the mail it quotes is shown beside it, so the quoted history is dropped.
+ */
+export function readable(body: string, quoted: boolean): string {
+  const kept: string[] = []
+  for (const raw of body.replace(/\r/g, '').split('\n')) {
+    const line = raw.trimEnd()
+    if (quoted && kept.some(Boolean) && quoteStarts.some((pattern) => pattern.test(line.trim()))) break
+    kept.push(shortLinks(line))
+  }
+  return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim()
+}
+
 /** The part of a body worth a model's attention: no quoted history, no mailing footer, no raw links, capped. */
 export function trimForModel(body: string, limit = 1500): string {
   const lines = body.replace(/\r/g, '').split('\n')

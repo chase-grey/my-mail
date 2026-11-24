@@ -1,6 +1,6 @@
 import { chunk, type ScanMessage } from '../domain/cleanup'
 import { describeOutlookRule, type OutlookRuleBody } from '../domain/outlookRules'
-import { trimForModel } from '../domain/text'
+import { readable, trimForModel } from '../domain/text'
 import type { MailContent } from '../domain/mailHtml'
 import type { Header } from '../domain/unsubscribe'
 import { categories, type Message, type OutlookRule } from '../domain/types'
@@ -21,6 +21,8 @@ type GraphMessage = {
   hasAttachments?: boolean
   categories?: string[]
   webLink: string
+  isDraft?: boolean
+  parentFolderId?: string
 }
 type GraphFolder = { id: string; displayName: string }
 type GraphRule = { id: string; displayName: string; isEnabled: boolean; sequence: number; conditions?: Record<string, unknown>; actions?: Record<string, unknown> }
@@ -32,6 +34,7 @@ export const bodyLimit = 1500
 export const snoozedFolderName = 'snoozed'
 export const receiptsFolderName = 'receipts'
 export const inboxPageSize = 50
+export const threadCap = 100
 export const junkSweepCap = 200
 export const scanPageSize = 500
 export const batchLimit = 20
@@ -96,6 +99,7 @@ export function ruleFromGraph(rule: GraphRule): OutlookRule {
 export class MailProvider {
   private readonly folderIds = new Map<string, string>()
   private archiveId?: string
+  private deletedId?: Promise<string | undefined>
   private masterCategoriesReady = false
   private readonly contents = new Map<string, Promise<MailContent>>()
 
@@ -168,6 +172,30 @@ export class MailProvider {
     if (!messages.length) return []
     const stuck = new Set(await this.moveMany(messages.map((message) => message.id), 'inbox'))
     return messages.filter((message) => !stuck.has(message.id))
+  }
+
+  /**
+   * Every message of a conversation in any folder, sent ones included, newest first. Drafts and deleted mail are left out.
+   * Bodies are whole. Each drops the history it quotes, since that mail is in the list too; the oldest keeps its own,
+   * which may be the only copy of what came before.
+   */
+  async conversation(conversationId: string, cap = threadCap): Promise<Message[]> {
+    // Graph refuses a sort beside this filter, so the order is put right here.
+    const query = new URLSearchParams({ '$filter': `conversationId eq '${conversationId.replace(/'/g, "''")}'`, '$select': `${messageSelect},isDraft,parentFolderId`, '$top': String(Math.min(cap, inboxPageSize)) })
+    const found: GraphMessage[] = []
+    let next: string | undefined = `/me/messages?${query}`
+    while (next && found.length < cap) {
+      const page: { value: GraphMessage[]; '@odata.nextLink'?: string } = await this.graph.request(next)
+      found.push(...page.value)
+      next = page['@odata.nextLink']
+    }
+    this.deletedId ??= this.graph.request<GraphFolder>('/me/mailFolders/deleteditems?$select=id').then((folder) => folder.id, () => undefined)
+    const deleted = await this.deletedId
+    const kept = found.filter((message) => !message.isDraft && (!deleted || message.parentFolderId !== deleted))
+      .sort((a, b) => b.receivedDateTime.localeCompare(a.receivedDateTime))
+    return kept.map((message, index) => {
+      return { ...fromGraph(message), body: readable(message.body?.content ?? message.bodyPreview ?? '', index < kept.length - 1) }
+    })
   }
 
   /** How many messages the inbox holds, loaded or not. */

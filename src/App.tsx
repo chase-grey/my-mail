@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { InteractionRequiredAuthError } from '@azure/msal-browser'
 import { AnthropicClient } from './ai/anthropicClient'
 import { JevClient, classifyWithJev, kindOf } from './ai/jev'
+import { findRelated } from './ai/related'
 import { answerFromMail, translateQuery } from './ai/search'
 import { draftReply, readMessages, type ReadItem } from './ai/triage'
 import { AppFolder } from './data/appFolder'
@@ -17,8 +18,9 @@ import { historyTriage, noiseSenders, senderHistoryLine } from './domain/history
 import { compileRule, planRuleSync } from './domain/outlookRules'
 import { applyRules, autoRuleSenders, newRule, recordHits, rememberDecision, retiredSenders, suggestRules, type RuleSuggestion } from './domain/rules'
 import { dueSnoozes, snoozeRecord, snoozeUntil, withoutSnoozes, type SnoozeOption } from './domain/snooze'
-import { ageTriage, autoArchivable, groupInbox, needsReading, outlookTriage, pruneTriage, rankTriaged, summarize, unsureBelow, type RunSummary, type Triaged } from './domain/triage'
+import { ageTriage, autoArchivable, needsReading, outlookTriage, pruneTriage, rankTriaged, summarize, unsureBelow, type RunSummary, type Triaged } from './domain/triage'
 import { emptyAutomation, type Action, type Automation, type Message, type OutlookRule, type Rule, type RuleAction, type Triage } from './domain/types'
+import { inboxThreads } from './domain/threads'
 import { parseUnsubscribe, unsubscribeMethod } from './domain/unsubscribe'
 import { useInstallPrompt } from './installPrompt'
 import { loadSettings, saveSettings, type Settings } from './settings'
@@ -31,6 +33,7 @@ import { RulesView } from './views/RulesView'
 import { SearchView, type SearchActions } from './views/SearchView'
 import { Shell, type ShellLink, type View } from './views/Shell'
 import { SettingsView, type ConnectionStatus } from './views/SettingsView'
+import { ThreadContext, type ThreadActions } from './views/Thread'
 
 const triageKey = 'my-mail.triage.v1'
 const keptKey = 'my-mail.kept.v1'
@@ -858,7 +861,8 @@ export default function App() {
   // One thing to do at a time: the install while there is one to do, and connecting only after it.
   // It waits for the saved sign-in to be looked for, so a tab that is already connected never sees it.
   const installFirst = !connected && Boolean(services) && !busy && hasInstallStep(install, installSkipped)
-  const needsMe = useMemo(() => groupInbox(triaged.filter((item) => !kept[item.message.id])).needsMe.length, [triaged, kept])
+  // Counted the way the inbox shows it: one for each conversation that needs me.
+  const needsMe = useMemo(() => inboxThreads(triaged).filter((item) => item.needsMe && !kept[item.message.id]).length, [triaged, kept])
   const senders = useMemo(() => messages.map((message) => message.from), [messages])
   const searchActions: SearchActions = {
     find: (query, count) => services!.search.search(query, count),
@@ -866,6 +870,12 @@ export default function App() {
     senders: (word) => services!.search.senders(word),
     translate: (question) => translateQuery(anthropic(), settingsRef.current.strongModel, question, new Date().toLocaleDateString('en-CA')),
     answer: (question, hits) => answerFromMail(anthropic(), settingsRef.current.strongModel, question, hits, { aboutMe: settingsRef.current.aboutMe, today: new Date().toLocaleDateString('en-CA') }),
+  }
+
+  const threadActions: ThreadActions = {
+    thread: (message) => message.conversationId ? services!.mail.conversation(message.conversationId) : Promise.resolve([]),
+    fromSender: async (message) => (await services!.search.search(`from:${message.from.address}`)).hits,
+    related: settings.anthropicApiKey ? (message, onStep) => findRelated(anthropic(), settingsRef.current.strongModel, message, (query, count) => services!.search.search(query, count), new Date().toLocaleDateString('en-CA'), onStep) : undefined,
   }
 
   // `/` opens search from anywhere outside a text field.
@@ -894,15 +904,15 @@ export default function App() {
     ...(install.canPrompt ? [{ label: 'install app', onSelect: () => void install.install() }] : []),
   ]
 
-  return <BodySource value={connected ? readBody : undefined}><Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe } : undefined} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })}>
+  return <BodySource value={connected ? readBody : undefined}><ThreadContext value={connected ? threadActions : undefined}><Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe } : undefined} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })}>
     {view === 'inbox' && installFirst && <InstallStep install={install} onSkip={() => setInstallSkipped(true)} />}
     {view === 'inbox' && connected && <InstallBanner install={install} />}
-    {view === 'inbox' && !installFirst && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} hasModel={Boolean(settings.anthropicApiKey)} suggestions={suggestions} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
+    {view === 'inbox' && !installFirst && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} hasModel={Boolean(settings.anthropicApiKey)} archiveAfterReply={settings.archiveAfterReply} suggestions={suggestions} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
       onConnect={connect} onDismissSuggestion={(item) => setDismissed((current) => [...current, `${item.from}|${item.action}`])} />}
     {view === 'search' && connected && <SearchView search={searchActions} actions={actions} hasModel={Boolean(settings.anthropicApiKey)} senders={senders} />}
     {view === 'receipts' && connected && <ReceiptsView actions={receiptActions} />}
     {view === 'rules' && <RulesView rules={automation.rules} outlookRules={outlookRules} snoozes={automation.snoozes} error={error} onRules={updateRules} />}
     {view === 'cleanup' && <CleanupView state={cleanup} error={error} actions={cleanupActions} onError={setError} />}
     {view === 'settings' && <SettingsView settings={settings} connection={connection} accountName={accountName} busy={Boolean(busy)} error={error} onSettings={setSettings} onConnect={connect} onDisconnect={disconnect} />}
-  </Shell></BodySource>
+  </Shell></ThreadContext></BodySource>
 }

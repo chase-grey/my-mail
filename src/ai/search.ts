@@ -3,14 +3,19 @@ import { textOf, type AnthropicClient, type MessagesRequest } from './anthropicC
 
 export type SearchPrompt = { aboutMe: string; today: string }
 
+/** How a mailbox search is written. Shared by everything that has a model write one. */
+export const kqlNotes = [
+  'Bare words match anywhere in a message. Properties: from:, to:, cc:, participants:, subject:, body:, attachment: (a file name), hasattachments:true, importance:high, received.',
+  'Dates are YYYY-MM-DD: received>=2026-03-01, received<2026-06-01, or a range as received:2026-03-01..2026-05-31. Use a date only when the request gives a time, and make the range generous.',
+  'Join alternatives with OR in capitals inside parentheses; terms side by side must all match. Put a phrase in double quotes.',
+  'Search matches whole words, so use few and distinctive ones, leave out filler, and when the sender could have used a different word, OR the likely ones: (invoice OR bill OR receipt). Prefer finding too much over finding nothing.',
+]
+
 export function translateSystemPrompt(today: string): string {
   return [
     'You turn what one person wants to find in their own mailbox into a single Microsoft Graph mail search query, written in KQL. Reply with the query and nothing else: no quotes around it, no explanation.',
     `Today is ${today}.`,
-    'Bare words match anywhere in a message. Properties: from:, to:, cc:, participants:, subject:, body:, attachment: (a file name), hasattachments:true, importance:high, received.',
-    'Dates are YYYY-MM-DD: received>=2026-03-01, received<2026-06-01, or a range as received:2026-03-01..2026-05-31. Use a date only when the request gives a time, and make the range generous.',
-    'Join alternatives with OR in capitals inside parentheses; terms side by side must all match. Put a phrase in double quotes.',
-    'Search matches whole words, so use few and distinctive ones, leave out filler, and when the sender could have used a different word, OR the likely ones: (invoice OR bill OR receipt). Prefer finding too much over finding nothing.',
+    ...kqlNotes,
   ].join('\n')
 }
 

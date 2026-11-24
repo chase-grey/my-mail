@@ -13,6 +13,7 @@ import { RulesView } from '../views/RulesView'
 import { SearchView, type SearchActions } from '../views/SearchView'
 import { SettingsView } from '../views/SettingsView'
 import { Shell, type View } from '../views/Shell'
+import { ThreadContext, type ThreadActions } from '../views/Thread'
 import { defaultSettings } from '../settings'
 import '../styles.css'
 
@@ -32,7 +33,7 @@ const long = 'Hi,\n\nDoes five work on Sunday? Dad is doing the roast again and 
 const seed: Triaged[] = [
   mail(1, 'Ruth Calder', 'Dinner Sunday?', long, 'reply', 'reply', 'asks if 5pm sunday works, bring a salad and the folding chairs'),
   mail(2, 'Linden County Treasurer', 'Property tax statement', 'Your second installment is due January 31. Amount due: $2,140.00. Pay online or by mail.', 'action', 'task', 'second installment due jan 31, $2,140', { hasAttachments: true }),
-  mail(3, 'Owen Marsh', 'Re: cabin weekend', 'I can drive if someone else books the place. Are we still thinking the second weekend of February?', 'reply', 'reply', 'will drive if someone books; wants the february weekend confirmed', { flagged: true }),
+  mail(3, 'Owen Marsh', 'Re: cabin weekend', 'I can drive if someone else books the place. Are we still thinking the second weekend of February?', 'reply', 'reply', 'will drive if someone books; wants the february weekend confirmed', { flagged: true, conversationId: 'cabin' }),
   mail(4, 'Northside Dental', 'Your appointment is confirmed', 'This confirms your cleaning on Tuesday, December 8 at 9:40 am. Reply C to confirm.', 'waiting', 'keep', 'cleaning tuesday dec 8 at 9:40'),
   mail(5, 'Harbor Outfitters', 'Members: 20% off through Sunday', 'Members save 20% on one full-price item and an extra 20% on one outlet item.', 'promo', 'archive', '20% off one item through sunday', {}, 0.72),
   mail(6, 'The Weekly Fold', 'Issue 214: slow mornings', 'This week: a case for doing less before nine, three recipes, and a reader letter.', 'newsletter', 'archive', 'weekly newsletter, issue 214'),
@@ -42,6 +43,8 @@ const seed: Triaged[] = [
   mail(10, 'Juniper Books', 'New this week', 'Staff picks and a signed first edition.', 'promo', 'archive', 'staff picks'),
   mail(11, 'Trail Club', 'January trail report', 'Conditions, closures, and volunteer days.', 'newsletter', 'archive', 'monthly trail report'),
   mail(12, 'Ida Voss', 'Old photos', 'Found these in the attic, thought you would want them.', 'fyi', 'keep', 'sent old photos from the attic', { hasAttachments: true }),
+  mail(13, 'Tess Arnett', 'Re: cabin weekend', 'I found two places near the lake. One sleeps six and has a wood stove. Sending links tonight.', 'fyi', 'archive', 'found two places near the lake, links tonight', { conversationId: 'cabin' }),
+  mail(14, 'Owen Marsh', 'cabin weekend', 'Who is in for a cabin weekend this winter? Thinking February.', 'fyi', 'archive', 'asks who is in for a cabin weekend in february', { conversationId: 'cabin' }),
 ]
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
@@ -58,6 +61,25 @@ const contents: Record<string, MailContent> = {
 const readBody = async (message: Message): Promise<MailContent> => {
   await wait(250)
   return contents[message.id] ?? (message.id.startsWith('r') ? { html: mailing.replace('Members: 20% off through Sunday', message.subject), text: '' } : { html: `<html><body><p>${message.body}</p></body></html>`, text: '' })
+}
+
+// A conversation reaches past the inbox: the reply I sent is in it too.
+const sent: Message = { ...seed[2].message, id: 'sent1', from: { name: 'Sam Calder', address: 'sam@example.com' }, receivedAt: hoursAgo(40), preview: 'I am in. February works, the second weekend is best for me.', body: 'I am in. February works, the second weekend is best for me.', isRead: true, flagged: false }
+const elsewhere = (item: Triaged, hours: number, subject: string, folder = 'Archive') => ({ message: { ...item.message, id: `${item.message.id}-${hours}`, conversationId: `${item.message.id}-${hours}`, subject, receivedAt: hoursAgo(hours) }, inInbox: false, folder })
+const threads: ThreadActions = {
+  thread: async (message) => {
+    await wait(300)
+    return message.conversationId === 'cabin' ? [...seed.filter((item) => item.message.conversationId === 'cabin').map((item) => item.message), sent].sort((a, b) => b.receivedAt.localeCompare(a.receivedAt)) : []
+  },
+  fromSender: async (message) => {
+    await wait(400)
+    const item = seed.find((entry) => entry.message.from.address === message.from.address) ?? seed[0]
+    return [elsewhere(item, 300, 'Lake photos'), elsewhere(item, 2200, 'Re: your birthday'), elsewhere(item, 9000, 'Recipe you asked for', 'Sent Items')]
+  },
+  related: async (_message, onStep) => {
+    await wait(500); onStep('searching'); await wait(500); onStep('reading 14 messages'); await wait(700)
+    return [elsewhere(seed[11], 700, 'Lake house deposit'), elsewhere(seed[1], 5000, 'Cabin rental agreement')]
+  },
 }
 
 const found = () => seed.slice(0, 4).map((item, index) => ({ message: { ...item.message, receivedAt: hoursAgo(index * 4000 + 30) }, inInbox: index === 0, folder: index === 0 ? undefined : 'Archive' }))
@@ -98,7 +120,7 @@ function Preview() {
     restore: async (message) => { await wait(250); setItems((current) => rankTriaged([...current, ...seed.filter((item) => item.message.id === message.id)])) },
   }
 
-  return <BodySource value={readBody}><Shell view={view} views={['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings']} counts={{ inbox: groupInbox(items.filter((item) => !kept[item.message.id])).needsMe.length }} busy={params.has('busy')} canRefresh links={[{ label: 'open my brain', onSelect: () => {} }]} onView={setView} onRefresh={() => setItems(seed)}>
+  return <BodySource value={readBody}><ThreadContext value={threads}><Shell view={view} views={['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings']} counts={{ inbox: groupInbox(items.filter((item) => !kept[item.message.id])).needsMe.length }} busy={params.has('busy')} canRefresh links={[{ label: 'open my brain', onSelect: () => {} }]} onView={setView} onRefresh={() => setItems(seed)}>
     {view === 'inbox' && <InboxView items={items} kept={kept} summary={{ inbox: items.length, needReply: items.filter((item) => item.triage?.needsReply).length, byRules: 14, autoArchived: 0, returned: 0, withoutModel: 0 }} busy={params.has('busy') ? 'checking mail' : undefined} connection="connected" hasModel
       suggestions={[{ from: 'news@weeklyfold.example.com', action: 'archive', count: 4 }]} snoozes={[]} actions={actions} onConnect={async () => {}} onDismissSuggestion={() => {}} />}
     {view === 'search' && <SearchView search={search} actions={actions} hasModel senders={seed.map((item) => item.message.from)} />}
@@ -106,7 +128,7 @@ function Preview() {
     {view === 'cleanup' && <CleanupView state={{ scanned: scanned.length, total: scanned.length, groups: senders, staleCount: 6, done: true }} actions={cleanupActions} onError={() => {}} />}
     {view === 'rules' && <RulesView rules={[{ id: 'r1', from: '@harbor.example.com', action: 'archive', enabled: true, createdAt: 'now', hits: 12, outlookId: 'o1' }, { id: 'r2', subject: 'receipt', action: 'read', enabled: true, createdAt: 'now', hits: 3 }]} outlookRules={[]} snoozes={[{ messageId: 's1', until: new Date(Date.now() + 86_400_000).toISOString(), subject: 'Renew passport', from: 'Travel Office' }]} onRules={async () => {}} />}
     {view === 'settings' && <SettingsView settings={defaultSettings} connection="connected" accountName="someone@example.com" busy={false} onSettings={() => {}} onConnect={async () => {}} onDisconnect={async () => {}} />}
-  </Shell></BodySource>
+  </Shell></ThreadContext></BodySource>
 }
 
 createRoot(document.getElementById('root')!).render(<StrictMode><Preview /></StrictMode>)

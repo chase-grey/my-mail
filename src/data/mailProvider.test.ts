@@ -187,4 +187,19 @@ describe('mail provider', () => {
     const request = vi.fn(async () => { throw new GraphError(404, 'gone') })
     await expect(new MailProvider({ request } as unknown as GraphClient).unsnooze('m1')).resolves.toBe(false)
   })
+
+  it('reads a whole conversation from every folder, newest first, without drafts or deleted mail, quoting history only on the oldest', async () => {
+    const mail = (id: string, receivedDateTime: string, extra: object = {}) => ({ id, conversationId: "c'1", receivedDateTime, isRead: true, webLink: 'w', body: { contentType: 'text', content: `${id} says hi
+
+On Monday Owen wrote:
+> earlier` }, ...extra })
+    const request = vi.fn(async (path: string) => path.startsWith('/me/mailFolders/deleteditems')
+      ? { id: 'trash' }
+      : { value: [mail('old', '2026-11-01T09:00:00Z'), mail('new', '2026-11-03T09:00:00Z'), mail('draft', '2026-11-04T09:00:00Z', { isDraft: true }), mail('gone', '2026-11-02T09:00:00Z', { parentFolderId: 'trash' })] })
+    const thread = await new MailProvider({ request } as unknown as GraphClient).conversation("c'1")
+    expect(thread.map((message) => message.id)).toEqual(['new', 'old'])
+    expect(thread[0].body).toBe('new says hi')
+    expect(thread[1].body).toContain('> earlier')
+    expect(decodeURIComponent((request.mock.calls[0] as unknown as [string])[0]).replace(/\+/g, ' ')).toContain("conversationId eq 'c''1'")
+  })
 })

@@ -2,37 +2,45 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as R
 import type { MessageActions } from '../App'
 import { ruleActionLabel, senderDomain, type RuleSuggestion } from '../domain/rules'
 import { snoozeOptions, type SnoozeOption } from '../domain/snooze'
-import { categoryLabel, groupInbox, summaryLine, type RunSummary, type Triaged } from '../domain/triage'
+import { inboxThreads, type InboxThread } from '../domain/threads'
+import { categoryLabel, summaryLine, type RunSummary, type Triaged } from '../domain/triage'
 import type { Message, RuleAction, Snooze } from '../domain/types'
 import { Card, Field, Fold, Menu, Segmented, Sheet, Toast, useMediaQuery, usePresence, type ToastState } from '../ui'
-import { MailBody } from './MailBody'
 import type { ConnectionStatus } from './SettingsView'
+import { Conversation } from './Thread'
 
 type SheetState =
-  | { kind: 'reply'; message: Message; draft: string }
-  | { kind: 'snooze'; message: Message }
-  | { kind: 'task'; message: Message; title: string }
+  | { kind: 'reply'; thread: InboxThread; draft: string }
+  | { kind: 'snooze'; thread: InboxThread }
+  | { kind: 'task'; thread: InboxThread; title: string }
   | { kind: 'rule'; message: Message }
 
 /** Which way a row slides as it leaves, and how long it waits when a whole group goes at once. */
 type Leave = { to: 'right' | 'left' | 'fade'; delay?: number }
 
-/** Everything a row or the open message can ask for. Each one animates, acts, and offers undo where it can. */
+/**
+ * Everything a row or the open message can ask for. Each one animates, acts, and offers undo where it can.
+ * A row is a conversation: what clears it clears every inbox message in it.
+ */
 type Handlers = {
-  open: (item: Triaged) => void
-  archive: (item: Triaged) => void
-  remove: (item: Triaged) => void
-  keep: (item: Triaged) => void
-  flag: (item: Triaged) => void
-  task: (item: Triaged) => void
-  reply: (item: Triaged) => void
-  snooze: (item: Triaged) => void
-  rule: (item: Triaged) => void
-  unsubscribe: (item: Triaged) => void
+  open: (item: InboxThread) => void
+  archive: (item: InboxThread) => void
+  remove: (item: InboxThread) => void
+  keep: (item: InboxThread) => void
+  flag: (item: InboxThread) => void
+  task: (item: InboxThread) => void
+  reply: (item: InboxThread) => void
+  snooze: (item: InboxThread) => void
+  rule: (item: InboxThread) => void
+  unsubscribe: (item: InboxThread) => void
 }
 
 const swipeAt = 88
-const keyOf = (item: Triaged) => item.message.id
+const keyOf = (item: InboxThread) => item.key
+
+async function each(list: Message[], work: (message: Message) => Promise<void>): Promise<void> {
+  for (const message of list) await work(message)
+}
 
 function when(receivedAt: string, long = false): string {
   const value = new Date(receivedAt)
@@ -47,7 +55,7 @@ const percent = (value: number) => `${Math.round(value * 100)}% sure`
 const isLoud = (item: Triaged) => Boolean(item.triage?.needsReply || item.triage?.category === 'action')
 
 /** The one action a closed row offers: what the verdict suggests, or archive. */
-function quickAction(item: Triaged, kept: boolean, on: Handlers): { label: string; run: () => void } {
+function quickAction(item: InboxThread, kept: boolean, on: Handlers): { label: string; run: () => void } {
   const suggested = item.triage?.suggested
   if (suggested === 'reply') return { label: 'reply', run: () => on.reply(item) }
   if (suggested === 'task') return { label: 'to do', run: () => on.task(item) }
@@ -58,7 +66,7 @@ function quickAction(item: Triaged, kept: boolean, on: Handlers): { label: strin
 }
 
 /** The full message and every action on it. Inline under the row on a phone, in the reading pane on a wide screen. */
-function Detail({ item, kept, quiet, pane, on }: { item: Triaged; kept: boolean; quiet: boolean; pane: boolean; on: Handlers }) {
+function Detail({ item, kept, quiet, pane, on }: { item: InboxThread; kept: boolean; quiet: boolean; pane: boolean; on: Handlers }) {
   const { message, triage } = item
   const suggested = triage?.suggested
   const button = (label: string, action: string, run: () => void) =>
@@ -87,11 +95,11 @@ function Detail({ item, kept, quiet, pane, on }: { item: Triaged; kept: boolean;
     {pane && triage?.summary && <p className={`detail-summary${isLoud(item) ? ' is-loud' : ''}`}>{triage.summary}</p>}
     <p className="detail-meta"><span>{pane && <b className="detail-from">{message.from.name}</b>}{`<${message.from.address}>`}</span><span>{when(message.receivedAt, true)}</span></p>
     {facts && <p className="detail-meta">{facts}</p>}
-    <MailBody message={message} />
+    <Conversation message={message} />
   </div>
 }
 
-function Row({ item, index, kept, quiet, open, pane, leave, on }: { item: Triaged; index: number; kept: boolean; quiet: boolean; open: boolean; pane: boolean; leave?: Leave; on: Handlers }) {
+function Row({ item, index, kept, quiet, open, pane, leave, on }: { item: InboxThread; index: number; kept: boolean; quiet: boolean; open: boolean; pane: boolean; leave?: Leave; on: Handlers }) {
   const { message, triage } = item
   const drag = useRef<{ x: number; y: number; active: boolean }>(undefined)
   const dragged = useRef(false)
@@ -140,7 +148,7 @@ function Row({ item, index, kept, quiet, open, pane, leave, on }: { item: Triage
     else if (dx <= -swipeAt) on.snooze(item)
   }
 
-  return <li id={`mail-${message.id}`} className={`item${leave ? ' is-leaving' : ''}${open ? ' is-open' : ''}${kept ? ' is-kept' : ''}`} data-leave={leave?.to} style={{ '--i': Math.min(index, 12), '--d': leave?.delay ?? 0 } as CSSProperties}>
+  return <li id={`mail-${item.key}`} className={`item${leave ? ' is-leaving' : ''}${open ? ' is-open' : ''}${kept ? ' is-kept' : ''}`} data-leave={leave?.to} style={{ '--i': Math.min(index, 12), '--d': leave?.delay ?? 0 } as CSSProperties}>
     <div className="item-clip">
       <div className="item-under" aria-hidden="true"><span>archive</span><span>snooze</span></div>
       <article className="mail" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}
@@ -148,7 +156,7 @@ function Row({ item, index, kept, quiet, open, pane, leave, on }: { item: Triage
         <div className="mail-row">
           <button className="mail-open" type="button" aria-expanded={open} onClick={() => on.open(item)}>
             <span className="mail-top">
-              <span className={`mail-from${message.isRead ? '' : ' is-unread'}`} title={message.from.address}>{message.from.name}</span>
+              <span className={`mail-from${message.isRead ? '' : ' is-unread'}`} title={message.from.address}>{message.from.name}{item.all.length > 1 && <span className="mail-count">{item.all.length}</span>}</span>
               <small>{kind ? `${kind} · ` : ''}{when(message.receivedAt)}</small>
             </span>
             <span className="mail-subject">{message.subject}</span>
@@ -162,7 +170,7 @@ function Row({ item, index, kept, quiet, open, pane, leave, on }: { item: Triage
   </li>
 }
 
-export function InboxView({ items, kept, summary, busy, error, connection, hasModel, suggestions, snoozes, actions, more, onMore, onConnect, onDismissSuggestion }: {
+export function InboxView({ items, kept, summary, busy, error, connection, hasModel, archiveAfterReply, suggestions, snoozes, actions, more, onMore, onConnect, onDismissSuggestion }: {
   items: Triaged[]
   kept: Record<string, string>
   summary?: RunSummary
@@ -170,6 +178,8 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
   error?: string
   connection: ConnectionStatus
   hasModel: boolean
+  /** A sent reply archives its message, so the rest of the conversation goes with it. */
+  archiveAfterReply?: boolean
   suggestions: RuleSuggestion[]
   snoozes: Snooze[]
   actions: MessageActions
@@ -184,9 +194,11 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
   const [leaving, setLeaving] = useState<Record<string, Leave>>({})
   const [toast, setToast] = useState<ToastState>()
   const pane = useMediaQuery('(min-width: 60rem)')
-  const live = items.filter((item) => !kept[item.message.id])
-  const keptItems = items.filter((item) => kept[item.message.id])
-  const groups = groupInbox(live)
+  // One row per conversation. A kept conversation comes back when something new arrives in it.
+  const threads = inboxThreads(items)
+  const live = threads.filter((item) => !kept[item.message.id])
+  const keptItems = threads.filter((item) => kept[item.message.id])
+  const groups = { needsMe: live.filter((item) => item.needsMe), probablyFine: live.filter((item) => !item.needsMe) }
   const needsRows = usePresence(groups.needsMe, keyOf)
   const fineRows = usePresence(groups.probablyFine, keyOf)
   const keptRows = usePresence(keptItems, keyOf)
@@ -197,10 +209,10 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
   const follow = useRef(false)
 
   // Rows still in play, top to bottom. The reading pane always shows one of them when there is one.
-  const order = [...groups.needsMe, ...groups.probablyFine].filter((item) => !leaving[item.message.id])
-  const selected = items.find((item) => item.message.id === openId && !leaving[item.message.id]) ?? (pane ? order[0] : undefined)
-  const selectedId = selected?.message.id
-  const isQuiet = (item: Triaged) => groups.probablyFine.includes(item)
+  const order = [...groups.needsMe, ...groups.probablyFine].filter((item) => !leaving[item.key])
+  const selected = threads.find((item) => item.key === openId && !leaving[item.key]) ?? (pane ? order[0] : undefined)
+  const selectedId = selected?.key
+  const isQuiet = (item: InboxThread) => !item.needsMe
 
   // Older mail loads as the end of the list scrolls into view. A failed load waits for a tap instead of retrying.
   useEffect(() => {
@@ -220,38 +232,45 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
   const say = (text: string, undo?: () => void) => setToast({ key: Date.now(), text, undo })
   const stay = (ids: string[]) => setLeaving((current) => Object.fromEntries(Object.entries(current).filter(([id]) => !ids.includes(id))))
 
-  /** The row leaves at once; the mailbox catches up behind it. A failure brings the row back. */
-  function clear(item: Triaged, to: Leave['to'], work: () => Promise<void>, done?: string, undoable = false): void {
-    const { message } = item
+  /** The row leaves at once; the mailbox catches up behind it, one message of the conversation at a time. A failure brings the row back with what is left. */
+  function clear(item: InboxThread, to: Leave['to'], work: (message: Message) => Promise<void>, done?: string, undoable = false): void {
     setLocalError(undefined)
-    if (selectedId === message.id) {
-      const at = order.indexOf(item)
-      setOpenId(pane ? (order[at + 1] ?? order[at - 1])?.message.id : undefined)
+    if (selectedId === item.key) {
+      const at = order.findIndex((entry) => entry.key === item.key)
+      setOpenId(pane ? (order[at + 1] ?? order[at - 1])?.key : undefined)
     }
-    setLeaving((current) => ({ ...current, [message.id]: { to } }))
-    void work()
-      .then(() => { if (done) say(done, undoable ? () => { setToast(undefined); void actions.restore(message).catch(() => undefined) } : undefined) })
+    setLeaving((current) => ({ ...current, [item.key]: { to } }))
+    void each(item.all, work)
+      .then(() => { if (done) say(done, undoable ? () => { setToast(undefined); void each(item.all, actions.restore).catch(() => undefined) } : undefined) })
       .catch(() => undefined)
-      .finally(() => stay([message.id]))
+      .finally(() => stay([item.key]))
   }
 
-  function archiveAll(list: Triaged[]): void {
+  /** The newest message was handled on its own; the older ones in the conversation are archived behind it. */
+  function clearRest(item: InboxThread): void {
+    const rest = item.all.slice(1)
+    if (!rest.length) return
+    setLeaving((current) => ({ ...current, [item.key]: { to: 'right' } }))
+    void each(rest, actions.archive).catch(() => undefined).finally(() => stay([item.key]))
+  }
+
+  function archiveAll(list: InboxThread[]): void {
     setLocalError(undefined)
-    setLeaving((current) => ({ ...current, ...Object.fromEntries(list.map((item, index) => [item.message.id, { to: 'right', delay: Math.min(index, 14) }])) }))
-    void actions.archiveAll(list.map((item) => item.message))
+    setLeaving((current) => ({ ...current, ...Object.fromEntries(list.map((item, index) => [item.key, { to: 'right', delay: Math.min(index, 14) }])) }))
+    void actions.archiveAll(list.flatMap((item) => item.all))
       .then(() => say(`archived ${list.length}`))
       .finally(() => stay(list.map(keyOf)))
   }
 
   const on: Handlers = {
-    open: (item) => setOpenId(pane || selectedId !== item.message.id ? item.message.id : undefined),
-    archive: (item) => clear(item, 'right', () => actions.archive(item.message), actions.isReceipt(item.message) ? 'moved to receipts' : 'archived', true),
-    remove: (item) => clear(item, 'fade', () => actions.remove(item.message), 'deleted', true),
-    keep: (item) => clear(item, 'fade', () => actions.keep(item.message)),
+    open: (item) => setOpenId(pane || selectedId !== item.key ? item.key : undefined),
+    archive: (item) => clear(item, 'right', actions.archive, actions.isReceipt(item.message) ? 'moved to receipts' : 'archived', true),
+    remove: (item) => clear(item, 'fade', actions.remove, 'deleted', true),
+    keep: (item) => clear(item, 'fade', actions.keep),
     flag: (item) => void actions.flag(item.message).catch(() => undefined),
-    task: (item) => setSheet({ kind: 'task', message: item.message, title: item.triage?.task ?? item.message.subject }),
-    reply: (item) => setSheet({ kind: 'reply', message: item.message, draft: item.triage?.draft ?? '' }),
-    snooze: (item) => setSheet({ kind: 'snooze', message: item.message }),
+    task: (item) => setSheet({ kind: 'task', thread: item, title: item.triage?.task ?? item.message.subject }),
+    reply: (item) => setSheet({ kind: 'reply', thread: item, draft: item.triage?.draft ?? '' }),
+    snooze: (item) => setSheet({ kind: 'snooze', thread: item }),
     rule: (item) => setSheet({ kind: 'rule', message: item.message }),
     unsubscribe: (item) => void actions.unsubscribe(item.message).then((text) => say(text)).catch(() => undefined),
   }
@@ -263,14 +282,14 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
     if ((event.target as HTMLElement).closest?.('input, textarea, select, dialog, details[open]')) return
     if (event.key === 'u') { toast?.undo?.(); return }
     if (event.key === 'j' || event.key === 'k') {
-      const at = selected ? order.indexOf(selected) : -1
+      const at = selected ? order.findIndex((entry) => entry.key === selected.key) : -1
       const next = order[Math.max(0, Math.min(order.length - 1, at + (event.key === 'j' ? 1 : -1)))]
-      if (next) { follow.current = true; setOpenId(next.message.id) }
+      if (next) { follow.current = true; setOpenId(next.key) }
       return
     }
     if (event.key === 'Escape' && !pane) { setOpenId(undefined); return }
     if (!selected) return
-    const act = ({ e: on.archive, r: on.reply, t: on.task, s: on.snooze, '#': on.remove } as Record<string, ((item: Triaged) => void) | undefined>)[event.key]
+    const act = ({ e: on.archive, r: on.reply, t: on.task, s: on.snooze, '#': on.remove } as Record<string, ((item: InboxThread) => void) | undefined>)[event.key]
     if (!act) return
     event.preventDefault()
     act(selected)
@@ -288,7 +307,7 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
     </Card></div>
   }
 
-  const rows = (entries: { key: string; item: Triaged; leaving: boolean }[], quiet: boolean, isKept = false) => <ul className="items">
+  const rows = (entries: { key: string; item: InboxThread; leaving: boolean }[], quiet: boolean, isKept = false) => <ul className="items">
     {entries.map((entry, index) => <Row key={entry.key} item={entry.item} index={index} kept={isKept} quiet={quiet} open={selectedId === entry.key} pane={pane} leave={leaving[entry.key] ?? (entry.leaving ? { to: 'fade' } : undefined)} on={on} />)}
   </ul>
 
@@ -314,7 +333,7 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
         {fineRows.length > 0 && <section className="lane">
           {groups.probablyFine.length > 0 && <div className="group-head">
             <h2 className="group-title">probably fine</h2>
-            <button className="link" type="button" onClick={() => archiveAll(groups.probablyFine.filter((item) => !leaving[item.message.id]))}>archive all {groups.probablyFine.length}</button>
+            <button className="link" type="button" onClick={() => archiveAll(groups.probablyFine.filter((item) => !leaving[item.key]))}>archive all {groups.probablyFine.length}</button>
           </div>}
           {rows(fineRows, true)}
         </section>}
@@ -331,16 +350,16 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
     </div>
 
     {pane && <section className="reader" aria-label="message">
-      {selected && <div className="reader-inner" key={selected.message.id}><Detail item={selected} kept={Boolean(kept[selected.message.id])} quiet={isQuiet(selected)} pane on={on} /></div>}
+      {selected && <div className="reader-inner" key={selected.key}><Detail item={selected} kept={Boolean(kept[selected.message.id])} quiet={isQuiet(selected)} pane on={on} /></div>}
     </section>}
 
     <Toast toast={toast} onDone={() => setToast(undefined)} />
 
-    {sheet?.kind === 'reply' && <ReplySheet message={sheet.message} draft={sheet.draft} hasModel={hasModel} onDraft={(strong, instruction) => actions.draft(sheet.message, strong, instruction)} onClose={() => setSheet(undefined)} onSend={(text, mode) => actions.reply(sheet.message, text, mode).then(() => { setSheet(undefined); say(mode === 'send' ? 'sent' : 'saved to drafts') }).catch(() => undefined)} />}
+    {sheet?.kind === 'reply' && <ReplySheet message={sheet.thread.message} draft={sheet.draft} hasModel={hasModel} onDraft={(strong, instruction) => actions.draft(sheet.thread.message, strong, instruction)} onClose={() => setSheet(undefined)} onSend={(text, mode) => actions.reply(sheet.thread.message, text, mode).then(() => { setSheet(undefined); say(mode === 'send' ? 'sent' : 'saved to drafts'); if (mode === 'send' && archiveAfterReply) clearRest(sheet.thread) }).catch(() => undefined)} />}
     {sheet?.kind === 'snooze' && <Sheet title="snooze until" onClose={() => setSheet(undefined)}>
-      <div className="options">{snoozeOptions.map((option) => <button key={option} type="button" onClick={() => { const item = items.find((entry) => entry.message.id === sheet.message.id); setSheet(undefined); if (item) clear(item, 'left', () => actions.snooze(item.message, option as SnoozeOption), `snoozed until ${option}`, true) }}>{option}</button>)}</div>
+      <div className="options">{snoozeOptions.map((option) => <button key={option} type="button" onClick={() => { setSheet(undefined); clear(sheet.thread, 'left', (message) => actions.snooze(message, option as SnoozeOption), `snoozed until ${option}`, true) }}>{option}</button>)}</div>
     </Sheet>}
-    {sheet?.kind === 'task' && <TaskSheet title={sheet.title} onClose={() => setSheet(undefined)} onSave={(title) => actions.task(sheet.message, title).then(() => { setSheet(undefined); say('added to to do') }).catch(() => undefined)} />}
+    {sheet?.kind === 'task' && <TaskSheet title={sheet.title} onClose={() => setSheet(undefined)} onSave={(title) => actions.task(sheet.thread.message, title).then(() => { setSheet(undefined); say('added to to do'); clearRest(sheet.thread) }).catch(() => undefined)} />}
     {sheet?.kind === 'rule' && <RuleSheet message={sheet.message} onClose={() => setSheet(undefined)} onSave={(input) => actions.makeRule(input).then(() => { setSheet(undefined); say('rule saved') }).catch(() => undefined)} />}
   </div>
 }

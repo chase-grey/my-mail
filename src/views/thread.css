@@ -1,0 +1,37 @@
+/* a conversation inside the open message */
+.mail-count { margin-left: 0.45rem; color: var(--muted); font-size: 0.8rem; font-weight: 400; font-variant-numeric: tabular-nums; }
+.thread { display: flex; flex-direction: column; margin-top: 0.2rem; }
+.thread-mail + .thread-mail { border-top: 1px solid var(--border); }
+.thread-head { display: flex; align-items: baseline; gap: 0.6rem; width: 100%; min-height: 2.5rem; padding: 0.35rem 0; text-align: left; }
+.thread-from { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9rem; font-weight: 600; }
+.thread-preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 0.9rem; }
+.thread-head small { flex: none; font-variant-numeric: tabular-nums; }
+.thread-head + .mail-body { margin-top: 0; margin-bottom: 0.6rem; }
+
+/* the mail around it */
+.related { display: flex; flex-direction: column; margin-top: 0.25rem; }
+.related-actions { display: flex; flex-wrap: wrap; gap: 0 1rem; margin-inline: -0.25rem; }
+.related-actions .link { text-align: left; overflow-wrap: anywhere; }
+.related-actions .link[aria-pressed="true"] { font-weight: 600; }
+.related-list { padding: 0; list-style: none; border-top: 1px solid var(--border); }
+.related-list > li { border-bottom: 1px solid var(--border); }
+.related-row { display: flex; flex-direction: column; gap: 0.1rem; width: 100%; padding: 0.55rem 0; text-align: left; line-height: 1.35; }
+.related-top { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+.related-top small { flex: none; font-variant-numeric: tabular-nums; }
+.related-subject, .related-line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.related-line { color: var(--muted); font-size: 0.9rem; }
+.related-row[aria-expanded="true"] .related-subject { font-weight: 600; white-space: normal; overflow-wrap: anywhere; }
+.related-open { padding-bottom: 0.4rem; }
+
+@media (min-width: 60rem) {
+  .reader .thread { margin-top: 0.5rem; }
+  .reader .thread-head { padding: 0.6rem 0; }
+  .reader .thread-head + .mail-body { margin-bottom: 1.25rem; }
+  .reader .related { margin-top: 1.5rem; padding-top: 0.5rem; border-top: 1px solid var(--border); }
+  .reader .related-open .mail-body { margin-top: 0.25rem; }
+}
+
+/* on the selected row of the wide layout the count wears the row's colour */
+@media (min-width: 60rem) {
+  .main:has(.reader) .item.is-open .mail-count { color: inherit; opacity: 0.85; }
+}

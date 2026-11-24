@@ -3,7 +3,7 @@ import type { MessageActions } from '../App'
 import { answerParts, fromSender, rememberSearch, searchMode, senderWord, suggestSenders, type SearchHit, type SearchMode, type SearchPage, type Sender } from '../domain/search'
 import type { Message } from '../domain/types'
 import { Card, Field, Fold, Menu, Segmented, Toast, useMediaQuery, type ToastState } from '../ui'
-import { MailBody } from './MailBody'
+import { Conversation } from './Thread'
 import './search.css'
 
 export type SearchActions = {
@@ -72,7 +72,7 @@ function Detail({ hit, pane, on }: { hit: SearchHit; pane: boolean; on: Handlers
     {pane && <h2 className="detail-subject">{message.subject}</h2>}
     <p className="detail-meta"><span>{pane && <b className="detail-from">{message.from.name}</b>}{`<${message.from.address}>`}</span><span>{dated(message.receivedAt, true)}</span></p>
     {facts && <p className="detail-meta">{facts}</p>}
-    <MailBody message={message} />
+    <Conversation message={message} />
   </div>
 }
 

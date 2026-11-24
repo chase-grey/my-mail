@@ -15,6 +15,10 @@
 
 There is no junk folder. Every run moves what Outlook junked into the inbox before reading it (`rescueJunk`), and that mail goes through the same rules and sorting as the rest. Blocking is done with rules. Do not add a junk view, and do not read the inbox without emptying junk first.
 
+## threads
+
+The inbox shows one row per conversation: its newest message, with a count when more of it is in the inbox. The row sits with the mail that needs me when any message in it does, not only the newest. What clears the row (archive, delete, snooze, keep, to do, a sent reply that archives) clears every inbox message in the conversation, and undo brings them all back. A message opened anywhere (inbox, search, receipts) shows its whole conversation from every folder, sent mail included, newest first. Do not go back to one row per message, and do not add a place that opens a message without its conversation.
+
 ## new mail
 
 Mail should show up about as fast as it does in Outlook. While the app is on screen it asks for new mail every few seconds (`peek`), and again the moment it comes back to the screen. What arrives is shown as soon as the rules have had their say, before any model sorts it; sorting then relabels it or takes it away. Do not hold fetched mail off screen until sorting finishes, and do not put a wait in front of the look for new mail. The quiet look changes nothing on screen when nothing came, and it stays one small request (`glance`: ids and the junk count, no bodies); full messages are fetched only once it finds something.
