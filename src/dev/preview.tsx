@@ -1,9 +1,12 @@
 import { StrictMode, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { MessageActions } from '../App'
-import { rankTriaged, type Triaged } from '../domain/triage'
+import { groupBySender } from '../domain/cleanup'
+import { groupInbox, rankTriaged, type Triaged } from '../domain/triage'
 import type { Action, Category, Message } from '../domain/types'
+import { CleanupView, type CleanupActions } from '../views/CleanupView'
 import { InboxView } from '../views/InboxView'
+import { ReceiptsView } from '../views/ReceiptsView'
 import { RulesView } from '../views/RulesView'
 import { SearchView, type SearchActions } from '../views/SearchView'
 import { SettingsView } from '../views/SettingsView'
@@ -49,6 +52,12 @@ const search: SearchActions = {
   answer: async () => { await wait(700); return 'The second installment is $2,140.00 and is due January 31 [2]. Nothing in these messages says it has been paid [1].' },
 }
 
+// Clean up reads thousands of messages; a few senders with several each is enough to see the screen.
+const scanned = seed.flatMap((item, at) => Array.from({ length: (at % 4) * 3 + 1 }, (_, copy) => ({ id: `${item.message.id}-${copy}`, from: item.message.from, subject: item.message.subject, preview: item.message.preview, receivedAt: hoursAgo(at * 30 + copy * 200), isRead: copy > 0, flagged: false })))
+const senders = groupBySender(scanned).map((group) => ({ ...group, kind: seed.find((item) => item.message.from.address === group.address)?.triage?.category }))
+const cleanupActions: CleanupActions = { scan: async () => {}, archiveSender: () => wait(400), deleteSender: () => wait(400), blockSender: () => wait(400), undoSender: () => wait(400), unsubscribe: async (group) => `unsubscribed from ${group.address}`, archiveStale: () => wait(400) }
+const receipts = Array.from({ length: 9 }, (_, at) => ({ ...seed[7].message, id: `r${at}`, from: at % 2 ? seed[7].message.from : { name: 'Harbor Outfitters', address: 'orders@harbor.example.com' }, subject: at % 2 ? 'Your receipt' : `Order ${4100 + at} confirmed`, receivedAt: hoursAgo(at * 190 + 20), body: `Order total $${(48.12 + at * 13.5).toFixed(2)}. Thanks for shopping with us.\n\nItems\n1 x olive oil\n2 x sourdough\n\nPaid with card ending 4417.` }))
+
 function Preview() {
   const params = new URLSearchParams(window.location.search)
   const [view, setView] = useState<View>((params.get('view') as View) || 'inbox')
@@ -73,10 +82,12 @@ function Preview() {
     restore: async (message) => { await wait(250); setItems((current) => rankTriaged([...current, ...seed.filter((item) => item.message.id === message.id)])) },
   }
 
-  return <Shell view={view} views={['inbox', 'search', 'cleanup', 'rules', 'settings']} busy={params.has('busy')} canRefresh links={[{ label: 'open outlook', onSelect: () => {} }, { label: 'open my brain', onSelect: () => {} }]} onView={setView} onRefresh={() => setItems(seed)}>
+  return <Shell view={view} views={['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings']} counts={{ inbox: groupInbox(items.filter((item) => !kept[item.message.id])).needsMe.length }} busy={params.has('busy')} canRefresh links={[{ label: 'open my brain', onSelect: () => {} }]} onView={setView} onRefresh={() => setItems(seed)}>
     {view === 'inbox' && <InboxView items={items} kept={kept} summary={{ inbox: items.length, needReply: items.filter((item) => item.triage?.needsReply).length, byRules: 14, autoArchived: 0, returned: 0, withoutModel: 0 }} busy={params.has('busy') ? 'checking mail' : undefined} connection="connected" hasModel
       suggestions={[{ from: 'news@weeklyfold.example.com', action: 'archive', count: 4 }]} snoozes={[]} actions={actions} onConnect={async () => {}} onDismissSuggestion={() => {}} />}
     {view === 'search' && <SearchView search={search} actions={actions} hasModel />}
+    {view === 'receipts' && <ReceiptsView actions={{ load: async () => { await wait(300); return { messages: receipts, more: true } }, fromArchive: async () => { await wait(600); return 3 }, toInbox: () => wait(300) }} />}
+    {view === 'cleanup' && <CleanupView state={{ scanned: scanned.length, total: scanned.length, groups: senders, staleCount: 6, done: true }} actions={cleanupActions} onError={() => {}} />}
     {view === 'rules' && <RulesView rules={[{ id: 'r1', from: '@harbor.example.com', action: 'archive', enabled: true, createdAt: 'now', hits: 12, outlookId: 'o1' }, { id: 'r2', subject: 'receipt', action: 'read', enabled: true, createdAt: 'now', hits: 3 }]} outlookRules={[]} snoozes={[{ messageId: 's1', until: new Date(Date.now() + 86_400_000).toISOString(), subject: 'Renew passport', from: 'Travel Office' }]} onRules={async () => {}} />}
     {view === 'settings' && <SettingsView settings={defaultSettings} connection="connected" accountName="someone@example.com" busy={false} onSettings={() => {}} onConnect={async () => {}} onDisconnect={async () => {}} />}
   </Shell>

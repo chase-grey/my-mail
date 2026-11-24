@@ -70,7 +70,7 @@ export function CleanupView({ state, error, actions, onError }: { state: Cleanup
     <p className="status" aria-live="polite">{state.working ?? `${state.total ?? state.scanned} in inbox · ${left(state.groups).length} senders`}</p>
     {error && <p className="note is-error" role="alert">{error}</p>}
 
-    {state.staleCount > 0 && <Card title="old and already read">
+    {state.staleCount > 0 && <Card title="old and already read" className="is-wide">
       <div className="suggest">
         <span>{state.staleCount} read {state.staleCount === 1 ? 'message' : 'messages'} older than 30 days, none flagged</span>
         <button className="secondary" type="button" disabled={Boolean(state.working)} onClick={() => void actions.archiveStale()}>archive them</button>

@@ -120,7 +120,7 @@ a { color: var(--accent); }
 .group-head .link { min-height: 1.5rem; }
 
 /* inbox */
-.inbox, .list, .lane { display: flex; flex-direction: column; gap: 0.75rem; }
+.inbox, .search, .receipts, .list, .lane { display: flex; flex-direction: column; gap: 0.75rem; }
 .lanes { display: flex; flex-direction: column; gap: 1.1rem; margin-top: 0.35rem; }
 .lane > .group-title { display: flex; align-items: center; min-height: 1.5rem; }
 .items { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
@@ -212,11 +212,17 @@ a { color: var(--accent); }
 /* sheet */
 .sheet { width: 100%; max-width: 100%; margin: auto 0 0; padding: 0; border: 1px solid var(--border); border-bottom: 0; border-radius: 16px 16px 0 0; background: var(--surface); color: var(--text); }
 .sheet[open] { animation: sheet-up var(--move) var(--ease); }
+.sheet:focus-visible { outline: none; }
 .sheet::backdrop { background: rgb(0 0 0 / 0.45); animation: fade var(--move); }
 .sheet-body { padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom)); }
 .sheet-body h2 { margin-bottom: 0.75rem; font-size: 1.1rem; }
 .sheet-body .field textarea { min-height: 10rem; }
 @keyframes sheet-up { from { translate: 0 100%; } }
+.keys { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.15rem 1.5rem; margin: 0; }
+.keys div { display: flex; align-items: center; gap: 0.75rem; min-height: 2.25rem; }
+.keys dt { flex: none; width: 2rem; }
+.keys dd { margin: 0; }
+kbd { display: inline-grid; place-items: center; min-width: 1.75rem; height: 1.75rem; padding: 0 0.4rem; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 6px; background: var(--surface-2); font: inherit; font-size: 0.85rem; }
 
 /* wide: a rail at the screen edge, the list, and the open message filling the rest */
 @media (min-width: 60rem) {
@@ -225,20 +231,21 @@ a { color: var(--accent); }
   .rail button { display: flex; align-items: center; gap: 0.65rem; min-height: 2.5rem; padding: 0 0.75rem; border-radius: 9px; color: var(--muted); text-align: left; transition: background var(--quick), color var(--quick); }
   .rail button:hover { background: var(--surface-2); color: var(--text); }
   .rail button.is-current { background: var(--surface-2); color: var(--text); font-weight: 600; }
+  .rail button .count { margin-left: auto; }
   .rail-links { display: flex; flex-direction: column; gap: 0.15rem; margin-top: auto; }
   /* Every other screen is one column of cards, centred in whatever the rail leaves. */
   .main { --w: 96rem; --gutter: max(1.5rem, (100% - var(--w)) / 2); max-width: none; height: 100dvh; min-height: 0; padding: 0; overflow: hidden; }
-  .main:has(> .is-settings, > .is-rules) { --w: 72rem; }
+  .main:has(> .is-settings, > .is-rules, > .is-cleanup) { --w: 72rem; }
   .topbar { position: static; padding: 1rem var(--gutter) 0.4rem; }
   .topbar .back, .topbar .menu { display: none; }
   .progress { position: static; flex: none; }
   .content { min-height: 0; overflow-y: auto; padding: 0.5rem var(--gutter) 2rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); align-items: start; align-content: start; gap: 1rem; }
-  .content > .status, .content > .note, .content > .actions { grid-column: 1 / -1; }
-  /* The inbox: title and list share a column, the message runs the full height beside them. */
-  .main:has(> .is-inbox) { --list: clamp(21rem, 36%, 30rem); display: grid; grid-template-columns: var(--list) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
-  .content.is-inbox, .inbox { display: contents; }
-  .main:has(> .is-inbox) .topbar { grid-area: 1 / 1; padding-inline: 1.5rem 0.75rem; }
-  .main:has(> .is-inbox) .progress { grid-area: 2 / 1; }
+  .content > .status, .content > .note, .content > .actions, .content > .is-wide { grid-column: 1 / -1; }
+  /* Inbox, search, and receipts: title and list share a column, the message runs the full height beside them. */
+  .main:has(> :is(.is-inbox, .is-search, .is-receipts)) { --list: clamp(21rem, 36%, 30rem); display: grid; grid-template-columns: var(--list) minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
+  .content:is(.is-inbox, .is-search, .is-receipts), .inbox, .search, .receipts { display: contents; }
+  .main:has(> :is(.is-inbox, .is-search, .is-receipts)) .topbar { grid-area: 1 / 1; padding-inline: 1.5rem 0.75rem; }
+  .main:has(> :is(.is-inbox, .is-search, .is-receipts)) .progress { grid-area: 2 / 1; }
   .list { grid-area: 3 / 1; min-height: 0; overflow-y: auto; padding: 0.25rem 1rem 5rem 1.5rem; scrollbar-width: thin; }
   .list > * { flex: none; }
   .lone { grid-column: 1 / -1; justify-self: start; margin-top: 0.5rem; margin-left: 1.5rem; }
@@ -267,13 +274,16 @@ a { color: var(--accent); }
 
 @media (min-width: 100rem) {
   .shell { grid-template-columns: 13rem minmax(0, 1fr); }
-  .main:has(> .is-inbox) { --list: 32rem; }
+  .main:has(> :is(.is-inbox, .is-search, .is-receipts)) { --list: 32rem; }
   .reader-inner { padding-inline: 3rem; }
 }
 
 /* very wide: needs me and probably fine sit side by side */
 @media (min-width: 150rem) {
-  .main:has(.lane + .lane) { --list: 62rem; }
+  .main:has(> :is(.is-inbox, .is-search, .is-receipts)) { --list: 38rem; }
+  .main:has(.lane + .lane) { --list: clamp(62rem, 42%, 76rem); }
+  .reader-inner { max-width: 72rem; padding-inline: 4rem; }
+  .reader .mail-body { font-size: 1.05rem; }
   .lanes { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); align-items: start; gap: 1.25rem; }
 }
 

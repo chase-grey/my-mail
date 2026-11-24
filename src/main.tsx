@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { watchForNewBuild } from './appUpdate'
 import './styles.css'
 
 /** Microsoft sends the sign-in popup back to this page with the result in the url. */
@@ -18,6 +19,8 @@ if (isSignInResponse()) {
       <App />
     </StrictMode>,
   )
+
+  if (import.meta.env.PROD) watchForNewBuild(import.meta.env.BASE_URL)
 
   if ('serviceWorker' in navigator && import.meta.env.PROD) {
     window.addEventListener('load', () => {

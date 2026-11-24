@@ -22,3 +22,10 @@ Mail should show up about as fast as it does in Outlook. While the app is on scr
 ## committing and deploying
 
 When a task is finished, commit the files you edited by name and push to main without asking. The push deploys the site.
+
+## desktop
+
+- Any screen that lists messages (inbox, search, receipts) uses the list with a reading pane beside it from 60rem up. The row whose message is open is filled solid with the accent colour; a tint is not enough.
+- The inbox is saved on the device and shown on open while the mailbox is checked in the background. A check never blanks or blocks the list; the status line and progress bar say it is running.
+- A new deploy has to reach an open tab or installed window on its own (`src/appUpdate.ts`). Do not rely on a manual refresh.
+- Check layout changes in `dev/preview.html` at 3438x1440 and 1440x900 as well as the phone. Every screen is in the preview; add new ones to it.

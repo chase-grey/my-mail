@@ -1,4 +1,4 @@
-const cacheName = 'my-mail-shell-v2'
+const cacheName = 'my-mail-shell-v3'
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(cacheName).then((cache) => cache.add('./')))
@@ -17,8 +17,9 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || new URL(event.request.url).origin !== self.location.origin) return
 
   if (event.request.mode === 'navigate') {
+    // The host lets the browser reuse the page for ten minutes; asking it to check keeps a new deploy from hiding behind that.
     event.respondWith(
-      fetch(event.request)
+      fetch(event.request, { cache: 'no-cache' })
         .then((response) => {
           const copy = response.clone()
           caches.open(cacheName).then((cache) => cache.put('./', copy))

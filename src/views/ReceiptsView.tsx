@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Message } from '../domain/types'
-import { Empty, Fold } from '../ui'
+import { Empty, Fold, useMediaQuery } from '../ui'
 
 export type ReceiptActions = {
   /** The newest receipts, or the next page received at or before `before`. */
@@ -11,10 +11,23 @@ export type ReceiptActions = {
 }
 
 /** Receipts reach back years, so anything from another year says which. */
-function dated(receivedAt: string): string {
+function dated(receivedAt: string, long = false): string {
   const value = new Date(receivedAt)
   const sameYear = new Date().getFullYear() === value.getFullYear()
-  return value.toLocaleDateString(undefined, sameYear ? { weekday: 'short', month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' }).toLowerCase()
+  const day = value.toLocaleDateString(undefined, sameYear ? { weekday: 'short', month: 'short', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' }).toLowerCase()
+  return long ? `${day}, ${value.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).toLowerCase()}` : day
+}
+
+/** The receipt itself. Inline under the row on a phone, in the reading pane on a wide screen. */
+function Detail({ message, pane, onInbox }: { message: Message; pane: boolean; onInbox: (message: Message) => void }) {
+  return <div className="detail">
+    <div className="mail-actions">
+      <button type="button" onClick={() => onInbox(message)}>move to inbox</button>
+    </div>
+    {pane && <h2 className="detail-subject">{message.subject}</h2>}
+    {pane && <p className="detail-meta"><span><b className="detail-from">{message.from.name}</b>{`<${message.from.address}>`}</span><span>{dated(message.receivedAt, true)}</span></p>}
+    <div className="mail-body">{message.body || message.preview || '(empty)'}</div>
+  </div>
 }
 
 const failed = (error: unknown) => error instanceof Error ? error.message.toLowerCase() : 'something failed'
@@ -26,6 +39,8 @@ export function ReceiptsView({ actions }: { actions: ReceiptActions }) {
   const [note, setNote] = useState<string>()
   const [error, setError] = useState<string>()
   const [openId, setOpenId] = useState<string>()
+  const pane = useMediaQuery('(min-width: 60rem)')
+  const selected = messages.find((message) => message.id === openId) ?? (pane ? messages[0] : undefined)
   const current = useRef(actions)
   current.current = actions
 
@@ -71,45 +86,43 @@ export function ReceiptsView({ actions }: { actions: ReceiptActions }) {
       .catch((failure: unknown) => setError(failed(failure)))
   }
 
-  return <>
-    <p className={`status${busy ? ' is-busy' : ''}`} aria-live="polite">{busy ?? note ?? ''}</p>
-    {error && <p className="note is-error" role="alert">{error}</p>}
+  return <div className="receipts">
+    <div className="list">
+      <p className={`status${busy ? ' is-busy' : ''}`} aria-live="polite">{busy ?? note ?? ''}</p>
+      {error && <p className="note is-error" role="alert">{error}</p>}
 
-    {messages.length > 0 && <ul className="items">
-      {messages.map((message) => {
-        const open = openId === message.id
-        return <li key={message.id} className={`item${open ? ' is-open' : ''}`}>
-          <div className="item-clip">
-            <article className="mail">
-              <div className="mail-row">
-                <button className="mail-open" type="button" aria-expanded={open} onClick={() => setOpenId(open ? undefined : message.id)}>
-                  <span className="mail-top">
-                    <span className="mail-from" title={message.from.address}>{message.from.name}</span>
-                    <small>{dated(message.receivedAt)}</small>
-                  </span>
-                  <span className="mail-subject">{message.subject}</span>
-                  {message.preview && <span className="mail-summary">{message.preview}</span>}
-                </button>
-              </div>
-              <Fold open={open}>
-                <div className="detail">
-                  <div className="mail-actions">
-                    <button type="button" onClick={() => window.open(message.webLink, '_blank', 'noreferrer')}>open in outlook</button>
-                    <button type="button" onClick={() => toInbox(message)}>move to inbox</button>
-                  </div>
-                  <div className="mail-body">{message.body || message.preview || '(empty)'}</div>
+      {messages.length > 0 && <ul className="items">
+        {messages.map((message) => {
+          const open = selected?.id === message.id
+          return <li key={message.id} className={`item${open ? ' is-open' : ''}`}>
+            <div className="item-clip">
+              <article className="mail">
+                <div className="mail-row">
+                  <button className="mail-open" type="button" aria-expanded={open} onClick={() => setOpenId(pane || !open ? message.id : undefined)}>
+                    <span className="mail-top">
+                      <span className="mail-from" title={message.from.address}>{message.from.name}</span>
+                      <small>{dated(message.receivedAt)}</small>
+                    </span>
+                    <span className="mail-subject">{message.subject}</span>
+                    {message.preview && <span className="mail-summary">{message.preview}</span>}
+                  </button>
                 </div>
-              </Fold>
-            </article>
-          </div>
-        </li>
-      })}
-    </ul>}
-    {!busy && !messages.length && !error && <Empty>no receipts</Empty>}
+                {!pane && <Fold open={open}><Detail message={message} pane={false} onInbox={toInbox} /></Fold>}
+              </article>
+            </div>
+          </li>
+        })}
+      </ul>}
+      {!busy && !messages.length && !error && <Empty>no receipts</Empty>}
 
-    <div className="actions">
-      {more && <button className="secondary" type="button" disabled={Boolean(busy)} onClick={() => void read(messages)}>load more</button>}
-      <button className="link" type="button" disabled={Boolean(busy)} onClick={() => void fromArchive()}>move receipts from archive</button>
+      <div className="actions">
+        {more && <button className="secondary" type="button" disabled={Boolean(busy)} onClick={() => void read(messages)}>load more</button>}
+        <button className="link" type="button" disabled={Boolean(busy)} onClick={() => void fromArchive()}>move receipts from archive</button>
+      </div>
     </div>
-  </>
+
+    {pane && <section className="reader" aria-label="message">
+      {selected && <div className="reader-inner" key={selected.id}><Detail message={selected} pane onInbox={toInbox} /></div>}
+    </section>}
+  </div>
 }
