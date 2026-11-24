@@ -20,9 +20,11 @@ import { dueSnoozes, snoozeRecord, snoozeUntil, withoutSnoozes, type SnoozeOptio
 import { ageTriage, autoArchivable, groupInbox, needsReading, outlookTriage, pruneTriage, rankTriaged, summarize, unsureBelow, type RunSummary, type Triaged } from './domain/triage'
 import { emptyAutomation, type Action, type Automation, type Message, type OutlookRule, type Rule, type RuleAction, type Triage } from './domain/types'
 import { parseUnsubscribe, unsubscribeMethod } from './domain/unsubscribe'
+import { useInstallPrompt } from './installPrompt'
 import { loadSettings, saveSettings, type Settings } from './settings'
 import { CleanupView, type CleanupActions, type CleanupState } from './views/CleanupView'
 import { InboxView } from './views/InboxView'
+import { InstallBanner, InstallStep, hasInstallStep } from './views/InstallOffer'
 import { ReceiptsView, type ReceiptActions } from './views/ReceiptsView'
 import { RulesView } from './views/RulesView'
 import { SearchView, type SearchActions } from './views/SearchView'
@@ -840,6 +842,11 @@ export default function App() {
   const suggestions = useMemo<RuleSuggestion[]>(() => suggestRules(automation.decisions, automation.rules).filter((item) => !dismissed.includes(`${item.from}|${item.action}`)), [automation, dismissed])
   const triaged = useMemo<Triaged[]>(() => rankTriaged(messages.map((message) => ({ message, triage: triage[message.id] }))), [messages, triage])
   const connected = connection === 'connected' && Boolean(services)
+  const install = useInstallPrompt()
+  const [installSkipped, setInstallSkipped] = useState(false)
+  // One thing to do at a time: the install while there is one to do, and connecting only after it.
+  // It waits for the saved sign-in to be looked for, so a tab that is already connected never sees it.
+  const installFirst = !connected && Boolean(services) && !busy && hasInstallStep(install, installSkipped)
   const needsMe = useMemo(() => groupInbox(triaged.filter((item) => !kept[item.message.id])).needsMe.length, [triaged, kept])
   const searchActions: SearchActions = {
     find: (query, count) => services!.search.search(query, count),
@@ -869,10 +876,13 @@ export default function App() {
   const links: ShellLink[] = [
     { label: 'open outlook', onSelect: () => window.open('https://outlook.live.com/mail/0/', '_blank', 'noreferrer') },
     ...(settings.brainUrl ? [{ label: 'open my brain', onSelect: () => window.open(settings.brainUrl, '_blank', 'noreferrer') }] : []),
+    ...(install.canPrompt ? [{ label: 'install app', onSelect: () => void install.install() }] : []),
   ]
 
   return <Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe } : undefined} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })}>
-    {view === 'inbox' && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} hasModel={Boolean(settings.anthropicApiKey)} suggestions={suggestions} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
+    {view === 'inbox' && installFirst && <InstallStep install={install} onSkip={() => setInstallSkipped(true)} />}
+    {view === 'inbox' && connected && <InstallBanner install={install} />}
+    {view === 'inbox' && !installFirst && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} hasModel={Boolean(settings.anthropicApiKey)} suggestions={suggestions} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
       onConnect={connect} onDismissSuggestion={(item) => setDismissed((current) => [...current, `${item.from}|${item.action}`])} />}
     {view === 'search' && connected && <SearchView search={searchActions} actions={actions} hasModel={Boolean(settings.anthropicApiKey)} />}
     {view === 'receipts' && connected && <ReceiptsView actions={receiptActions} />}

@@ -1,0 +1,10 @@
+/* install: the step ahead of connecting, and the banner on the inbox. */
+.install-steps { display: flex; flex-direction: column; gap: 0.6rem; padding: 0.25rem 0 0.5rem 1.25rem; color: var(--muted); }
+.install-banner { display: flex; flex: none; align-items: center; gap: 0.75rem; min-height: 3.25rem; padding: 0.25rem 0.25rem 0.25rem 1rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.install-banner span { flex: 1; }
+.install-banner .icon-button { font-size: 1.25rem; color: var(--muted); }
+
+@media (min-width: 60rem) {
+  /* Beside a reading pane the list owns its column, so the banner sits over the foot of it. */
+  .install-banner { grid-area: 3 / 1; align-self: end; z-index: 4; margin: 0 1rem 1rem 1.5rem; box-shadow: 0 8px 24px rgb(0 0 0 / 0.22); }
+}
