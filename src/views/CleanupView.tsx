@@ -44,7 +44,6 @@ function SenderRow({ group, onError, actions }: { group: SenderGroup; onError: (
       <Menu label={`more for ${group.name}`} items={[
         { label: 'archive all', onSelect: () => perform(() => actions.archiveSender(group)) },
         { label: 'unsubscribe', onSelect: () => perform(async () => setNote(await actions.unsubscribe(group))) },
-        { label: 'open latest in outlook', onSelect: () => window.open(`https://outlook.live.com/mail/0/inbox/id/${encodeURIComponent(group.sample.id)}`, '_blank', 'noreferrer') },
         { label: 'delete all + rule', danger: true, onSelect: () => perform(() => actions.blockSender(group, 'delete')) },
         { label: 'delete all', danger: true, onSelect: () => perform(() => actions.deleteSender(group)) },
       ]} />

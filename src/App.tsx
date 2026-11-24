@@ -967,7 +967,6 @@ export default function App() {
   const readBody = useMemo(() => services && ((message: Message) => services.mail.content(message.id)), [services])
 
   const links: ShellLink[] = [
-    { label: 'open outlook', onSelect: () => window.open('https://outlook.live.com/mail/0/', '_blank', 'noreferrer') },
     ...(settings.brainUrl ? [{ label: 'open my brain', onSelect: () => window.open(settings.brainUrl, '_blank', 'noreferrer') }] : []),
     ...(install.canPrompt ? [{ label: 'install app', onSelect: () => void install.install() }] : []),
   ]
