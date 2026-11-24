@@ -11,12 +11,13 @@ import { MailProvider, inboxPageSize, mailDefaultHeaders } from './data/mailProv
 import { MailSearch } from './data/mailSearch'
 import { MicrosoftAuth, configuredClientId } from './data/microsoftAuth'
 import { TodoProvider } from './data/todoProvider'
+import { arrivals, newestOf, withArrivals } from './domain/arrivals'
 import { groupBySender, staleIds, type ScanMessage, type SenderGroup } from './domain/cleanup'
 import { historyTriage, noiseSenders, senderHistoryLine } from './domain/history'
 import { compileRule, planRuleSync } from './domain/outlookRules'
 import { applyRules, autoRuleSenders, newRule, recordHits, rememberDecision, retiredSenders, suggestRules, type RuleSuggestion } from './domain/rules'
 import { dueSnoozes, snoozeRecord, snoozeUntil, withoutSnoozes, type SnoozeOption } from './domain/snooze'
-import { autoArchivable, needsReading, outlookTriage, pruneTriage, rankTriaged, summarize, unsureBelow, type RunSummary, type Triaged } from './domain/triage'
+import { autoArchivable, groupInbox, needsReading, outlookTriage, pruneTriage, rankTriaged, summarize, unsureBelow, type RunSummary, type Triaged } from './domain/triage'
 import { emptyAutomation, type Action, type Automation, type Message, type OutlookRule, type Rule, type RuleAction, type Triage } from './domain/types'
 import { parseUnsubscribe, unsubscribeMethod } from './domain/unsubscribe'
 import { loadSettings, saveSettings, type Settings } from './settings'
@@ -30,6 +31,9 @@ import { SettingsView, type ConnectionStatus } from './views/SettingsView'
 
 const triageKey = 'my-mail.triage.v1'
 const keptKey = 'my-mail.kept.v1'
+const inboxKey = 'my-mail.inbox.v1'
+/** How much of the inbox is kept on this device to show on the next open, before the mailbox has answered. */
+const savedInboxSize = 200
 const staleDays = 30
 
 type Services = { auth: MicrosoftAuth; mail: MailProvider; search: MailSearch; todo: TodoProvider; store: AutomationStore }
@@ -64,6 +68,8 @@ function errorText(error: unknown): string {
 
 const notMoved = (count: number) => `${count} did not move`
 const resumeAfterMs = 60_000
+/** How often an open, visible app asks the mailbox for new mail. Graph cannot push to a page with no server behind it. */
+const pollMs = 10_000
 
 async function createServices(clientId: string): Promise<Services> {
   const auth = await MicrosoftAuth.create(clientId)
@@ -118,7 +124,7 @@ export default function App() {
   const [services, setServices] = useState<Services>()
   const [connection, setConnection] = useState<ConnectionStatus>(configuredClientId() ? 'disconnected' : 'unconfigured')
   const [accountName, setAccountName] = useState<string>()
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<Message[]>(() => readJson(inboxKey, []))
   const [more, setMore] = useState(false)
   const [triage, setTriage] = useState<Record<string, Triage>>(() => readJson(triageKey, {}))
   const [kept, setKept] = useState<Record<string, string>>(() => readJson(keptKey, {}))
@@ -145,10 +151,17 @@ export default function App() {
   const busyRef = useRef(busy)
   busyRef.current = busy
   const lastRunRef = useRef(0)
+  /** The received time of the latest mail any read has seen; a look for new mail asks for what came after it. */
+  const newestSeenRef = useRef<string | undefined>(undefined)
+  const peekingRef = useRef(false)
+  /** What left the inbox, and what came back, while a check was reading the mailbox. The check's answer predates both. */
+  const leftRef = useRef(new Set<string>())
+  const backRef = useRef(new Map<string, Message>())
 
   useEffect(() => saveSettings(settings), [settings])
   useEffect(() => writeJson(triageKey, triage), [triage])
   useEffect(() => writeJson(keptKey, kept), [kept])
+  useEffect(() => writeJson(inboxKey, messages.slice(0, savedInboxSize)), [messages])
 
   const persistAutomation = useCallback(async (next: Automation, current = services) => {
     automationRef.current = next
@@ -174,10 +187,13 @@ export default function App() {
   }, [])
 
   /** Rules, verdicts, reading, categories, and auto-archive for one batch of fetched mail. Used for the first load and for every older page. */
-  const sortBatch = useCallback(async (current: Services, batch: Message[], startCache: Record<string, Triage>, startAutomation: Automation, settings: Settings, now: string): Promise<Sorted> => {
+  const sortBatch = useCallback(async (current: Services, batch: Message[], startCache: Record<string, Triage>, startAutomation: Automation, settings: Settings, now: string, onShow?: (inbox: Message[]) => void): Promise<Sorted> => {
     let inbox = batch
     let automationState = startAutomation
     const hits = applyRules(inbox, automationState.rules)
+    // Mail goes on screen as soon as it is known to be staying past the rules, which cost nothing to work out. Sorting follows.
+    const removed = new Set(hits.filter((hit) => hit.rule.action !== 'read' && hit.rule.action !== 'flag').map((hit) => hit.message.id))
+    onShow?.(inbox.filter((message) => !removed.has(message.id)))
     for (const hit of hits) {
       if (hit.rule.action === 'archive') await current.mail.archive(hit.message.id)
       else if (hit.rule.action === 'receipts') await current.mail.fileReceipt(hit.message.id)
@@ -186,7 +202,6 @@ export default function App() {
       else if (hit.rule.action === 'flag') await current.mail.flag(hit.message.id)
       else if (hit.rule.action === 'task') { await current.todo.createTask({ title: hit.message.subject, message: hit.message }); await current.mail.archive(hit.message.id) }
     }
-    const removed = new Set(hits.filter((hit) => hit.rule.action !== 'read' && hit.rule.action !== 'flag').map((hit) => hit.message.id))
     inbox = inbox.filter((message) => !removed.has(message.id)).map((message) => {
       const hit = hits.find((item) => item.message.id === message.id)
       if (!hit) return message
@@ -288,6 +303,8 @@ export default function App() {
     setError(undefined)
     const now = new Date().toISOString()
     lastRunRef.current = Date.now()
+    leftRef.current.clear()
+    backRef.current.clear()
     try {
       // The other device may have added rules or snoozes since this one last looked. Working from an old copy
       // would take its rules back out of Outlook, so the shared file is read again before anything is synced.
@@ -319,6 +336,7 @@ export default function App() {
         current.mail.inboxCount().catch(() => undefined),
       ])
       oldestRef.current = oldestOf(page.messages)
+      newestSeenRef.current = newestOf(page.messages, newestSeenRef.current)
       // Rescued mail is sorted this run even when it is older than the page, or the inbox read has not caught up with the move.
       const inPage = new Set(page.messages.map((message) => message.id))
       const batch = [...page.messages, ...rescued.filter((message) => !inPage.has(message.id))]
@@ -326,8 +344,16 @@ export default function App() {
       // Outlook has had its turn on anything that arrived while the app was closed; rules run here too for what it missed,
       // and they are the only rules junked mail ever meets.
       automationState = await pushRules(current, automationState)
-      const sorted = await sortBatch(current, batch, triageRef.current, automationState, options.settings, now)
-      const inbox = sorted.inbox
+      // The list stayed usable while this ran. What was cleared from it in the meantime stays cleared, and what was undone stays back.
+      const settle = (read: Message[]) => {
+        const ids = new Set(read.map((message) => message.id))
+        return [...read.filter((message) => !leftRef.current.has(message.id)), ...[...backRef.current.values()].filter((message) => !ids.has(message.id))]
+      }
+      const sorted = await sortBatch(current, batch, triageRef.current, automationState, options.settings, now, (read) => {
+        messagesRef.current = settle(read)
+        setMessages(messagesRef.current)
+      })
+      const inbox = settle(sorted.inbox)
       const cache = pruneTriage(sorted.cache, inbox)
 
       triageRef.current = cache
@@ -344,6 +370,71 @@ export default function App() {
       setBusy(undefined)
     }
   }, [pushRules, sortBatch])
+
+  /**
+   * A quiet look for mail that arrived since the last read. Nothing on screen changes unless something came,
+   * and what came is shown before it is sorted.
+   */
+  const peek = useCallback(async (current: Services, options: { settings: Settings }) => {
+    if (peekingRef.current || busyRef.current || !lastRunRef.current) return
+    // A snooze coming due needs the full check, which is what brings it back.
+    if (dueSnoozes(automationRef.current.snoozes).length) { await run(current, options); return }
+    peekingRef.current = true
+    const lastRun = lastRunRef.current
+    try {
+      let rescued: Message[] = []
+      let found: Message[] = []
+      try {
+        // One inbox: junk is emptied before the inbox is read, here as in the full check.
+        rescued = await current.mail.rescueJunk()
+        const since = newestSeenRef.current
+        found = (since ? await current.mail.inboxSince(since) : await current.mail.inbox()).messages
+      } catch {
+        // A look that fails says nothing; the next one is seconds away, and a full check reports what is wrong.
+        return
+      }
+      // A full check that started in the meantime reads these itself.
+      if (lastRunRef.current !== lastRun || busyRef.current) return
+      newestSeenRef.current = newestOf(found, newestSeenRef.current)
+      const fresh = arrivals([...found, ...rescued], messagesRef.current, leftRef.current)
+      if (!fresh.length) return
+
+      busyRef.current = 'checking mail'
+      setBusy('checking mail')
+      setError(undefined)
+      const batch = new Set(fresh.map((message) => message.id))
+      const show = (inbox: Message[]) => {
+        messagesRef.current = withArrivals(messagesRef.current, batch, inbox, leftRef.current)
+        setMessages(messagesRef.current)
+      }
+      try {
+        const sorted = await sortBatch(current, fresh, triageRef.current, automationRef.current, options.settings, new Date().toISOString(), show)
+        show(sorted.inbox)
+        const stayed = sorted.inbox.filter((message) => !leftRef.current.has(message.id))
+        const cache = { ...triageRef.current }
+        for (const message of stayed) if (sorted.cache[message.id]) cache[message.id] = sorted.cache[message.id]
+        triageRef.current = cache
+        setTriage(cache)
+        setSummary((summary) => summary ? {
+          ...summary,
+          inbox: summary.inbox + stayed.length,
+          needReply: summary.needReply + stayed.filter((message) => cache[message.id]?.needsReply).length,
+          byRules: summary.byRules + sorted.byRules,
+          autoArchived: summary.autoArchived + sorted.autoArchived,
+          filed: (summary.filed ?? 0) + sorted.filed,
+          newRules: (summary.newRules ?? 0) + sorted.newRules,
+          withoutModel: summary.withoutModel + sorted.withoutModel,
+          fromJunk: (summary.fromJunk ?? 0) + rescued.length,
+        } : summary)
+      } catch (failure) {
+        setError(errorText(failure))
+      } finally {
+        setBusy(undefined)
+      }
+    } finally {
+      peekingRef.current = false
+    }
+  }, [run, sortBatch])
 
   /** The next page of older mail, put through the same sorting as the first. */
   const loadMore = useCallback(async (current: Services, options: { settings: Settings }) => {
@@ -388,27 +479,33 @@ export default function App() {
     void createServices(clientId).then(async (created) => {
       setServices(created)
       const account = created.auth.account()
-      if (!account) return
+      if (!account) { setMessages([]); return }
       setAccountName(account.username)
       setConnection('connected')
       await run(created, { settings: loadSettings() })
     }).catch((failure: unknown) => setError(errorText(failure)))
   }, [run])
 
-  // The installed app stays alive in the background, so coming back to it has to look for new mail.
+  // New mail is looked for every few seconds while the app is on screen, and the moment it comes back to the screen.
+  // After a minute away the return is a full check, which also catches what was archived or read elsewhere.
   useEffect(() => {
     if (!services || connection !== 'connected') return
-    const check = () => {
-      if (document.visibilityState !== 'visible' || busyRef.current || Date.now() - lastRunRef.current < resumeAfterMs) return
-      void run(services, { settings: settingsRef.current })
+    const look = (full: boolean) => {
+      if (document.visibilityState !== 'visible' || busyRef.current) return
+      const options = { settings: settingsRef.current }
+      if (full && Date.now() - lastRunRef.current >= resumeAfterMs) void run(services, options)
+      else void peek(services, options)
     }
-    document.addEventListener('visibilitychange', check)
-    window.addEventListener('focus', check)
+    const back = () => look(true)
+    const timer = setInterval(() => look(false), pollMs)
+    document.addEventListener('visibilitychange', back)
+    window.addEventListener('focus', back)
     return () => {
-      document.removeEventListener('visibilitychange', check)
-      window.removeEventListener('focus', check)
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', back)
+      window.removeEventListener('focus', back)
     }
-  }, [services, connection, run])
+  }, [services, connection, run, peek])
 
   async function connect(): Promise<void> {
     setBusy('connecting')
@@ -446,6 +543,7 @@ export default function App() {
     const gone = new Set(removedMessages.map((message) => message.id))
     // Search acts on mail that may not be in the loaded inbox; only what was here comes off the counts.
     const here = messagesRef.current.filter((message) => gone.has(message.id))
+    for (const id of gone) { leftRef.current.add(id); backRef.current.delete(id) }
     setMessages((current) => current.filter((item) => !gone.has(item.id)))
     setSummary((current) => current ? { ...current, inbox: current.inbox - here.length, needReply: current.needReply - here.filter((message) => triageRef.current[message.id]?.needsReply).length } : current)
   }
@@ -565,6 +663,8 @@ export default function App() {
       setError(undefined)
       try {
         await services.mail.move(message.id, 'inbox')
+        leftRef.current.delete(message.id)
+        backRef.current.set(message.id, message)
         setMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message])
         setSummary((current) => current ? { ...current, inbox: current.inbox + 1, needReply: current.needReply + (triageRef.current[message.id]?.needsReply ? 1 : 0) } : current)
         const state = automationRef.current
@@ -721,6 +821,7 @@ export default function App() {
   const suggestions = useMemo<RuleSuggestion[]>(() => suggestRules(automation.decisions, automation.rules).filter((item) => !dismissed.includes(`${item.from}|${item.action}`)), [automation, dismissed])
   const triaged = useMemo<Triaged[]>(() => rankTriaged(messages.map((message) => ({ message, triage: triage[message.id] }))), [messages, triage])
   const connected = connection === 'connected' && Boolean(services)
+  const needsMe = useMemo(() => groupInbox(triaged.filter((item) => !kept[item.message.id])).needsMe.length, [triaged, kept])
   const searchActions: SearchActions = {
     find: (query, count) => services!.search.search(query, count),
     more: (next) => services!.search.more(next),
@@ -751,9 +852,9 @@ export default function App() {
     ...(settings.brainUrl ? [{ label: 'open my brain', onSelect: () => window.open(settings.brainUrl, '_blank', 'noreferrer') }] : []),
   ]
 
-  return <Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })}>
+  return <Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe } : undefined} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })}>
     {view === 'inbox' && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} hasModel={Boolean(settings.anthropicApiKey)} suggestions={suggestions} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
-      onConnect={connect} onSettings={() => setView('settings')} onDismissSuggestion={(item) => setDismissed((current) => [...current, `${item.from}|${item.action}`])} />}
+      onConnect={connect} onDismissSuggestion={(item) => setDismissed((current) => [...current, `${item.from}|${item.action}`])} />}
     {view === 'search' && connected && <SearchView search={searchActions} actions={actions} hasModel={Boolean(settings.anthropicApiKey)} />}
     {view === 'receipts' && connected && <ReceiptsView actions={receiptActions} />}
     {view === 'rules' && <RulesView rules={automation.rules} outlookRules={outlookRules} snoozes={automation.snoozes} error={error} onRules={updateRules} />}

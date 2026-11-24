@@ -37,6 +37,14 @@ describe('mail provider', () => {
     expect(new URLSearchParams(request.mock.calls.at(-2)![0].split('?')[1]).get('$filter')).toBe('receivedDateTime le 2026-11-01T09:00:00Z')
   })
 
+  it('asks for new mail by date, from the latest it has seen', async () => {
+    const request = vi.fn(async (_path: string) => ({ value: [] }))
+    await new MailProvider({ request } as unknown as GraphClient).inboxSince('2026-11-02T15:00:00Z')
+    const [path, query] = request.mock.calls[0][0].split('?')
+    expect(path).toBe('/me/mailFolders/inbox/messages')
+    expect(new URLSearchParams(query).get('$filter')).toBe('receivedDateTime ge 2026-11-02T15:00:00Z')
+  })
+
   it('moves everything in junk to the inbox and returns what moved', async () => {
     const graphMessage = (id: string) => ({ id, receivedDateTime: '2026-11-02T15:00:00Z', isRead: false, webLink: 'w' })
     const request = vi.fn(async (path: string, init?: RequestInit) => {

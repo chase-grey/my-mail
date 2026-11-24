@@ -110,14 +110,20 @@ export class MailProvider {
     return this.page('inbox', count, before)
   }
 
+  /** Inbox mail received at or after `since`, newest first. The message at the boundary comes back again; the caller drops what it already has. */
+  inboxSince(since: string, count = inboxPageSize): Promise<{ messages: Message[]; more: boolean }> {
+    return this.page('inbox', count, undefined, since)
+  }
+
   /** The receipts folder, newest first, paged by date the same way as the inbox. */
   async receipts(count = inboxPageSize, before?: string): Promise<{ messages: Message[]; more: boolean }> {
     return this.page(await this.receiptsFolder(), count, before)
   }
 
-  private async page(folder: string, count: number, before?: string): Promise<{ messages: Message[]; more: boolean }> {
+  private async page(folder: string, count: number, before?: string, since?: string): Promise<{ messages: Message[]; more: boolean }> {
     const query = new URLSearchParams({ '$top': String(Math.min(count, inboxPageSize)), '$orderby': 'receivedDateTime desc', '$select': messageSelect })
     if (before) query.set('$filter', `receivedDateTime le ${before}`)
+    else if (since) query.set('$filter', `receivedDateTime ge ${since}`)
     const all: Message[] = []
     let next: string | undefined = `/me/mailFolders/${encodeURIComponent(folder)}/messages?${query}`
     while (next && all.length < count) {
