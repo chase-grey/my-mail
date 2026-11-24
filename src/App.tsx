@@ -63,6 +63,10 @@ function writeJson(key: string, value: unknown): void {
   }
 }
 
+/** TypeSafe turns away calls made from a web page. Once one fails that way, Jev is not asked again until the page reloads; Claude sorts instead. */
+let jevUnreachable = false
+const isNetworkFailure = (failure: unknown) => failure instanceof TypeError
+
 function errorText(error: unknown): string {
   if (error instanceof InteractionRequiredAuthError) return 'reconnect microsoft'
   if (error instanceof GraphError && error.status === 403) return 'reconnect microsoft to allow rules and categories'
@@ -226,14 +230,15 @@ export default function App() {
     }
     const history = (message: Message) => senderHistoryLine(automationState.decisions, message.from.address)
     const unsorted = inbox.filter((message) => !cache[message.id])
-    if (settings.jevApiKey && unsorted.length) {
+    if (settings.jevApiKey && unsorted.length && !jevUnreachable) {
       setBusy(`sorting ${unsorted.length} new ${unsorted.length === 1 ? 'message' : 'messages'}`)
       try {
         const results = await classifyWithJev(new JevClient(settings.jevApiKey), unsorted, history)
         for (const result of results) cache[result.messageId] = result
         withoutModel += results.length
       } catch (failure) {
-        setError(errorText(failure))
+        if (isNetworkFailure(failure)) jevUnreachable = true
+        setError(isNetworkFailure(failure) ? "jev can't be reached from the browser" : errorText(failure))
       }
     }
 

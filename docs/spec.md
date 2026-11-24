@@ -540,9 +540,10 @@ Defaults are set so nothing blocks; change any of these in a sentence.
   local only.
 - **Auto-archive** default off. The expected first move is on after a week of watching the
   `probably fine` group and its confidence chips.
-- **Jev in the browser.** The key is sent from the page like the Anthropic key. Whether TypeSafe
-  answers cross-origin requests is unverified; if it does not, the fallback is Claude sorting, and
-  the fix is a tiny proxy or waiting for a browser-access header like Anthropic's.
+- **Jev in the browser.** The key is sent from the page like the Anthropic key. TypeSafe refuses
+  cross-origin requests (checked 2026-11-24: the preflight answers `Disallowed CORS origin`), so Jev
+  does not run from the site today. The first failed call says so once and Claude sorts until the
+  page reloads. Making Jev work needs a tiny proxy or TypeSafe allowing the site's origin.
 - **Images** default to people only.
 - **Sent-mail voice samples** default off until tried once.
 - **Name** stays `my mail`.
