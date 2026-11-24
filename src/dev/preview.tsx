@@ -1,11 +1,14 @@
 import { StrictMode, useState } from 'react'
+import { Toast, type ToastState } from '../ui'
 import { createRoot } from 'react-dom/client'
 import type { MessageActions } from '../App'
 import { groupBySender } from '../domain/cleanup'
 import { groupInbox, rankTriaged, type Triaged } from '../domain/triage'
 import type { MailContent } from '../domain/mailHtml'
 import type { Action, Category, Message } from '../domain/types'
+import type { ComposeActions, DraftAttachment } from '../data/compose'
 import { CleanupView, type CleanupActions } from '../views/CleanupView'
+import { Compose, type ComposeRequest } from '../views/Compose'
 import { InboxView } from '../views/InboxView'
 import { BodySource } from '../views/MailBody'
 import { ReceiptsView } from '../views/ReceiptsView'
@@ -98,11 +101,37 @@ const senders = groupBySender(scanned).map((group) => ({ ...group, kind: seed.fi
 const cleanupActions: CleanupActions = { scan: async () => {}, archiveSender: () => wait(400), deleteSender: () => wait(400), blockSender: () => wait(400), undoSender: () => wait(400), unsubscribe: async (group) => `unsubscribed from ${group.address}`, archiveStale: () => wait(400) }
 const receipts = Array.from({ length: 9 }, (_, at) => ({ ...seed[7].message, id: `r${at}`, from: at % 2 ? seed[7].message.from : { name: 'Harbor Outfitters', address: 'orders@harbor.example.com' }, subject: at % 2 ? 'Your receipt' : `Order ${4100 + at} confirmed`, receivedAt: hoursAgo(at * 190 + 20), body: `Order total $${(48.12 + at * 13.5).toFixed(2)}. Thanks for shopping with us.\n\nItems\n1 x olive oil\n2 x sourdough\n\nPaid with card ending 4417.` }))
 
+// Compose against a made-up mailbox: a reply comes back addressed, a forward brings the original's file.
+let attached: DraftAttachment[] = []
+const composeActions: ComposeActions = {
+  start: async (mode, id) => {
+    await wait(400)
+    const from = seed.find((item) => item.message.id === id)?.message
+    attached = mode === 'forward' ? [{ id: 'a0', name: 'statement-2026.pdf', size: 184_000 }] : []
+    return {
+      id: 'draft',
+      to: mode === 'new' || mode === 'forward' || !from ? [] : [from.from],
+      cc: mode === 'replyAll' ? [{ name: 'Tess Arnett', address: 'tess.arnett@example.com' }] : [],
+      subject: from ? `${mode === 'forward' ? 'FW' : 'RE'}: ${from.subject}` : '',
+      quoted: { contentType: 'html', content: '<body>earlier</body>' },
+      attachments: attached,
+    }
+  },
+  attach: async (_id, file) => { await wait(900); attached = [...attached, { id: crypto.randomUUID(), name: file.name, size: file.size }]; return attached },
+  detach: async (_id, attachment) => { await wait(200); attached = attached.filter((item) => item.id !== attachment) },
+  save: () => wait(400),
+  send: () => wait(700),
+  discard: () => wait(100),
+}
+
 function Preview() {
   const params = new URLSearchParams(window.location.search)
   const [view, setView] = useState<View>((params.get('view') as View) || 'inbox')
   const [items, setItems] = useState(params.has('empty') ? [] : seed)
   const [kept, setKept] = useState<Record<string, string>>({ m12: 'now' })
+  const asked = params.get('compose') as ComposeRequest['mode'] | null
+  const [composing, setComposing] = useState<ComposeRequest | undefined>(asked ? { mode: asked, message: asked === 'new' ? undefined : seed[2].message, text: asked === 'reply' ? 'Sounds good, see you then.' : '' } : undefined)
+  const [note, setNote] = useState<ToastState>()
   const drop = (ids: string[]) => setItems((current) => current.filter((item) => !ids.includes(item.message.id)))
   const gone = async (message: Message) => { await wait(350); drop([message.id]) }
 
@@ -112,7 +141,7 @@ function Preview() {
     archiveAll: async (messages) => { await wait(500); drop(messages.map((message) => message.id)) },
     remove: gone,
     task: gone,
-    reply: gone,
+    compose: (request) => setComposing(request),
     draft: async () => { await wait(600); return 'Five works. I will bring a salad and the chairs.' },
     snooze: gone,
     keep: async (message) => { await wait(200); setKept((current) => ({ ...current, [message.id]: 'now' })) },
@@ -122,14 +151,18 @@ function Preview() {
     restore: async (message) => { await wait(250); setItems((current) => rankTriaged([...current, ...seed.filter((item) => item.message.id === message.id)])) },
   }
 
-  return <BodySource value={readBody}><ThreadContext value={threads}><Shell view={view} views={['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings']} counts={{ inbox: groupInbox(items.filter((item) => !kept[item.message.id])).needsMe.length }} busy={params.has('busy')} canRefresh links={[{ label: 'open my brain', onSelect: () => {} }]} onView={setView} onRefresh={() => setItems(seed)}>
-    {view === 'inbox' && <InboxView items={items} kept={kept} summary={{ inbox: items.length, needReply: items.filter((item) => item.triage?.needsReply).length, byRules: 14, autoArchived: 0, returned: 0, withoutModel: 0 }} busy={params.has('busy') ? 'checking mail' : undefined} connection="connected" hasModel
+  return <BodySource value={readBody}><ThreadContext value={threads}><Shell view={view} views={['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings']} counts={{ inbox: groupInbox(items.filter((item) => !kept[item.message.id])).needsMe.length }} busy={params.has('busy')} canRefresh links={[{ label: 'open my brain', onSelect: () => {} }]} onView={setView} onRefresh={() => setItems(seed)} onCompose={() => setComposing({ mode: 'new' })}>
+    {view === 'inbox' && <InboxView items={items} kept={kept} summary={{ inbox: items.length, needReply: items.filter((item) => item.triage?.needsReply).length, byRules: 14, autoArchived: 0, returned: 0, withoutModel: 0 }} busy={params.has('busy') ? 'checking mail' : undefined} connection="connected"
       suggestions={[{ from: 'news@weeklyfold.example.com', action: 'archive', count: 4 }]} snoozes={[]} actions={actions} onConnect={async () => {}} onDismissSuggestion={() => {}} />}
     {view === 'search' && <SearchView search={search} actions={actions} hasModel senders={seed.map((item) => item.message.from)} subjects={seed.map((item) => item.message.subject)} />}
-    {view === 'receipts' && <ReceiptsView actions={{ load: async () => { await wait(300); return { messages: receipts, more: true } }, fromArchive: async () => { await wait(600); return 3 }, toInbox: () => wait(300) }} />}
+    {view === 'receipts' && <ReceiptsView actions={{ load: async () => { await wait(300); return { messages: receipts, more: true } }, fromArchive: async () => { await wait(600); return 3 }, toInbox: () => wait(300), forward: (message) => setComposing({ mode: 'forward', message }) }} />}
     {view === 'cleanup' && <CleanupView state={{ scanned: scanned.length, total: scanned.length, groups: senders, staleCount: 6, done: true }} actions={cleanupActions} onError={() => {}} />}
     {view === 'rules' && <RulesView rules={[{ id: 'r1', from: '@harbor.example.com', action: 'archive', enabled: true, createdAt: 'now', hits: 12, outlookId: 'o1' }, { id: 'r2', subject: 'receipt', action: 'read', enabled: true, createdAt: 'now', hits: 3 }]} outlookRules={[]} snoozes={[{ messageId: 's1', until: new Date(Date.now() + 86_400_000).toISOString(), subject: 'Renew passport', from: 'Travel Office' }]} onRules={async () => {}} />}
     {view === 'settings' && <SettingsView settings={defaultSettings} connection="connected" accountName="someone@example.com" busy={false} onSettings={() => {}} onConnect={async () => {}} onDisconnect={async () => {}} />}
+    {composing && <Compose key={`${composing.mode}:${composing.message?.id ?? ''}`} request={composing} actions={composeActions} contacts={seed.map((item) => item.message.from)}
+      onDraft={composing.message && composing.mode !== 'forward' ? actions.draft.bind(undefined, composing.message) : undefined}
+      onSent={() => composing.onSent?.()} onClose={(text) => { setComposing(undefined); if (text) setNote({ key: Date.now(), text }) }} />}
+    <Toast toast={note} onDone={() => setNote(undefined)} />
   </Shell></ThreadContext></BodySource>
 }
 

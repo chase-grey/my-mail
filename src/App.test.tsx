@@ -18,13 +18,13 @@ it('renders the connect step before anything else when signed out', () => {
 
 it('shows triaged mail with the suggested action highlighted and kept mail folded away', () => {
   const noop = async () => {}
-  const actions: MessageActions = { archive: noop, archiveAll: noop, remove: noop, task: noop, reply: noop, draft: async () => '', snooze: noop, isReceipt: () => false, keep: noop, flag: noop, unsubscribe: async () => '', makeRule: noop, restore: noop }
+  const actions: MessageActions = { archive: noop, archiveAll: noop, remove: noop, task: noop, compose: () => {}, draft: async () => '', snooze: noop, isReceipt: () => false, keep: noop, flag: noop, unsubscribe: async () => '', makeRule: noop, restore: noop }
   const items = [
     { message: message('m1', 'mom@example.com', 'Dinner Sunday?'), triage: { messageId: 'm1', category: 'reply' as const, summary: 'mom asks about sunday dinner', needsReply: true, suggested: 'reply' as const, draft: 'Yes!', confidence: 0.9, source: 'model' as const, triagedAt: 'now' } },
     { message: message('m2', 'news@daily.example.com', 'Daily digest'), triage: { messageId: 'm2', category: 'newsletter' as const, summary: 'daily digest', needsReply: false, suggested: 'archive' as const, confidence: 0.9, source: 'jev' as const, triagedAt: 'now' } },
     { message: message('m3', 'kept@example.com', 'Keep me') },
   ]
-  const html = renderToStaticMarkup(<InboxView items={items} kept={{ m3: 'now' }} summary={{ inbox: 3, needReply: 1, byRules: 2, autoArchived: 0, returned: 0, withoutModel: 1 }} connection="connected" hasModel suggestions={[{ from: 'news@daily.example.com', action: 'archive', count: 3 }]} snoozes={[]} actions={actions} onConnect={noop} onDismissSuggestion={() => {}} />)
+  const html = renderToStaticMarkup(<InboxView items={items} kept={{ m3: 'now' }} summary={{ inbox: 3, needReply: 1, byRules: 2, autoArchived: 0, returned: 0, withoutModel: 1 }} connection="connected" suggestions={[{ from: 'news@daily.example.com', action: 'archive', count: 3 }]} snoozes={[]} actions={actions} onConnect={noop} onDismissSuggestion={() => {}} />)
   expect(html).not.toContain('in inbox ·')
   expect(html).toContain('mom asks about sunday dinner')
   expect(html).toContain('mail-summary is-loud')
@@ -44,7 +44,7 @@ it('shows triaged mail with the suggested action highlighted and kept mail folde
 it('offers one search field, with find or ask only when there is a model', () => {
   vi.stubGlobal('localStorage', { getItem: () => '["property tax"]', setItem: () => {} })
   const noop = async () => {}
-  const actions: MessageActions = { archive: noop, archiveAll: noop, remove: noop, task: noop, reply: noop, draft: async () => '', snooze: noop, isReceipt: () => false, keep: noop, flag: noop, unsubscribe: async () => '', makeRule: noop, restore: noop }
+  const actions: MessageActions = { archive: noop, archiveAll: noop, remove: noop, task: noop, compose: () => {}, draft: async () => '', snooze: noop, isReceipt: () => false, keep: noop, flag: noop, unsubscribe: async () => '', makeRule: noop, restore: noop }
   const search = { find: async () => ({ hits: [] }), more: async () => ({ hits: [] }), translate: async () => '', answer: async () => '' }
   const withModel = renderToStaticMarkup(<SearchView search={search} actions={actions} hasModel />)
   expect(withModel).toContain('placeholder="search or ask"')

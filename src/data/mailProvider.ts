@@ -371,17 +371,6 @@ export class MailProvider {
     return asked
   }
 
-  /** Sends a plain-text reply to the sender right away. */
-  async reply(id: string, comment: string): Promise<void> {
-    await this.graph.request(`/me/messages/${encodeURIComponent(id)}/reply`, { method: 'POST', body: JSON.stringify({ comment }) })
-  }
-
-  /** Saves a reply in Drafts and returns where to finish it in Outlook. */
-  async draftReply(id: string, comment: string): Promise<{ id: string; webLink: string }> {
-    const draft = await this.graph.request<{ id: string; webLink: string }>(`/me/messages/${encodeURIComponent(id)}/createReply`, { method: 'POST', body: JSON.stringify({ comment }) })
-    return { id: draft.id, webLink: draft.webLink }
-  }
-
   /** A new plain-text message, used for mailto unsubscribe requests. Not saved to Sent. */
   async send(to: string, subject: string, body: string): Promise<void> {
     await this.graph.request('/me/sendMail', { method: 'POST', body: JSON.stringify({ message: { subject, body: { contentType: 'text', content: body }, toRecipients: [{ emailAddress: { address: to } }] }, saveToSentItems: false }) })

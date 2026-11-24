@@ -31,8 +31,8 @@ The product specification, including why this is built rather than forked, lives
   no model at all. Reply drafts are written on request, not ahead of time; `better draft` asks Sonnet.
 - **inbox** · two groups. `needs me` has the suggested action first. `probably fine` shows the
   category and how sure the sorter was, leads with archive, and has `archive all`.
-- **actions** · archive, to do (creates a To Do task and archives), reply (draft for me, edit, send
-  or finish in Outlook), snooze (this evening, tomorrow, this weekend, next week), keep in inbox,
+- **actions** · archive, to do (creates a To Do task and archives), reply, reply all, forward, and new
+  message in one compose screen with attachments (draft for me, send, save draft), snooze (this evening, tomorrow, this weekend, next week), keep in inbox,
   flag, delete, unsubscribe, always do this for the sender.
 - **unsubscribe** · follows the sender's `List-Unsubscribe` header: a one-click POST when offered,
   otherwise a mail sent through Graph, otherwise the page opens. Pair it with a rule to be sure.

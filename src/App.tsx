@@ -7,6 +7,7 @@ import { answerFromMail, translateQuery } from './ai/search'
 import { draftReply, readMessages, type ReadItem } from './ai/triage'
 import { AppFolder } from './data/appFolder'
 import { AutomationStore } from './data/automationStore'
+import { Composer } from './data/compose'
 import { GraphClient, GraphError } from './data/graphClient'
 import { MailProvider, inboxPageSize, mailDefaultHeaders } from './data/mailProvider'
 import { MailSearch } from './data/mailSearch'
@@ -24,7 +25,9 @@ import { inboxThreads } from './domain/threads'
 import { parseUnsubscribe, unsubscribeMethod } from './domain/unsubscribe'
 import { useInstallPrompt } from './installPrompt'
 import { aiSorts, aiStartsItself, loadSettings, saveSettings, type Settings } from './settings'
+import { Toast, type ToastState } from './ui'
 import { CleanupView, type CleanupActions, type CleanupState } from './views/CleanupView'
+import { Compose, type ComposeRequest } from './views/Compose'
 import { InboxView } from './views/InboxView'
 import { BodySource } from './views/MailBody'
 import { InstallBanner, InstallStep, hasInstallStep } from './views/InstallOffer'
@@ -43,7 +46,7 @@ const senderKindsKey = 'my-mail.senderKinds.v1'
 const savedInboxSize = 200
 const staleDays = 30
 
-type Services = { auth: MicrosoftAuth; mail: MailProvider; search: MailSearch; todo: TodoProvider; store: AutomationStore }
+type Services = { auth: MicrosoftAuth; mail: MailProvider; compose: Composer; search: MailSearch; todo: TodoProvider; store: AutomationStore }
 /** `waiting` is mail that stayed and still wants a model, but was not allowed one this time. */
 type Sorted = { inbox: Message[]; cache: Record<string, Triage>; byRules: number; autoArchived: number; filed: number; newRules: number; withoutModel: number; waiting: string[] }
 
@@ -86,7 +89,7 @@ const pollMs = 10_000
 async function createServices(clientId: string): Promise<Services> {
   const auth = await MicrosoftAuth.create(clientId)
   const graph = new GraphClient(() => auth.accessToken(), undefined, undefined, mailDefaultHeaders)
-  return { auth, mail: new MailProvider(graph), search: new MailSearch(graph), todo: new TodoProvider(graph), store: new AutomationStore(new AppFolder(graph)) }
+  return { auth, mail: new MailProvider(graph), compose: new Composer(graph), search: new MailSearch(graph), todo: new TodoProvider(graph), store: new AutomationStore(new AppFolder(graph)) }
 }
 
 /** Write what Outlook can run to Outlook, and read back what was changed or made there. */
@@ -113,7 +116,8 @@ export type MessageActions = {
   archiveAll: (messages: Message[]) => Promise<void>
   remove: (message: Message) => Promise<void>
   task: (message: Message, title: string) => Promise<void>
-  reply: (message: Message, text: string, mode: 'send' | 'draft') => Promise<void>
+  /** Opens compose: a new message, or a reply, reply all, or forward of one. */
+  compose: (request: ComposeRequest) => void
   /** Write a reply on request. The strong model is for when the first one is not good enough. */
   draft: (message: Message, strong: boolean, instruction?: string) => Promise<string>
   snooze: (message: Message, option: SnoozeOption) => Promise<void>
@@ -146,6 +150,8 @@ export default function App() {
   const [busy, setBusy] = useState<string>()
   const [error, setError] = useState<string>()
   const [dismissed, setDismissed] = useState<string[]>([])
+  const [composing, setComposing] = useState<ComposeRequest>()
+  const [composeNote, setComposeNote] = useState<ToastState>()
   const [cleanup, setCleanup] = useState<CleanupState>(emptyCleanup)
   const scanRef = useRef<ScanMessage[]>([])
   /** What each sender's clear took away this visit, by address, so undo can put it back. */
@@ -706,16 +712,7 @@ export default function App() {
       await services!.todo.createTask({ title: title.trim() || message.subject, note: triageRef.current[message.id]?.summary, message })
       await services!.mail.archive(message.id)
     }),
-    reply: (message, text, mode) => decide(message, 'reply', async () => {
-      if (mode === 'draft') {
-        const draft = await services!.mail.draftReply(message.id, text)
-        window.open(draft.webLink, '_blank', 'noreferrer')
-        return
-      }
-      await services!.mail.reply(message.id, text)
-      if (settings.archiveAfterReply) await services!.mail.archive(message.id)
-      else await services!.mail.markRead(message.id)
-    }, mode === 'send' && settings.archiveAfterReply),
+    compose: (request) => setComposing(request),
     draft: async (message, strong, instruction) => {
       const current = settingsRef.current
       const text = await draftReply(anthropic(), strong ? current.strongModel : current.anthropicModel, message, { aboutMe: current.aboutMe, today: new Date().toLocaleDateString('en-CA'), instruction })
@@ -764,6 +761,16 @@ export default function App() {
         throw failure
       }
     },
+  }
+
+  /** After a reply to mail in the inbox goes out, the original is archived or marked read, and the reply is remembered. */
+  async function sent(request: ComposeRequest): Promise<void> {
+    const { message } = request
+    if (message && request.onCard && request.mode !== 'forward') {
+      const archives = settingsRef.current.archiveAfterReply
+      await decide(message, 'reply', () => archives ? services!.mail.archive(message.id) : services!.mail.markRead(message.id), archives)
+    }
+    request.onSent?.()
   }
 
   async function updateRules(rules: Rule[]): Promise<void> {
@@ -909,6 +916,7 @@ export default function App() {
       return ids.length - stuck.length
     },
     toInbox: (message) => actions.restore(message),
+    forward: (message) => setComposing({ mode: 'forward', message }),
   }
 
   const suggestions = useMemo<RuleSuggestion[]>(() => suggestRules(automation.decisions, automation.rules).filter((item) => !dismissed.includes(`${item.from}|${item.action}`)), [automation, dismissed])
@@ -964,15 +972,19 @@ export default function App() {
     ...(install.canPrompt ? [{ label: 'install app', onSelect: () => void install.install() }] : []),
   ]
 
-  return <BodySource value={connected ? readBody : undefined}><ThreadContext value={connected ? threadActions : undefined}><Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe } : undefined} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })}>
+  return <BodySource value={connected ? readBody : undefined}><ThreadContext value={connected ? threadActions : undefined}><Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe } : undefined} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })} onCompose={connected ? () => setComposing({ mode: 'new' }) : undefined}>
     {view === 'inbox' && installFirst && <InstallStep install={install} onSkip={() => setInstallSkipped(true)} />}
     {view === 'inbox' && connected && <InstallBanner install={install} />}
-    {view === 'inbox' && !installFirst && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} hasModel={Boolean(settings.anthropicApiKey)} archiveAfterReply={settings.archiveAfterReply} suggestions={suggestions} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
+    {view === 'inbox' && !installFirst && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} archiveAfterReply={settings.archiveAfterReply} suggestions={suggestions} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
       onConnect={connect} onDismissSuggestion={(item) => setDismissed((current) => [...current, `${item.from}|${item.action}`])} />}
     {view === 'search' && connected && <SearchView search={searchActions} actions={actions} hasModel={Boolean(settings.anthropicApiKey)} senders={senders} subjects={subjects} />}
     {view === 'receipts' && connected && <ReceiptsView actions={receiptActions} />}
     {view === 'rules' && <RulesView rules={automation.rules} outlookRules={outlookRules} snoozes={automation.snoozes} error={error} onRules={updateRules} />}
     {view === 'cleanup' && <CleanupView state={cleanup} error={error} actions={cleanupActions} onError={setError} />}
     {view === 'settings' && <SettingsView settings={settings} connection={connection} accountName={accountName} busy={Boolean(busy)} error={error} onSettings={setSettings} onConnect={connect} onDisconnect={disconnect} />}
+    {composing && services && <Compose key={`${composing.mode}:${composing.message?.id ?? ''}`} request={composing} actions={services.compose} contacts={senders}
+      onDraft={settings.anthropicApiKey && composing.message && composing.mode !== 'forward' ? (strong, instruction) => actions.draft(composing.message!, strong, instruction) : undefined}
+      onSent={() => sent(composing)} onClose={(note) => { setComposing(undefined); if (note) setComposeNote({ key: Date.now(), text: note }) }} />}
+    <Toast toast={composeNote} onDone={() => setComposeNote(undefined)} />
   </Shell></ThreadContext></BodySource>
 }

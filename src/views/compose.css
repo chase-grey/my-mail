@@ -1,0 +1,37 @@
+/* compose: the whole screen on a phone, a window over the app on a wide screen */
+.sheet.compose { height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; }
+.compose.is-over { outline: 2px dashed var(--accent); outline-offset: -8px; }
+.compose-body { display: flex; flex-direction: column; height: 100%; padding: calc(0.25rem + env(safe-area-inset-top)) 1rem calc(0.75rem + env(safe-area-inset-bottom)); }
+.compose-head { display: flex; align-items: center; justify-content: space-between; min-height: 3rem; }
+.compose-head h2 { font-size: 1.1rem; }
+.compose-head .icon-button { margin-right: -0.6rem; color: var(--muted); }
+
+.compose-field { display: flex; align-items: center; gap: 0.75rem; min-height: 2.9rem; border-bottom: 1px solid var(--border); }
+.compose-field > span { flex: none; width: 3.6rem; color: var(--muted); font-size: 0.9rem; }
+.compose-field input { flex: 1; min-width: 0; min-height: 2.75rem; padding: 0; border: 0; background: transparent; font-size: max(16px, 1rem); }
+.compose-field input:focus { outline: none; }
+.compose-field:focus-within { border-bottom-color: var(--accent); }
+
+.compose-text { flex: 1; width: 100%; min-height: 8rem; padding: 0.85rem 0; border: 0; background: transparent; font-size: max(16px, 1rem); line-height: 1.55; resize: none; }
+.compose-text:focus { outline: none; }
+
+.compose-files { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0 0 0.6rem; list-style: none; }
+.compose-files li { display: flex; align-items: center; gap: 0.5rem; max-width: 100%; min-height: 2.25rem; padding: 0 0.3rem 0 0.8rem; border: 1px solid var(--border); border-radius: 999px; font-size: 0.9rem; }
+.compose-files li.is-uploading { padding-right: 0.8rem; opacity: 0.7; }
+.compose-files .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compose-files small { flex: none; font-variant-numeric: tabular-nums; }
+.compose-files button { display: inline-grid; place-items: center; flex: none; width: 1.75rem; height: 1.75rem; border-radius: 50%; color: var(--muted); }
+.compose-files button:hover { background: var(--surface-2); color: var(--text); }
+
+.compose-model { display: flex; flex-wrap: wrap; align-items: center; gap: 0 0.5rem; border-top: 1px solid var(--border); }
+.compose-model input { flex: 1 1 7rem; min-width: 0; min-height: 2.75rem; padding: 0; border: 0; background: transparent; font-size: max(16px, 1rem); }
+.compose-model input:focus { outline: none; }
+
+.compose-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; padding-top: 0.6rem; border-top: 1px solid var(--border); }
+.compose-actions .primary { min-width: 5.5rem; }
+.compose-actions .plain { padding: 0 0.5rem; }
+
+@media (min-width: 60rem) {
+  .sheet.compose { width: 46rem; max-width: calc(100vw - 4rem); height: min(46rem, 90dvh); border: 1px solid var(--border); border-radius: 16px; }
+  .compose-body { padding: 0.6rem 1.4rem 1.1rem; }
+}

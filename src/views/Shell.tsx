@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { checkForUpdate, notePlace, takeResumePlace, useAppUpdate } from '../appUpdate'
 import { Icon, Menu, Sheet, type IconName } from '../ui'
 import { UpdateToast } from './UpdateToast'
@@ -21,7 +21,10 @@ export const shortcuts: [string, string][] = [
   ['j', 'next'],
   ['k', 'previous'],
   ['e', 'archive'],
+  ['c', 'new message'],
   ['r', 'reply'],
+  ['a', 'reply all'],
+  ['f', 'forward'],
   ['t', 'to do'],
   ['s', 'snooze'],
   ['#', 'delete'],
@@ -31,7 +34,7 @@ export const shortcuts: [string, string][] = [
 ]
 
 /** The frame around every screen: a side rail on wide screens, a top bar with a menu on a phone. */
-export function Shell({ view, views, counts = {}, busy, canRefresh, links, onView, onRefresh, children }: {
+export function Shell({ view, views, counts = {}, busy, canRefresh, links, onView, onRefresh, onCompose, children }: {
   view: View
   views: View[]
   counts?: Partial<Record<View, number>>
@@ -40,6 +43,8 @@ export function Shell({ view, views, counts = {}, busy, canRefresh, links, onVie
   links: ShellLink[]
   onView: (view: View) => void
   onRefresh: () => void
+  /** Starts a new message. Left out until there is a mailbox to send from. */
+  onCompose?: () => void
   children: ReactNode
 }) {
   const [keys, setKeys] = useState(false)
@@ -48,13 +53,18 @@ export function Shell({ view, views, counts = {}, busy, canRefresh, links, onVie
   // An update reload comes back to the screen it left.
   useEffect(() => notePlace(view), [view])
 
-  // `?` lists the keys from anywhere outside a text field.
+  const compose = useRef(onCompose)
+  compose.current = onCompose
+
+  // `?` lists the keys and `c` starts a message, from anywhere outside a text field.
   useEffect(() => {
     const listen = (event: KeyboardEvent) => {
-      if (event.key !== '?' || event.metaKey || event.ctrlKey || event.altKey) return
+      if ((event.key !== '?' && event.key !== 'c') || event.metaKey || event.ctrlKey || event.altKey) return
       if ((event.target as HTMLElement).closest?.('input, textarea, select, dialog')) return
+      if (event.key === 'c' && !compose.current) return
       event.preventDefault()
-      setKeys(true)
+      if (event.key === 'c') compose.current?.()
+      else setKeys(true)
     }
     window.addEventListener('keydown', listen)
     return () => window.removeEventListener('keydown', listen)
@@ -62,6 +72,7 @@ export function Shell({ view, views, counts = {}, busy, canRefresh, links, onVie
 
   return <div className="shell">
     <nav className="rail" aria-label="screens">
+      {onCompose && <button className="rail-compose" type="button" onClick={onCompose}><Icon name="compose" size={18} />new message</button>}
       {views.map((item) => <button key={item} type="button" className={item === view ? 'is-current' : ''} aria-current={item === view ? 'page' : undefined} onClick={() => onView(item)}><Icon name={viewIcon[item]} size={18} />{viewLabel[item]}{counts[item] ? <span className="count">{counts[item]}</span> : null}{item === 'settings' && updateReady && <i className="update-dot" aria-hidden="true" />}</button>)}
       <div className="rail-links">
         <button type="button" onClick={() => setKeys(true)}><Icon name="keys" size={18} />shortcuts</button>
@@ -72,6 +83,7 @@ export function Shell({ view, views, counts = {}, busy, canRefresh, links, onVie
       <header className="topbar">
         {view !== 'inbox' && <button className="back icon-button" type="button" aria-label="back to inbox" onClick={() => onView('inbox')}><Icon name="back" /></button>}
         <h1>{viewLabel[view]}</h1>
+        {view === 'inbox' && onCompose && <button className="icon-button to-compose" type="button" aria-label="new message" title="new message" onClick={onCompose}><Icon name="compose" /></button>}
         {view === 'inbox' && views.includes('search') && <button className="icon-button to-search" type="button" aria-label="search" title="search" onClick={() => onView('search')}><Icon name="search" /></button>}
         {view === 'inbox' && <button className={`icon-button${busy ? ' is-spinning' : ''}`} type="button" aria-label="check mail" title="check mail" disabled={!canRefresh} onClick={onRefresh}><Icon name="refresh" /></button>}
         <Menu items={[

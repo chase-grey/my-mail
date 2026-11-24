@@ -56,6 +56,7 @@ type Handlers = {
   task: (hit: SearchHit) => void
   flag: (hit: SearchHit) => void
   toInbox: (hit: SearchHit) => void
+  compose: (hit: SearchHit, mode: 'reply' | 'replyAll' | 'forward') => void
   remove: (hit: SearchHit) => void
 }
 
@@ -67,6 +68,9 @@ function Detail({ hit, pane, on }: { hit: SearchHit; pane: boolean; on: Handlers
       {hit.inInbox && <button type="button" onClick={() => on.archive(hit)}>archive</button>}
       <button type="button" onClick={() => on.task(hit)}>to do</button>
       <Menu label={`more for ${message.subject}`} items={[
+        { label: 'reply', onSelect: () => on.compose(hit, 'reply') },
+        { label: 'reply all', onSelect: () => on.compose(hit, 'replyAll') },
+        { label: 'forward', onSelect: () => on.compose(hit, 'forward') },
         { label: message.flagged ? 'unflag' : 'flag', onSelect: () => on.flag(hit) },
         ...(hit.inInbox ? [] : [{ label: 'move to inbox', onSelect: () => on.toInbox(hit) }]),
         { label: 'delete', danger: true, onSelect: () => on.remove(hit) },
@@ -244,6 +248,7 @@ export function SearchView({ search, actions, hasModel, senders = noSenders, sub
       say('added to to do')
     }),
     flag: (hit) => act(actions.flag(hit.message), () => patch(hit.message.id, (item) => ({ ...item, message: { ...item.message, flagged: !item.message.flagged } }))),
+    compose: (hit, mode) => actions.compose({ mode, message: hit.message, onCard: mode !== 'forward' && hit.inInbox }),
     toInbox: (hit) => act(actions.restore(hit.message), () => { inInbox(hit.message); say('moved to inbox') }),
     remove: (hit) => act(actions.remove(hit.message), () => {
       patch(hit.message.id, () => undefined)

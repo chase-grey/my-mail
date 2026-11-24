@@ -200,8 +200,7 @@ focused card: `e` archive, `r` reply, `t` to do, `s` snooze, `k` keep, `#` delet
 - Meeting invitations get `accept`, `tentative`, `decline` in place of the draft block.
 - The **draft** block appears when the model thinks a reply is owed. `send and archive` sends it as a
   reply (reply all when the original had several recipients and the model says so). `edit` opens it in
-  compose. `better draft` asks the stronger model with the whole thread. `finish in outlook` is in the
-  `…` menu and saves it as an Outlook draft.
+  compose. `better draft` asks the stronger model with the whole thread.
 - Action row at the bottom, same actions and keys as the card.
 
 ### compose
@@ -210,6 +209,14 @@ New message, reply, reply all, forward. To, cc (hidden until tapped), subject, b
 the signature appended, attachments from the device. `send` and `save draft`. Drafts are Outlook
 drafts: closing compose without sending saves one. A reply to a message that is on a card archives the
 original after sending when `archive after reply` is on.
+
+*Built 2026-11-24*, without the signature and `tighten`. One screen writes all mail: `new message` in the
+rail and the top bar (`c`), `reply` on the card, `reply all` and `forward` in its `…` menu and in search,
+`forward` on a receipt. A reply or forward is an Outlook draft from the moment it opens, so Outlook
+addresses and quotes it; a new message becomes one at its first file or save. Files come from the
+picker, a drop, or a paste, up to 25 mb a message; a forward keeps the original's files. Closing keeps
+what was written as a draft and `discard` deletes it; an answer nobody touched leaves no draft behind.
+A forward never archives the original. Drafts cannot be reopened in the app yet.
 
 The model helps in two places: `draft for me` with a one-line instruction ("say yes but push to 6"),
 and `tighten` on selected text. Both show the result as a replacement I can undo.

@@ -10,7 +10,6 @@ import type { ConnectionStatus } from './SettingsView'
 import { Conversation } from './Thread'
 
 type SheetState =
-  | { kind: 'reply'; thread: InboxThread; draft: string }
   | { kind: 'snooze'; thread: InboxThread }
   | { kind: 'task'; thread: InboxThread; title: string }
   | { kind: 'rule'; message: Message }
@@ -30,6 +29,8 @@ type Handlers = {
   flag: (item: InboxThread) => void
   task: (item: InboxThread) => void
   reply: (item: InboxThread) => void
+  replyAll: (item: InboxThread) => void
+  forward: (item: InboxThread) => void
   snooze: (item: InboxThread) => void
   rule: (item: InboxThread) => void
   unsubscribe: (item: InboxThread) => void
@@ -85,6 +86,8 @@ function Detail({ item, kept, quiet, pane, on }: { item: InboxThread; kept: bool
           { label: 'reply', onSelect: () => on.reply(item) },
           { label: 'snooze', onSelect: () => on.snooze(item) },
         ] : [{ label: kept ? 'kept' : 'keep in inbox', disabled: kept, onSelect: () => on.keep(item) }]),
+        { label: 'reply all', onSelect: () => on.replyAll(item) },
+        { label: 'forward', onSelect: () => on.forward(item) },
         { label: message.flagged ? 'unflag' : 'flag', onSelect: () => on.flag(item) },
         { label: 'unsubscribe', onSelect: () => on.unsubscribe(item) },
         { label: 'always do this for the sender', onSelect: () => on.rule(item) },
@@ -170,14 +173,13 @@ function Row({ item, index, kept, quiet, open, pane, leave, on }: { item: InboxT
   </li>
 }
 
-export function InboxView({ items, kept, summary, busy, error, connection, hasModel, archiveAfterReply, suggestions, snoozes, actions, more, onMore, onConnect, onDismissSuggestion }: {
+export function InboxView({ items, kept, summary, busy, error, connection, archiveAfterReply, suggestions, snoozes, actions, more, onMore, onConnect, onDismissSuggestion }: {
   items: Triaged[]
   kept: Record<string, string>
   summary?: RunSummary
   busy?: string
   error?: string
   connection: ConnectionStatus
-  hasModel: boolean
   /** A sent reply archives its message, so the rest of the conversation goes with it. */
   archiveAfterReply?: boolean
   suggestions: RuleSuggestion[]
@@ -254,6 +256,11 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
     void each(rest, actions.archive).catch(() => undefined).finally(() => stay([item.key]))
   }
 
+  /** A sent reply archives the message it answers when the setting says so; the rest of the conversation goes with it. */
+  function answer(item: InboxThread, mode: 'reply' | 'replyAll'): void {
+    actions.compose({ mode, message: item.message, text: item.triage?.draft ?? '', onCard: true, onSent: () => { if (archiveAfterReply) clearRest(item) } })
+  }
+
   const on: Handlers = {
     open: (item) => setOpenId(pane || selectedId !== item.key ? item.key : undefined),
     archive: (item) => clear(item, 'right', actions.archive, actions.isReceipt(item.message) ? 'moved to receipts' : 'archived', true),
@@ -261,13 +268,15 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
     keep: (item) => clear(item, 'fade', actions.keep),
     flag: (item) => void actions.flag(item.message).catch(() => undefined),
     task: (item) => setSheet({ kind: 'task', thread: item, title: item.triage?.task ?? item.message.subject }),
-    reply: (item) => setSheet({ kind: 'reply', thread: item, draft: item.triage?.draft ?? '' }),
+    reply: (item) => answer(item, 'reply'),
+    replyAll: (item) => answer(item, 'replyAll'),
+    forward: (item) => actions.compose({ mode: 'forward', message: item.message }),
     snooze: (item) => setSheet({ kind: 'snooze', thread: item }),
     rule: (item) => setSheet({ kind: 'rule', message: item.message }),
     unsubscribe: (item) => void actions.unsubscribe(item.message).then((text) => say(text)).catch(() => undefined),
   }
 
-  // Keys on the open message: j and k move, e archive, r reply, t to do, s snooze, # delete, u undo.
+  // Keys on the open message: j and k move, e archive, r reply, a reply all, f forward, t to do, s snooze, # delete, u undo.
   const onKey = useRef<(event: KeyboardEvent) => void>(undefined)
   onKey.current = (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey || sheet) return
@@ -281,7 +290,7 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
     }
     if (event.key === 'Escape' && !pane) { setOpenId(undefined); return }
     if (!selected) return
-    const act = ({ e: on.archive, r: on.reply, t: on.task, s: on.snooze, '#': on.remove } as Record<string, ((item: InboxThread) => void) | undefined>)[event.key]
+    const act = ({ e: on.archive, r: on.reply, a: on.replyAll, f: on.forward, t: on.task, s: on.snooze, '#': on.remove } as Record<string, ((item: InboxThread) => void) | undefined>)[event.key]
     if (!act) return
     event.preventDefault()
     act(selected)
@@ -343,44 +352,12 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
 
     <Toast toast={toast} onDone={() => setToast(undefined)} />
 
-    {sheet?.kind === 'reply' && <ReplySheet message={sheet.thread.message} draft={sheet.draft} hasModel={hasModel} onDraft={(strong, instruction) => actions.draft(sheet.thread.message, strong, instruction)} onClose={() => setSheet(undefined)} onSend={(text, mode) => actions.reply(sheet.thread.message, text, mode).then(() => { setSheet(undefined); say(mode === 'send' ? 'sent' : 'saved to drafts'); if (mode === 'send' && archiveAfterReply) clearRest(sheet.thread) }).catch(() => undefined)} />}
     {sheet?.kind === 'snooze' && <Sheet title="snooze until" onClose={() => setSheet(undefined)}>
       <div className="options">{snoozeOptions.map((option) => <button key={option} type="button" onClick={() => { setSheet(undefined); clear(sheet.thread, 'left', (message) => actions.snooze(message, option as SnoozeOption), `snoozed until ${option}`, true) }}>{option}</button>)}</div>
     </Sheet>}
     {sheet?.kind === 'task' && <TaskSheet title={sheet.title} onClose={() => setSheet(undefined)} onSave={(title) => actions.task(sheet.thread.message, title).then(() => { setSheet(undefined); say('added to to do'); clearRest(sheet.thread) }).catch(() => undefined)} />}
     {sheet?.kind === 'rule' && <RuleSheet message={sheet.message} onClose={() => setSheet(undefined)} onSave={(input) => actions.makeRule(input).then(() => { setSheet(undefined); say('rule saved') }).catch(() => undefined)} />}
   </div>
-}
-
-function ReplySheet({ message, draft, hasModel, onDraft, onClose, onSend }: { message: Message; draft: string; hasModel: boolean; onDraft: (strong: boolean, instruction?: string) => Promise<string>; onClose: () => void; onSend: (text: string, mode: 'send' | 'draft') => Promise<void> }) {
-  const [text, setText] = useState(draft)
-  const [instruction, setInstruction] = useState('')
-  const [sending, setSending] = useState<'send' | 'draft'>()
-  const [drafting, setDrafting] = useState(false)
-  const [failure, setFailure] = useState<string>()
-  const submit = (mode: 'send' | 'draft') => { setSending(mode); void onSend(text, mode).finally(() => setSending(undefined)) }
-  const draftNow = (strong: boolean) => {
-    setDrafting(true); setFailure(undefined)
-    void onDraft(strong, instruction).then(setText).catch((error: unknown) => setFailure(error instanceof Error ? error.message.toLowerCase() : 'draft failed')).finally(() => setDrafting(false))
-  }
-  return <Sheet title={`reply to ${message.from.name}`} onClose={onClose}>
-    <div className="stack">
-      <Field label={message.subject}><textarea autoFocus value={text} onChange={(event) => setText(event.target.value)} /></Field>
-      {hasModel && <>
-        <Field label="what to say"><input value={instruction} placeholder="yes, but push it to 6" onChange={(event) => setInstruction(event.target.value)} /></Field>
-        <div className="actions">
-          <button className="secondary" type="button" disabled={drafting} onClick={() => draftNow(false)}>{drafting ? 'drafting' : text ? 'redraft' : 'draft for me'}</button>
-          <button className="plain" type="button" disabled={drafting} onClick={() => draftNow(true)}>better draft</button>
-        </div>
-      </>}
-      {failure && <p className="note is-error" role="alert">{failure}</p>}
-      <div className="actions">
-        <button className="primary" type="button" disabled={!text.trim() || Boolean(sending)} onClick={() => submit('send')}>{sending === 'send' ? 'sending' : 'send'}</button>
-        <button className="secondary" type="button" disabled={Boolean(sending)} onClick={() => submit('draft')}>{sending === 'draft' ? 'saving' : 'finish in outlook'}</button>
-        <button className="plain" type="button" onClick={onClose}>cancel</button>
-      </div>
-    </div>
-  </Sheet>
 }
 
 function TaskSheet({ title, onClose, onSave }: { title: string; onClose: () => void; onSave: (title: string) => Promise<void> }) {

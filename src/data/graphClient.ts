@@ -37,8 +37,9 @@ export class GraphClient {
 
   async request<T>(path: string, init: RequestInit = {}): Promise<T> {
     const response = await this.response(path, init)
-    if (response.status === 204) return undefined as T
-    return await response.json() as T
+    // A send or a delete is answered with no body at all, under more than one status.
+    const text = await response.text()
+    return (text ? JSON.parse(text) : undefined) as T
   }
 
   async requestText(path: string, init: RequestInit = {}): Promise<string> {

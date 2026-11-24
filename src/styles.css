@@ -231,6 +231,8 @@ kbd { display: inline-grid; place-items: center; min-width: 1.75rem; height: 1.7
   .rail { display: flex; flex-direction: column; gap: 0.15rem; padding: 1.1rem 0.75rem 1rem; border-right: 1px solid var(--border); }
   .rail button { display: flex; align-items: center; gap: 0.65rem; min-height: 2.5rem; padding: 0 0.75rem; border-radius: 9px; color: var(--muted); text-align: left; transition: background var(--quick), color var(--quick); }
   .rail button:hover { background: var(--surface-2); color: var(--text); }
+  .rail .rail-compose { margin-bottom: 0.6rem; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-weight: 600; }
+  .rail .rail-compose:hover { border-color: var(--muted); background: var(--surface); }
   .rail button.is-current { background: var(--surface-2); color: var(--text); font-weight: 600; }
   .rail button .count { margin-left: auto; }
   .rail-links { display: flex; flex-direction: column; gap: 0.15rem; margin-top: auto; }

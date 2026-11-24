@@ -29,6 +29,10 @@ An open message is shown as it was written: its own markup, links and pictures, 
 
 In dark mode every message is darkened, whatever colours it was sent with. Each one has a `light mode` switch right above it for the message that cannot be read dark, and `dark mode` to switch back. In light mode mail is shown as sent and there is no switch (`mailLook`). Mail that was sent dark is left as it is. Do not show mail on a white card in dark mode unless that switch was used.
 
+## compose
+
+All mail is written in one screen (`Compose`): new message, reply, reply all, forward. Nothing sends the user to Outlook to finish a message. Do not add a second place that writes or sends mail, and do not add a link out to Outlook for something compose can do. Closing compose keeps what was written as an Outlook draft; only `discard` throws it away.
+
 ## new mail
 
 Mail should show up about as fast as it does in Outlook. While the app is on screen it asks for new mail every few seconds (`peek`), and again the moment it comes back to the screen. What arrives is shown as soon as the rules have had their say, before any model sorts it; sorting then relabels it or takes it away. Do not hold fetched mail off screen until sorting finishes, and do not put a wait in front of the look for new mail. The quiet look changes nothing on screen when nothing came, and it stays one small request (`glance`: ids and the junk count, no bodies); full messages are fetched only once it finds something.

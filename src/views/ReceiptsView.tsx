@@ -9,6 +9,7 @@ export type ReceiptActions = {
   /** Moves archived mail tagged as a receipt into the folder. Returns how many it found. */
   fromArchive: (onProgress?: (done: number) => void) => Promise<number>
   toInbox: (message: Message) => Promise<void>
+  forward: (message: Message) => void
 }
 
 /** Receipts reach back years, so anything from another year says which. */
@@ -20,9 +21,10 @@ function dated(receivedAt: string, long = false): string {
 }
 
 /** The receipt itself. Inline under the row on a phone, in the reading pane on a wide screen. */
-function Detail({ message, pane, onInbox }: { message: Message; pane: boolean; onInbox: (message: Message) => void }) {
+function Detail({ message, pane, onInbox, onForward }: { message: Message; pane: boolean; onInbox: (message: Message) => void; onForward: (message: Message) => void }) {
   return <div className="detail">
     <div className="mail-actions">
+      <button type="button" onClick={() => onForward(message)}>forward</button>
       <button type="button" onClick={() => onInbox(message)}>move to inbox</button>
     </div>
     {pane && <h2 className="detail-subject">{message.subject}</h2>}
@@ -108,7 +110,7 @@ export function ReceiptsView({ actions }: { actions: ReceiptActions }) {
                     {message.preview && <span className="mail-summary">{message.preview}</span>}
                   </button>
                 </div>
-                {!pane && <Fold open={open}><Detail message={message} pane={false} onInbox={toInbox} /></Fold>}
+                {!pane && <Fold open={open}><Detail message={message} pane={false} onInbox={toInbox} onForward={actions.forward} /></Fold>}
               </article>
             </div>
           </li>
@@ -123,7 +125,7 @@ export function ReceiptsView({ actions }: { actions: ReceiptActions }) {
     </div>
 
     {pane && <section className="reader" aria-label="message">
-      {selected && <div className="reader-inner" key={selected.id}><Detail message={selected} pane onInbox={toInbox} /></div>}
+      {selected && <div className="reader-inner" key={selected.id}><Detail message={selected} pane onInbox={toInbox} onForward={actions.forward} /></div>}
     </section>}
   </div>
 }
