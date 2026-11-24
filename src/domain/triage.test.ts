@@ -64,6 +64,7 @@ describe('triage', () => {
     expect(summaryLine({ inbox: 4, needReply: 0, byRules: 0, autoArchived: 3, filed: 2, returned: 0, withoutModel: 3 })).toBe('4 in inbox · 1 auto-archived · 2 to receipts')
     expect(summaryLine({ inbox: 4, needReply: 0, byRules: 0, autoArchived: 2, filed: 2, returned: 0, withoutModel: 2 })).toBe('4 in inbox · 2 to receipts')
     expect(summaryLine(summarize([], { byRules: 0, autoArchived: 0, returned: 0, withoutModel: 0 }))).toBe('0 in inbox')
+    expect(summaryLine({ inbox: 4, needReply: 0, byRules: 0, autoArchived: 0, returned: 0, withoutModel: 0, fromJunk: 3 })).toBe('4 in inbox · 3 from junk')
   })
 
   it('prunes cached triage for messages that left the inbox', () => {

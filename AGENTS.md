@@ -11,6 +11,10 @@
 - When new copy is necessary and the wording is not obvious, ask the product owner what they would say or offer a few short lowercase options for them to choose from. Use their answer as the voice reference for similar copy.
 - Do not block straightforward implementation on a copy interview when an established label or existing product-owner phrasing already provides a clear answer.
 
+## one inbox
+
+There is no junk folder. Every run moves what Outlook junked into the inbox before reading it (`rescueJunk`), and that mail goes through the same rules and sorting as the rest. Blocking is done with rules. Do not add a junk view, and do not read the inbox without emptying junk first.
+
 ## committing and deploying
 
 When a task is finished, commit the files you edited by name and push to main without asking. The push deploys the site.

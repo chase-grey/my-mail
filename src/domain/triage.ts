@@ -63,6 +63,8 @@ export type RunSummary = {
   filed?: number
   /** Sender rules the sorter made this run from what it auto-archived. */
   newRules?: number
+  /** Mail brought into the inbox from Outlook's junk folder this run. */
+  fromJunk?: number
 }
 
 export function summarize(items: Triaged[], counts: Pick<RunSummary, 'byRules' | 'autoArchived' | 'returned' | 'withoutModel'>): RunSummary {
@@ -82,6 +84,7 @@ export function summaryLine(summary: RunSummary): string {
   if (filed) parts.push(`${filed} to receipts`)
   if (summary.newRules) parts.push(`${summary.newRules} new ${summary.newRules === 1 ? 'rule' : 'rules'}`)
   if (summary.returned) parts.push(`${summary.returned} back from snooze`)
+  if (summary.fromJunk) parts.push(`${summary.fromJunk} from junk`)
   return parts.join(' · ')
 }
 

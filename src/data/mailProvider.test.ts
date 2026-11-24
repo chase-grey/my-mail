@@ -37,6 +37,26 @@ describe('mail provider', () => {
     expect(new URLSearchParams(request.mock.calls.at(-2)![0].split('?')[1]).get('$filter')).toBe('receivedDateTime le 2026-11-01T09:00:00Z')
   })
 
+  it('moves everything in junk to the inbox and returns what moved', async () => {
+    const graphMessage = (id: string) => ({ id, receivedDateTime: '2026-11-02T15:00:00Z', isRead: false, webLink: 'w' })
+    const request = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path.startsWith('/me/mailFolders/junkemail/messages?')) return { value: [graphMessage('j1'), graphMessage('j2'), graphMessage('j3')] }
+      if (path === '/$batch') {
+        const { requests } = JSON.parse(init!.body as string) as { requests: { id: string; url: string; body: { destinationId: string } }[] }
+        expect(requests.every((item) => item.body.destinationId === 'inbox')).toBe(true)
+        // j2 is refused outright, so it stays in junk and is not reported as rescued.
+        return { responses: requests.map((item) => ({ id: item.id, status: item.url.includes('j2') ? 403 : 201 })) }
+      }
+      return undefined
+    })
+    const provider = new MailProvider({ request } as unknown as GraphClient, async () => {})
+    expect((await provider.rescueJunk()).map((message) => message.id)).toEqual(['j1', 'j3'])
+
+    const empty = vi.fn(async () => ({ value: [] }))
+    expect(await new MailProvider({ request: empty } as unknown as GraphClient).rescueJunk()).toEqual([])
+    expect(empty).toHaveBeenCalledTimes(1)
+  })
+
   it('moves messages with the well-known folder names and finds or creates the snoozed folder once', async () => {
     const request = vi.fn(async (path: string, init?: RequestInit) => {
       if (path.startsWith('/me/mailFolders?')) return { value: [] }

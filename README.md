@@ -45,6 +45,8 @@ The product specification, including why this is built rather than forked, lives
   never reaches the inbox or a model. No rule is made for a sender you have replied to, kept,
   flagged, snoozed, or made a task from, one with other mail still in the inbox, or one whose
   auto-made rule you deleted.
+- **junk** · there is no junk folder. Each open moves whatever Outlook junked into the inbox, where
+  rules and sorting treat it like any other mail. Block a sender with a rule.
 - **snooze** · moves the message to a `snoozed` folder and brings it back unread when the time
   comes. Snooze times sync through the OneDrive app folder, so phone and PC agree.
 

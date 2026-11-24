@@ -31,6 +31,7 @@ export const bodyLimit = 1500
 export const snoozedFolderName = 'snoozed'
 export const receiptsFolderName = 'receipts'
 export const inboxPageSize = 50
+export const junkSweepCap = 200
 export const scanPageSize = 500
 export const batchLimit = 20
 export const moveAttempts = 6
@@ -125,6 +126,18 @@ export class MailProvider {
       next = page['@odata.nextLink']
     }
     return { messages: all.slice(0, count), more: Boolean(next) || all.length > count }
+  }
+
+  /**
+   * Moves what Outlook's junk filter took into the inbox and returns what moved. A personal account cannot
+   * turn that filter off, and Outlook's rules never see junked mail, so this is the only way it reaches the inbox.
+   * More than the cap waits for the next run.
+   */
+  async rescueJunk(cap = junkSweepCap): Promise<Message[]> {
+    const { messages } = await this.page('junkemail', cap)
+    if (!messages.length) return []
+    const stuck = new Set(await this.moveMany(messages.map((message) => message.id), 'inbox'))
+    return messages.filter((message) => !stuck.has(message.id))
   }
 
   /** How many messages the inbox holds, loaded or not. */

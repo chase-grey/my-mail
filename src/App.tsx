@@ -305,16 +305,28 @@ export default function App() {
       for (const snooze of due) if (await current.mail.unsnooze(snooze.messageId)) returned++
       if (due.length) automationState = { ...automationState, snoozes: withoutSnoozes(automationState.snoozes, due.map((item) => item.messageId)) }
 
+      // There is one inbox: whatever Outlook's junk filter took comes back before the inbox is read.
+      let rescued: Message[] = []
+      try {
+        rescued = await current.mail.rescueJunk()
+      } catch (failure) {
+        setError(errorText(failure))
+      }
+
       // A refresh reads as deep as was already loaded, so older pages and their verdicts are not thrown away.
       const [page, total] = await Promise.all([
         current.mail.inbox(Math.max(inboxPageSize, messagesRef.current.length)),
         current.mail.inboxCount().catch(() => undefined),
       ])
       oldestRef.current = oldestOf(page.messages)
+      // Rescued mail is sorted this run even when it is older than the page, or the inbox read has not caught up with the move.
+      const inPage = new Set(page.messages.map((message) => message.id))
+      const batch = [...page.messages, ...rescued.filter((message) => !inPage.has(message.id))]
 
-      // Outlook has had its turn on anything that arrived while the app was closed; rules run here too for what it missed.
+      // Outlook has had its turn on anything that arrived while the app was closed; rules run here too for what it missed,
+      // and they are the only rules junked mail ever meets.
       automationState = await pushRules(current, automationState)
-      const sorted = await sortBatch(current, page.messages, triageRef.current, automationState, options.settings, now)
+      const sorted = await sortBatch(current, batch, triageRef.current, automationState, options.settings, now)
       const inbox = sorted.inbox
       const cache = pruneTriage(sorted.cache, inbox)
 
@@ -325,7 +337,7 @@ export default function App() {
       setMore(page.more)
       setKept((current) => Object.fromEntries(Object.entries(current).filter(([id]) => inbox.some((message) => message.id === id))))
       const counted = summarize(inbox.map((message) => ({ message, triage: cache[message.id] })), { byRules: sorted.byRules, autoArchived: sorted.autoArchived, returned, withoutModel: sorted.withoutModel })
-      setSummary({ ...counted, inbox: Math.max(inbox.length, (total ?? 0) - sorted.byRules - sorted.autoArchived), filed: sorted.filed, newRules: sorted.newRules })
+      setSummary({ ...counted, inbox: Math.max(inbox.length, (total ?? 0) - sorted.byRules - sorted.autoArchived), filed: sorted.filed, newRules: sorted.newRules, fromJunk: rescued.length })
     } catch (failure) {
       setError(errorText(failure))
     } finally {
