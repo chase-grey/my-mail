@@ -51,7 +51,7 @@ When a task is finished, commit the files you edited by name and push to main wi
 
 ## desktop
 
-- Any screen that lists messages (inbox, search, receipts) uses the list with a reading pane beside it from 60rem up. The row whose message is open is filled solid with the accent colour; a tint is not enough.
+- Any screen that lists messages (inbox, search, receipts) uses the list with a reading pane beside it from 60rem up. From 60rem up each conversation in the list is its own card, and the open message is a card beside them, sized to the message rather than stretched across the screen. The card whose message is open is filled solid with the accent colour and lifted; a tint is not enough. Do not go back to rows joined in one box or a reading pane flush to the edges.
 - The inbox is saved on the device and shown on open while the mailbox is checked in the background. A check never blanks or blocks the list; the status line and progress bar say it is running.
 - A new deploy reaches an open tab or installed window on its own (`src/appUpdate.ts`, the pattern in `~/.claude/patterns/app-update.md`). The app reloads onto it at a quiet moment: off screen, just reopened and not yet touched, or left alone for five minutes. It never reloads over an open sheet, a draft, or a screen that called `holdUpdates`, and it comes back to the screen it left. Until the reload happens, settings wears a dot and its button restarts onto the new build. Do not reload any other way, and do not rely on a manual refresh.
 - Check layout changes in `dev/preview.html` at 3438x1440 and 1440x900 as well as the phone. Every screen is in the preview; add new ones to it.
