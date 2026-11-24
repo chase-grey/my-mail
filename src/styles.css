@@ -122,7 +122,8 @@ a { color: var(--accent); }
 /* inbox */
 .inbox, .search, .receipts, .list, .lane { display: flex; flex-direction: column; gap: 0.75rem; }
 .lanes { display: flex; flex-direction: column; gap: 1.1rem; margin-top: 0.35rem; }
-.lane > .group-title { display: flex; align-items: center; min-height: 1.5rem; }
+.lane > .group-title { display: flex; align-items: center; gap: 0.4rem; min-height: 1.5rem; }
+.group-count { font-weight: 400; font-variant-numeric: tabular-nums; }
 .items { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
 .item { display: grid; grid-template-rows: 1fr; transition: grid-template-rows var(--move) var(--ease), opacity var(--move) var(--ease); transition-delay: calc(var(--d, 0) * 28ms); animation: rise var(--move) var(--ease) backwards; animation-delay: calc(var(--i, 0) * 22ms); }
 .item.is-leaving { grid-template-rows: 0fr; opacity: 0; pointer-events: none; }
@@ -278,13 +279,11 @@ kbd { display: inline-grid; place-items: center; min-width: 1.75rem; height: 1.7
   .reader-inner { padding-inline: 3rem; }
 }
 
-/* very wide: needs me and probably fine sit side by side */
+/* very wide */
 @media (min-width: 150rem) {
   .main:has(> :is(.is-inbox, .is-search, .is-receipts)) { --list: 38rem; }
-  .main:has(.lane + .lane) { --list: clamp(62rem, 42%, 76rem); }
   .reader-inner { max-width: 72rem; padding-inline: 4rem; }
   .reader .mail-body { font-size: 1.05rem; }
-  .lanes { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); align-items: start; gap: 1.25rem; }
 }
 
 @media (hover: none) {

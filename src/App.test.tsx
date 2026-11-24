@@ -25,20 +25,20 @@ it('shows triaged mail with the suggested action highlighted and kept mail folde
     { message: message('m3', 'kept@example.com', 'Keep me') },
   ]
   const html = renderToStaticMarkup(<InboxView items={items} kept={{ m3: 'now' }} summary={{ inbox: 3, needReply: 1, byRules: 2, autoArchived: 0, returned: 0, withoutModel: 1 }} connection="connected" hasModel suggestions={[{ from: 'news@daily.example.com', action: 'archive', count: 3 }]} snoozes={[]} actions={actions} onConnect={noop} onDismissSuggestion={() => {}} />)
-  expect(html).toContain('3 in inbox · 1 need a reply · 2 by rules')
+  expect(html).not.toContain('in inbox ·')
   expect(html).toContain('mom asks about sunday dinner')
   expect(html).toContain('mail-summary is-loud')
   expect(html).toMatch(/class="quick is-suggested"[^>]*>reply</)
   expect(html).toContain('archive everything from news@daily.example.com')
   expect(html).toContain('1 kept in inbox')
   expect(html.indexOf('Dinner Sunday?')).toBeLessThan(html.indexOf('Daily digest'))
-  expect(html).toContain('>needs me<')
-  expect(html).toContain('>probably fine<')
+  expect(html).toContain('needs me <span class="group-count">1</span>')
+  expect(html).not.toContain('probably fine')
   expect(html).toContain('newsletter · ')
   // The body and the rest of the actions stay folded away until a row is opened.
   expect(html).not.toContain('90% sure')
   expect(html).not.toContain('class="mail-body"')
-  expect(html).toContain('archive all 1')
+  expect(html).not.toContain('archive all')
 })
 
 it('offers one search field, with find or ask only when there is a model', () => {

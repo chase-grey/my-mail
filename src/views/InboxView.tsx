@@ -3,7 +3,7 @@ import type { MessageActions } from '../App'
 import { ruleActionLabel, senderDomain, type RuleSuggestion } from '../domain/rules'
 import { snoozeOptions, type SnoozeOption } from '../domain/snooze'
 import { inboxThreads, type InboxThread } from '../domain/threads'
-import { categoryLabel, summaryLine, type RunSummary, type Triaged } from '../domain/triage'
+import { categoryLabel, type RunSummary, type Triaged } from '../domain/triage'
 import type { Message, RuleAction, Snooze } from '../domain/types'
 import { Card, Field, Fold, Menu, Segmented, Sheet, Toast, useMediaQuery, usePresence, type ToastState } from '../ui'
 import type { ConnectionStatus } from './SettingsView'
@@ -254,14 +254,6 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
     void each(rest, actions.archive).catch(() => undefined).finally(() => stay([item.key]))
   }
 
-  function archiveAll(list: InboxThread[]): void {
-    setLocalError(undefined)
-    setLeaving((current) => ({ ...current, ...Object.fromEntries(list.map((item, index) => [item.key, { to: 'right', delay: Math.min(index, 14) }])) }))
-    void actions.archiveAll(list.flatMap((item) => item.all))
-      .then(() => say(`archived ${list.length}`))
-      .finally(() => stay(list.map(keyOf)))
-  }
-
   const on: Handlers = {
     open: (item) => setOpenId(pane || selectedId !== item.key ? item.key : undefined),
     archive: (item) => clear(item, 'right', actions.archive, actions.isReceipt(item.message) ? 'moved to receipts' : 'archived', true),
@@ -313,7 +305,7 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
 
   return <div className="inbox">
     <div className="list">
-      <p className={`status${busy ? ' is-busy' : ''}`} aria-live="polite">{busy ?? (summary ? summaryLine(summary) : '')}</p>
+      <p className={`status${busy ? ' is-busy' : ''}`} aria-live="polite">{busy ?? ''}</p>
       {shownError && <p className="note is-error" role="alert">{shownError}</p>}
 
       {suggestions.length > 0 && <details className="card group">
@@ -327,14 +319,10 @@ export function InboxView({ items, kept, summary, busy, error, connection, hasMo
 
       {(needsRows.length > 0 || fineRows.length > 0) && <div className="lanes">
         {needsRows.length > 0 && <section className="lane">
-          {groups.needsMe.length > 0 && groups.probablyFine.length > 0 && <h2 className="group-title">needs me</h2>}
+          {groups.needsMe.length > 0 && <h2 className="group-title">needs me <span className="group-count">{groups.needsMe.length}</span></h2>}
           {rows(needsRows, false)}
         </section>}
         {fineRows.length > 0 && <section className="lane">
-          {groups.probablyFine.length > 0 && <div className="group-head">
-            <h2 className="group-title">probably fine</h2>
-            <button className="link" type="button" onClick={() => archiveAll(groups.probablyFine.filter((item) => !leaving[item.key]))}>archive all {groups.probablyFine.length}</button>
-          </div>}
           {rows(fineRows, true)}
         </section>}
       </div>}

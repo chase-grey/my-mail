@@ -89,19 +89,6 @@ export function summarize(items: Triaged[], counts: Pick<RunSummary, 'byRules' |
   }
 }
 
-export function summaryLine(summary: RunSummary): string {
-  const parts = [`${summary.inbox} in inbox`]
-  if (summary.needReply) parts.push(`${summary.needReply} need a reply`)
-  if (summary.byRules) parts.push(`${summary.byRules} by rules`)
-  const filed = summary.filed ?? 0
-  if (summary.autoArchived > filed) parts.push(`${summary.autoArchived - filed} auto-archived`)
-  if (filed) parts.push(`${filed} to receipts`)
-  if (summary.newRules) parts.push(`${summary.newRules} new ${summary.newRules === 1 ? 'rule' : 'rules'}`)
-  if (summary.returned) parts.push(`${summary.returned} back from snooze`)
-  if (summary.fromJunk) parts.push(`${summary.fromJunk} from junk`)
-  return parts.join(' · ')
-}
-
 export const categoryLabel: Record<Category, string> = {
   reply: 'needs a reply',
   action: 'needs something',

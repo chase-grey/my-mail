@@ -15,6 +15,10 @@
 
 There is no junk folder. Every run moves what Outlook junked into the inbox before reading it (`rescueJunk`), and that mail goes through the same rules and sorting as the rest. Blocking is done with rules. Do not add a junk view, and do not read the inbox without emptying junk first.
 
+## inbox layout
+
+The inbox is one list with one extra thing on top: a `needs me` section, its count beside the heading. All other mail follows below it with no heading and no category name. There is no `probably fine` group, no side by side columns, and no summary line of counts above the list; the line under search only says a check is running.
+
 ## threads
 
 The inbox shows one row per conversation: its newest message, with a count when more of it is in the inbox. The row sits with the mail that needs me when any message in it does, not only the newest. What clears the row (archive, delete, snooze, keep, to do, a sent reply that archives) clears every inbox message in the conversation, and undo brings them all back. A message opened anywhere (inbox, search, receipts) shows its whole conversation from every folder, sent mail included, newest first. Do not go back to one row per message, and do not add a place that opens a message without its conversation.
@@ -31,7 +35,7 @@ Mail should show up about as fast as it does in Outlook. While the app is on scr
 
 ## model spend
 
-Mail older than thirty days is never sent to Jev or Claude (`isOld`). It gets a free verdict and waits under probably fine; whatever it once asked for, the moment has passed. A verdict a model was paid for is kept: a failed call later in the same run does not throw it away, and what cleanup learns about a sender is remembered. Do not add a model call that runs on every message, on every scan, or on every device without a cheaper source in front of it.
+Mail older than thirty days is never sent to Jev or Claude (`isOld`). It gets a free verdict and waits below needs me with the rest of the inbox; whatever it once asked for, the moment has passed. A verdict a model was paid for is kept: a failed call later in the same run does not throw it away, and what cleanup learns about a sender is remembered. Do not add a model call that runs on every message, on every scan, or on every device without a cheaper source in front of it.
 
 A key on its own starts nothing. Jev and Claude sort mail by themselves only once `sort mail with ai` is on (`aiSorts`): I turn it on, or it turns itself on the first time the inbox is down to 200 or fewer, and a no from me is never overridden. Until then a key answers only what is tapped (a draft, a search). A backlog is cleared first, with rules and clean up, which need no model. Anything new that runs a model without a tap goes behind the same check.
 
