@@ -3,7 +3,8 @@ import { describeOutlookRule, type OutlookRuleBody } from '../domain/outlookRule
 import { readable, trimForModel } from '../domain/text'
 import type { MailContent } from '../domain/mailHtml'
 import type { Header } from '../domain/unsubscribe'
-import { categories, type Message, type OutlookRule } from '../domain/types'
+import { readShared, writeShared } from '../domain/triage'
+import { categories, type Message, type OutlookRule, type SharedVerdict } from '../domain/types'
 import { GraphError, type GraphClient } from './graphClient'
 
 type GraphRecipient = { emailAddress: { name?: string; address?: string } }
@@ -21,6 +22,7 @@ type GraphMessage = {
   hasAttachments?: boolean
   categories?: string[]
   webLink: string
+  singleValueExtendedProperties?: { id: string; value: string }[]
   isDraft?: boolean
   parentFolderId?: string
 }
@@ -30,6 +32,9 @@ type BatchResponse = { responses: { id: string; status: number; headers?: Record
 
 export const messageSelect = 'id,conversationId,subject,from,receivedDateTime,bodyPreview,body,isRead,flag,importance,hasAttachments,categories,webLink'
 export const scanSelect = 'id,subject,from,receivedDateTime,bodyPreview,isRead,flag'
+/** Where the whole verdict is kept on a message: a named property of ours that Outlook stores and never shows. */
+export const verdictProperty = 'String {6f1d3c2a-8b7e-4c59-9a41-2e5d0c7b9f13} Name my-mail.verdict'
+export const verdictExpand = `singleValueExtendedProperties($filter=id eq '${verdictProperty}')`
 export const bodyLimit = 1500
 export const snoozedFolderName = 'snoozed'
 export const receiptsFolderName = 'receipts'
@@ -76,6 +81,7 @@ export function fromGraph(message: GraphMessage): Message {
     importance: message.importance ?? 'normal',
     hasAttachments: Boolean(message.hasAttachments),
     categories: message.categories ?? [],
+    verdict: readShared(message.singleValueExtendedProperties?.[0]?.value),
     webLink: message.webLink,
   }
 }
@@ -101,6 +107,8 @@ export class MailProvider {
   private archiveId?: string
   private deletedId?: Promise<string | undefined>
   private masterCategoriesReady = false
+  /** Off once Graph refuses the verdict property, so mail keeps loading and only the category is shared. */
+  private verdictsOnMessages = true
   private readonly contents = new Map<string, Promise<MailContent>>()
 
   constructor(
@@ -152,8 +160,25 @@ export class MailProvider {
     const query = new URLSearchParams({ '$top': String(Math.min(count, inboxPageSize)), '$orderby': 'receivedDateTime desc', '$select': messageSelect })
     if (before) query.set('$filter', `receivedDateTime le ${before}`)
     else if (since) query.set('$filter', `receivedDateTime ge ${since}`)
+    const path = `/me/mailFolders/${encodeURIComponent(folder)}/messages`
+    if (this.verdictsOnMessages) {
+      const withVerdicts = new URLSearchParams(query)
+      withVerdicts.set('$expand', verdictExpand)
+      try {
+        return await this.pages(`${path}?${withVerdicts}`, count)
+      } catch (error) {
+        // A mailbox that will not hand the property back still gets its mail; the category alone is shared from here on.
+        if (!(error instanceof GraphError && (error.status === 400 || error.status === 501))) throw error
+        this.verdictsOnMessages = false
+        console.warn('my-mail: verdicts are not shared on messages', error)
+      }
+    }
+    return this.pages(`${path}?${query}`, count)
+  }
+
+  private async pages(first: string, count: number): Promise<{ messages: Message[]; more: boolean }> {
     const all: Message[] = []
-    let next: string | undefined = `/me/mailFolders/${encodeURIComponent(folder)}/messages?${query}`
+    let next: string | undefined = first
     while (next && all.length < count) {
       const page: { value: GraphMessage[]; '@odata.nextLink'?: string } = await this.graph.request(next)
       all.push(...page.value.map(fromGraph))
@@ -284,11 +309,27 @@ export class MailProvider {
     await this.graph.request(`/me/messages/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ flag: { flagStatus: flagged ? 'flagged' : 'notFlagged' } }) })
   }
 
-  /** Write the verdict onto the message. Other categories on it are kept; an older verdict is replaced. */
-  async setVerdict(id: string, existing: string[], category: string): Promise<void> {
+  /**
+   * Write the verdict onto the message: the category, which Outlook shows and its rules can use, and the whole verdict
+   * beside it for this app on other devices. Other categories on the message are kept; an older verdict is replaced.
+   */
+  async setVerdict(id: string, existing: string[], verdict: SharedVerdict): Promise<void> {
     await this.ensureMasterCategories()
     const kept = existing.filter((item) => !(categories as readonly string[]).includes(item))
-    await this.graph.request(`/me/messages/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ categories: [...kept, category] }) })
+    const path = `/me/messages/${encodeURIComponent(id)}`
+    const body = { categories: [...kept, verdict.category] }
+    if (this.verdictsOnMessages) {
+      try {
+        await this.graph.request(path, { method: 'PATCH', body: JSON.stringify({ ...body, singleValueExtendedProperties: [{ id: verdictProperty, value: writeShared(verdict) }] }) })
+        return
+      } catch (error) {
+        if (!(error instanceof GraphError && (error.status === 400 || error.status === 501))) throw error
+        this.verdictsOnMessages = false
+        console.warn('my-mail: verdicts are not shared on messages', error)
+      }
+    }
+    if (existing.includes(verdict.category)) return
+    await this.graph.request(path, { method: 'PATCH', body: JSON.stringify(body) })
   }
 
   /** Outlook shows categories it knows about with a color; unknown ones still stick, so a failure here is not fatal. */

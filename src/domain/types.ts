@@ -13,7 +13,19 @@ export type Message = {
   hasAttachments: boolean
   /** Outlook categories on the message. The model's verdict is written here so every device shares it. */
   categories: string[]
+  /** The whole verdict, when a device has written one onto the message. Every device reads it with the mail, so none pays to sort or read it again. */
+  verdict?: SharedVerdict
   webLink: string
+}
+
+/** The part of a verdict that travels on the message itself. Drafts stay on the device that asked for them. */
+export type SharedVerdict = {
+  category: Category
+  summary: string
+  needsReply: boolean
+  suggested: Action
+  task?: string
+  confidence: number
 }
 
 export const categories = ['reply', 'action', 'waiting', 'fyi', 'receipt', 'notification', 'newsletter', 'promo', 'spam'] as const

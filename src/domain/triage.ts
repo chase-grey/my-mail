@@ -1,4 +1,4 @@
-import { categories, type Category, type Message, type Triage } from './types'
+import { actions, categories, type Action, type Category, type Message, type SharedVerdict, type Triage } from './types'
 
 const order: Record<Category, number> = Object.fromEntries(categories.map((category, index) => [category, index])) as Record<Category, number>
 
@@ -116,8 +116,49 @@ export const categoryLabel: Record<Category, string> = {
 
 const isCategory = (value: string): value is Category => (categories as readonly string[]).includes(value)
 
-/** A verdict Outlook already carries as a category on the message, written by this app on another device. */
+const isAction = (value: unknown): value is Action => typeof value === 'string' && (actions as readonly string[]).includes(value)
+
+/** What goes onto the message for the other devices. */
+export function sharedOf(triage: Triage): SharedVerdict {
+  return { category: triage.category, summary: triage.summary, needsReply: triage.needsReply, suggested: triage.suggested, task: triage.task, confidence: triage.confidence }
+}
+
+/** The text written onto the message. Short keys: it rides along with every read of the mail. */
+export function writeShared(verdict: SharedVerdict): string {
+  return JSON.stringify({ c: verdict.category, s: verdict.summary || undefined, r: verdict.needsReply || undefined, a: verdict.suggested, t: verdict.task || undefined, p: Math.round(verdict.confidence * 100) / 100 })
+}
+
+/** A verdict read back off a message. Anything that is not one of ours is ignored. */
+export function readShared(text: unknown): SharedVerdict | undefined {
+  if (typeof text !== 'string' || !text) return undefined
+  try {
+    const raw = JSON.parse(text) as { c?: unknown; s?: unknown; r?: unknown; a?: unknown; t?: unknown; p?: unknown }
+    if (typeof raw.c !== 'string' || !isCategory(raw.c)) return undefined
+    const needsReply = raw.r === true || raw.c === 'reply'
+    return {
+      category: raw.c,
+      summary: typeof raw.s === 'string' ? raw.s : '',
+      needsReply,
+      suggested: isAction(raw.a) ? raw.a : needsReply ? 'reply' : 'keep',
+      task: typeof raw.t === 'string' && raw.t ? raw.t : undefined,
+      confidence: typeof raw.p === 'number' && Number.isFinite(raw.p) ? Math.min(1, Math.max(0, raw.p)) : 1,
+    }
+  } catch {
+    return undefined
+  }
+}
+
+/** Whether a verdict still has to be written onto its message: it says something the message does not already carry. */
+export function worthSharing(message: Message, triage: Triage): boolean {
+  if (triage.source === 'age') return false
+  if (message.verdict) return writeShared(message.verdict) !== writeShared(sharedOf(triage))
+  // Read off the category alone, with nothing added since: the message already says all of it.
+  return !(triage.source === 'outlook' && !triage.summary)
+}
+
+/** A verdict the message already carries, written by this app on another device: the whole of it, or at least its category. */
 export function outlookTriage(message: Message, triagedAt: string): Triage | undefined {
+  if (message.verdict) return { messageId: message.id, ...message.verdict, source: 'outlook', triagedAt }
   const category = message.categories.find(isCategory)
   if (!category) return undefined
   const needsReply = category === 'reply'

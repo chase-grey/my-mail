@@ -16,7 +16,7 @@ export function SettingsView({ settings, connection, accountName, busy, error, o
 }) {
   const set = <K extends keyof Settings>(key: K) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     onSettings((current) => ({ ...current, [key]: event.target.value }))
-  const toggle = (key: 'autoArchive' | 'archiveAfterReply' | 'writeCategories' | 'fileReceipts') => (value: boolean) => onSettings((current) => ({ ...current, [key]: value }))
+  const toggle = (key: 'autoArchive' | 'archiveAfterReply' | 'writeCategories' | 'fileReceipts' | 'aiSorting') => (value: boolean) => onSettings((current) => ({ ...current, [key]: value }))
 
   const update = useAppUpdate()
 
@@ -36,6 +36,7 @@ export function SettingsView({ settings, connection, accountName, busy, error, o
           <Field label="reading"><select value={settings.anthropicModel} onChange={set('anthropicModel')}>{modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}</select></Field>
           <Field label="better drafts"><select value={settings.strongModel} onChange={set('strongModel')}>{modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}</select></Field>
         </div>
+        <Switch label="sort mail with ai" checked={settings.aiSorting === true} onChange={toggle('aiSorting')} />
         <Field label="about me, for replies"><textarea value={settings.aboutMe} placeholder="who you are, how you sign off, what you usually say yes and no to" onChange={set('aboutMe')} /></Field>
       </div>
     </Card>

@@ -338,8 +338,9 @@ sender.
 ### settings
 
 - microsoft: connected account, `disconnect`.
-- ai: Anthropic key, Jev key, reading model, better-drafts model, about me (a few lines for
-  reply voice). Later: `use my sent mail as voice samples`.
+- ai: Anthropic key, Jev key, `sort mail with ai`, reading model, better-drafts model, about me (a
+  few lines for reply voice). Sorting is off when a key is first added. It turns itself on the first
+  time the inbox holds 200 or fewer, or when I turn it on; turned off by me, it stays off. Later: `use my sent mail as voice samples`.
 - mail: write categories to outlook, auto-archive, move receipts to their own folder, archive
   after reply.
 - reading: load remote images for people only / always / never; signature.
@@ -466,9 +467,15 @@ Rules the budget follows:
   then capped at 1,500 characters.
 - Messages are numbered 1 to 12 in a batch; immutable ids never cross the wire to a model.
 - Reading runs at `effort: low`. Haiku 5.5 thinks by default and a category does not need it.
-- A verdict is written once, as a category on the message, so a second device pays nothing to sort.
-  Sure verdicts are written while Claude reads, not after. The summary is not shared yet, so a second
-  device still pays Claude to read what needs me.
+- A verdict is written once, onto the message, so a second device pays nothing to sort or to read:
+  the category as an Outlook category, and the whole verdict (summary, needs reply, suggestion, task,
+  confidence) in a named extended property read back with the mail. Sure verdicts are written while
+  Claude reads, not after, and again when the summary lands. A mailbox that refuses the property falls
+  back to the category alone.
+- Only the device in use sorts new mail as it lands. One that is on screen but not in use shows the
+  mail, waits twenty seconds, reads it again, and sorts only what still has no verdict.
+- No model runs on its own until sorting is on. That covers Jev and Claude in the inbox and Jev in
+  clean up. Drafts and search run on a tap either way.
 - Mail older than thirty days is never sent to Jev or Claude. It gets an `fyi` verdict from its age,
   sits under probably fine, is never auto-archived, and is not written to Outlook as a category.
 - A failed Claude call keeps Jev's verdicts and the batches already read.

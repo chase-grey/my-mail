@@ -12,18 +12,18 @@ import { MailProvider, inboxPageSize, mailDefaultHeaders } from './data/mailProv
 import { MailSearch } from './data/mailSearch'
 import { MicrosoftAuth, configuredClientId } from './data/microsoftAuth'
 import { TodoProvider } from './data/todoProvider'
-import { arrivals, newestOf, withArrivals } from './domain/arrivals'
+import { arrivals, dueHeld, newestOf, withArrivals } from './domain/arrivals'
 import { groupBySender, keepSenderKinds, sendersToAsk, staleIds, type ScanMessage, type SenderGroup, type SenderKinds } from './domain/cleanup'
 import { historyTriage, noiseSenders, senderHistoryLine } from './domain/history'
 import { compileRule, planRuleSync } from './domain/outlookRules'
 import { applyRules, autoRuleSenders, newRule, recordHits, rememberDecision, retiredSenders, suggestRules, type RuleSuggestion } from './domain/rules'
 import { dueSnoozes, snoozeRecord, snoozeUntil, withoutSnoozes, type SnoozeOption } from './domain/snooze'
-import { ageTriage, autoArchivable, needsReading, outlookTriage, pruneTriage, rankTriaged, summarize, unsureBelow, type RunSummary, type Triaged } from './domain/triage'
+import { ageTriage, autoArchivable, needsReading, outlookTriage, pruneTriage, rankTriaged, sharedOf, summarize, unsureBelow, worthSharing, writeShared, type RunSummary, type Triaged } from './domain/triage'
 import { emptyAutomation, type Action, type Automation, type Message, type OutlookRule, type Rule, type RuleAction, type Triage } from './domain/types'
 import { inboxThreads } from './domain/threads'
 import { parseUnsubscribe, unsubscribeMethod } from './domain/unsubscribe'
 import { useInstallPrompt } from './installPrompt'
-import { loadSettings, saveSettings, type Settings } from './settings'
+import { aiSorts, aiStartsItself, loadSettings, saveSettings, type Settings } from './settings'
 import { CleanupView, type CleanupActions, type CleanupState } from './views/CleanupView'
 import { InboxView } from './views/InboxView'
 import { BodySource } from './views/MailBody'
@@ -44,7 +44,8 @@ const savedInboxSize = 200
 const staleDays = 30
 
 type Services = { auth: MicrosoftAuth; mail: MailProvider; search: MailSearch; todo: TodoProvider; store: AutomationStore }
-type Sorted = { inbox: Message[]; cache: Record<string, Triage>; byRules: number; autoArchived: number; filed: number; newRules: number; withoutModel: number }
+/** `waiting` is mail that stayed and still wants a model, but was not allowed one this time. */
+type Sorted = { inbox: Message[]; cache: Record<string, Triage>; byRules: number; autoArchived: number; filed: number; newRules: number; withoutModel: number; waiting: string[] }
 
 /** The earliest received time in a page, which is where the next page starts. */
 function oldestOf(messages: Message[]): string | undefined {
@@ -168,6 +169,8 @@ export default function App() {
   /** What left the inbox, and what came back, while a check was reading the mailbox. The check's answer predates both. */
   const leftRef = useRef(new Set<string>())
   const backRef = useRef(new Map<string, Message>())
+  /** Mail shown but left unsorted because this device was not the one in use, by when it was first seen. */
+  const heldRef = useRef(new Map<string, number>())
 
   useEffect(() => saveSettings(settings), [settings])
   useEffect(() => writeJson(triageKey, triage), [triage])
@@ -197,8 +200,11 @@ export default function App() {
     }
   }, [])
 
-  /** Rules, verdicts, reading, categories, and auto-archive for one batch of fetched mail. Used for the first load and for every older page. */
-  const sortBatch = useCallback(async (current: Services, batch: Message[], startCache: Record<string, Triage>, startAutomation: Automation, settings: Settings, now: string, onShow?: (inbox: Message[]) => void): Promise<Sorted> => {
+  /**
+   * Rules, verdicts, reading, categories, and auto-archive for one batch of fetched mail. Used for the first load and for every older page.
+   * `spend` says which messages may go to Jev or Claude; the rest get only what costs nothing.
+   */
+  const sortBatch = useCallback(async (current: Services, batch: Message[], startCache: Record<string, Triage>, startAutomation: Automation, settings: Settings, now: string, spend: (message: Message) => boolean, onShow?: (inbox: Message[]) => void): Promise<Sorted> => {
     let inbox = batch
     let automationState = startAutomation
     const hits = applyRules(inbox, automationState.rules)
@@ -224,21 +230,22 @@ export default function App() {
     // Verdicts, cheapest source first: this device's cache, the category Outlook already carries, the sender's history,
     // the message's age, then Jev. Mail too old to need anything never reaches a model.
     let cache = { ...startCache }
-    const before = new Set(Object.keys(cache))
+    /** Verdicts this batch made or changed; only those are written back to the mailbox. */
+    const touched = new Set<string>()
     let withoutModel = 0
     const noise = noiseSenders(automationState.decisions)
     for (const message of inbox) {
       if (cache[message.id]) continue
       const verdict = outlookTriage(message, now) ?? historyTriage(message, noise, now) ?? ageTriage(message, now)
-      if (verdict) { cache[message.id] = verdict; withoutModel++ }
+      if (verdict) { cache[message.id] = verdict; touched.add(message.id); withoutModel++ }
     }
     const history = (message: Message) => senderHistoryLine(automationState.decisions, message.from.address)
-    const unsorted = inbox.filter((message) => !cache[message.id])
+    const unsorted = inbox.filter((message) => !cache[message.id] && spend(message))
     if (settings.jevApiKey && unsorted.length && !jevUnreachable) {
       setBusy(`sorting ${unsorted.length} new ${unsorted.length === 1 ? 'message' : 'messages'}`)
       try {
         const results = await classifyWithJev(new JevClient(settings.jevApiKey), unsorted, history)
-        for (const result of results) cache[result.messageId] = result
+        for (const result of results) { cache[result.messageId] = result; touched.add(result.messageId) }
         withoutModel += results.length
       } catch (failure) {
         if (isNetworkFailure(failure)) jevUnreachable = true
@@ -246,24 +253,27 @@ export default function App() {
       }
     }
 
-    // New verdicts go onto the message as a category so the other device, and Outlook, can see them. The sure ones go
-    // while Claude reads, so a second device looking at the same mail finds them sooner and a failed read does not lose them.
-    const shared = new Set<string>()
+    // New verdicts go onto the message, whole, so the other device reads them with the mail and pays nothing, and as a category
+    // so Outlook can see them. The sure ones go while Claude reads, so a second device looking at the same mail finds them
+    // sooner and a failed read does not lose them; what Claude adds is written when it lands.
+    const shared = new Map<string, string>()
     const share = async (sureOnly: boolean) => {
       if (!settings.writeCategories) return
       for (const message of inbox) {
         const verdict = cache[message.id]
-        if (!verdict || before.has(message.id) || shared.has(message.id) || verdict.source === 'outlook' || verdict.source === 'age' || message.categories.includes(verdict.category)) continue
+        if (!verdict || !touched.has(message.id) || !worthSharing(message, verdict)) continue
         if (sureOnly && verdict.confidence < unsureBelow) continue
-        shared.add(message.id)
-        try { await current.mail.setVerdict(message.id, message.categories, verdict.category) } catch { /* a missing scope only costs the shared category */ }
+        const text = writeShared(sharedOf(verdict))
+        if (shared.get(message.id) === text) continue
+        shared.set(message.id, text)
+        try { await current.mail.setVerdict(message.id, message.categories, sharedOf(verdict)) } catch { /* a missing scope only costs the shared verdict */ }
       }
     }
     const sharing = share(true)
 
     // The language model reads only what needs me, or what nothing else could settle.
     if (settings.anthropicApiKey) {
-      const toRead = inbox.filter((message) => needsReading(message, cache[message.id], now))
+      const toRead = inbox.filter((message) => spend(message) && needsReading(message, cache[message.id], now))
       if (toRead.length) {
         setBusy(`reading ${toRead.length} ${toRead.length === 1 ? 'message' : 'messages'}`)
         const items: ReadItem[] = toRead.map((message) => {
@@ -276,6 +286,7 @@ export default function App() {
             for (const result of results) {
               const prior = cache[result.messageId]
               cache[result.messageId] = prior && prior.confidence >= unsureBelow ? { ...result, source: prior.source, confidence: prior.confidence } : result
+              touched.add(result.messageId)
             }
           })
         } catch (failure) {
@@ -322,7 +333,10 @@ export default function App() {
       }
     }
 
-    return { inbox, cache, byRules: removed.size, autoArchived, filed, newRules, withoutModel }
+    const canSort = Boolean(settings.anthropicApiKey) || (Boolean(settings.jevApiKey) && !jevUnreachable)
+    const wantsModel = (message: Message) => cache[message.id] ? Boolean(settings.anthropicApiKey) && needsReading(message, cache[message.id], now) : canSort
+    const waiting = inbox.filter((message) => !spend(message) && wantsModel(message)).map((message) => message.id)
+    return { inbox, cache, byRules: removed.size, autoArchived, filed, newRules, withoutModel, waiting }
   }, [persistAutomation, pushRules])
 
   const run = useCallback(async (current: Services, options: { settings: Settings }) => {
@@ -332,6 +346,7 @@ export default function App() {
     lastRunRef.current = Date.now()
     leftRef.current.clear()
     backRef.current.clear()
+    heldRef.current.clear()
     try {
       // The other device may have added rules or snoozes since this one last looked. Working from an old copy
       // would take its rules back out of Outlook, so the shared file is read again before anything is synced.
@@ -376,7 +391,13 @@ export default function App() {
         const ids = new Set(read.map((message) => message.id))
         return [...read.filter((message) => !leftRef.current.has(message.id)), ...[...backRef.current.values()].filter((message) => !ids.has(message.id))]
       }
-      const sorted = await sortBatch(current, batch, triageRef.current, automationState, options.settings, now, (read) => {
+      // A key on its own starts nothing. Sorting begins when I turn it on, or by itself the first time the inbox is small
+      // enough to be worth sorting; a backlog is cleared first.
+      const starts = aiStartsItself(options.settings, total)
+      const settings = starts ? { ...options.settings, aiSorting: true } : options.settings
+      if (starts) setSettings((held) => ({ ...held, aiSorting: true }))
+      const sorting = aiSorts(settings)
+      const sorted = await sortBatch(current, batch, triageRef.current, automationState, settings, now, () => sorting, (read) => {
         messagesRef.current = settle(read)
         setMessages(messagesRef.current)
       })
@@ -411,16 +432,31 @@ export default function App() {
     try {
       let rescued: Message[] = []
       let found: Message[] = []
+      // Only the device in use pays to sort new mail the moment it lands. One nobody is using shows it and waits,
+      // then reads it again: by then the other device has usually written its verdict onto the message.
+      const inUse = document.hasFocus()
+      const onScreen = new Set(messagesRef.current.map((message) => message.id))
+      for (const id of heldRef.current.keys()) if (!onScreen.has(id)) heldRef.current.delete(id)
+      const due = new Set(dueHeld(heldRef.current, Date.now(), inUse))
+      let gone: string[] = []
       try {
         // One inbox: junk is emptied before the inbox is read, here as in the full check.
         // The look itself is ids and a count. Mail is read in full only when there is something to read.
         const since = newestSeenRef.current
         const glance = await current.mail.glance(since)
-        const held = new Set(messagesRef.current.map((message) => message.id))
-        const news = glance.ids.some((id) => !held.has(id) && !leftRef.current.has(id))
-        if (!glance.junk && !news) return
+        const news = glance.ids.some((id) => !onScreen.has(id) && !leftRef.current.has(id))
+        if (!glance.junk && !news && !due.size) return
         if (glance.junk) rescued = await current.mail.rescueJunk()
-        if (news) found = (since ? await current.mail.inboxSince(since) : await current.mail.inbox()).messages
+        if (due.size) {
+          const oldestDue = oldestOf(messagesRef.current.filter((message) => due.has(message.id)))
+          const from = since && oldestDue ? (oldestDue < since ? oldestDue : since) : undefined
+          const page = from ? await current.mail.inboxSince(from) : await current.mail.inbox()
+          found = page.messages
+          // Held mail the mailbox no longer lists was put away on the other device.
+          if (!page.more) gone = [...due].filter((id) => !found.some((message) => message.id === id))
+        } else if (news) {
+          found = (since ? await current.mail.inboxSince(since) : await current.mail.inbox()).messages
+        }
       } catch {
         // A look that fails says nothing; the next one is seconds away, and a full check reports what is wrong.
         return
@@ -428,7 +464,15 @@ export default function App() {
       // A full check that started in the meantime reads these itself.
       if (lastRunRef.current !== lastRun || busyRef.current) return
       newestSeenRef.current = newestOf(found, newestSeenRef.current)
-      const fresh = arrivals([...found, ...rescued], messagesRef.current, leftRef.current)
+      for (const id of due) heldRef.current.delete(id)
+      if (gone.length) {
+        const away = new Set(gone)
+        const here = messagesRef.current.filter((message) => away.has(message.id))
+        messagesRef.current = messagesRef.current.filter((message) => !away.has(message.id))
+        setMessages(messagesRef.current)
+        setSummary((summary) => summary ? { ...summary, inbox: summary.inbox - here.length } : summary)
+      }
+      const fresh = arrivals([...found, ...rescued], messagesRef.current.filter((message) => !due.has(message.id)), leftRef.current)
       if (!fresh.length) return
 
       busyRef.current = 'checking mail'
@@ -440,16 +484,20 @@ export default function App() {
         setMessages(messagesRef.current)
       }
       try {
-        const sorted = await sortBatch(current, fresh, triageRef.current, automationRef.current, options.settings, new Date().toISOString(), show)
+        const sorting = aiSorts(options.settings)
+        const sorted = await sortBatch(current, fresh, triageRef.current, automationRef.current, options.settings, new Date().toISOString(), (message) => sorting && (inUse || due.has(message.id)), show)
         show(sorted.inbox)
+        if (sorting) for (const id of sorted.waiting) heldRef.current.set(id, Date.now())
         const stayed = sorted.inbox.filter((message) => !leftRef.current.has(message.id))
+        const stayedIds = new Set(stayed.map((message) => message.id))
         const cache = { ...triageRef.current }
         for (const message of stayed) if (sorted.cache[message.id]) cache[message.id] = sorted.cache[message.id]
         triageRef.current = cache
         setTriage(cache)
         setSummary((summary) => summary ? {
           ...summary,
-          inbox: summary.inbox + stayed.length,
+          // Held mail was counted when it first showed; only its verdict is new.
+          inbox: summary.inbox + stayed.filter((message) => !due.has(message.id)).length - fresh.filter((message) => due.has(message.id) && !stayedIds.has(message.id)).length,
           needReply: summary.needReply + stayed.filter((message) => cache[message.id]?.needsReply).length,
           byRules: summary.byRules + sorted.byRules,
           autoArchived: summary.autoArchived + sorted.autoArchived,
@@ -478,7 +526,8 @@ export default function App() {
       const page = await current.mail.inbox(inboxPageSize, before)
       const have = new Set(messagesRef.current.map((message) => message.id))
       const fresh = page.messages.filter((message) => !have.has(message.id))
-      const sorted = await sortBatch(current, fresh, triageRef.current, automationRef.current, options.settings, new Date().toISOString())
+      const sorting = aiSorts(options.settings)
+      const sorted = await sortBatch(current, fresh, triageRef.current, automationRef.current, options.settings, new Date().toISOString(), () => sorting)
       oldestRef.current = oldestOf(page.messages) ?? before
 
       triageRef.current = sorted.cache
@@ -538,6 +587,15 @@ export default function App() {
       window.removeEventListener('focus', back)
     }
   }, [services, connection, run, peek])
+
+  // Turning sorting on sorts what is already on screen, instead of waiting for the next check.
+  const sortingOn = aiSorts(settings)
+  const wasSorting = useRef(sortingOn)
+  useEffect(() => {
+    const turnedOn = sortingOn && !wasSorting.current
+    wasSorting.current = sortingOn
+    if (turnedOn && services && connection === 'connected' && lastRunRef.current && !busyRef.current) void run(services, { settings: settingsRef.current })
+  }, [sortingOn, services, connection, run])
 
   async function connect(): Promise<void> {
     setBusy('connecting')
@@ -727,7 +785,7 @@ export default function App() {
         const jevKey = settingsRef.current.jevApiKey
         // A sender Jev has already been asked about is not asked again; a scan during a long cleanup costs only its new senders.
         const known = keepSenderKinds(groups, readJson<SenderKinds>(senderKindsKey, {}))
-        const candidates = jevKey ? sendersToAsk(groups, known) : []
+        const candidates = jevKey && aiSorts(settingsRef.current) ? sendersToAsk(groups, known) : []
         const labelled = (list: SenderGroup[], kinds: SenderKinds) => list.map((group) => kinds[group.address] ? { ...group, kind: kinds[group.address].kind, kindConfidence: kinds[group.address].confidence } : group)
         // The lists stay hidden until the senders are sorted, so none of them changes section after it is on screen.
         setCleanup({ scanned: scanned.length, total: scanned.length, groups: labelled(groups, known), staleCount: staleIds(scanned, staleDays).length, done: !candidates.length })

@@ -10,6 +10,11 @@ export type Settings = {
   strongModel: string
   /** TypeSafe Jev. When set, categories come from Jev and the language model reads only what needs me. */
   jevApiKey: string
+  /**
+   * Whether Jev and Claude sort mail on their own. Unset until I turn it on or the inbox is small enough to start by itself;
+   * until then a key only answers what I tap (drafts, search).
+   */
+  aiSorting?: boolean
   aboutMe: string
   autoArchive: boolean
   archiveAfterReply: boolean
@@ -35,6 +40,19 @@ export const defaultSettings: Settings = {
 
 const storageKey = 'my-mail.settings.v1'
 
+/** An inbox this size or smaller is one worth sorting; a bigger one is a backlog to clear first. */
+export const manageableInbox = 200
+
+/** Models run on their own only once sorting is on. */
+export function aiSorts(settings: Settings): boolean {
+  return settings.aiSorting === true && Boolean(settings.anthropicApiKey || settings.jevApiKey)
+}
+
+/** Sorting starts by itself the first time the inbox is small enough, unless I have already said yes or no. */
+export function aiStartsItself(settings: Settings, inboxCount: number | undefined): boolean {
+  return settings.aiSorting === undefined && Boolean(settings.anthropicApiKey || settings.jevApiKey) && inboxCount !== undefined && inboxCount <= manageableInbox
+}
+
 const text = (value: unknown, fallback: string) => typeof value === 'string' ? value : fallback
 const flag = (value: unknown, fallback: boolean) => typeof value === 'boolean' ? value : fallback
 
@@ -45,6 +63,7 @@ export function parseSettings(stored: unknown): Settings {
     anthropicModel: text(value.anthropicModel, defaultModel) || defaultModel,
     strongModel: text(value.strongModel, defaultStrongModel) || defaultStrongModel,
     jevApiKey: text(value.jevApiKey, '').trim(),
+    aiSorting: typeof value.aiSorting === 'boolean' ? value.aiSorting : undefined,
     aboutMe: text(value.aboutMe, ''),
     autoArchive: flag(value.autoArchive, defaultSettings.autoArchive),
     archiveAfterReply: flag(value.archiveAfterReply, defaultSettings.archiveAfterReply),
