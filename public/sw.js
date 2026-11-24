@@ -15,6 +15,8 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || new URL(event.request.url).origin !== self.location.origin) return
+  // The update check asks for the published page past every cache; a cached answer would hide a new deploy.
+  if (event.request.cache === 'no-store') return
 
   if (event.request.mode === 'navigate') {
     // The host lets the browser reuse the page for ten minutes; asking it to check keeps a new deploy from hiding behind that.

@@ -1,3 +1,4 @@
+import { APP_BUILD_TIME, APP_COMMIT, checkForUpdate, useAppUpdate } from '../appUpdate'
 import { modelOptions, type Settings } from '../settings'
 import { Card, Field, Switch } from '../ui'
 
@@ -16,6 +17,8 @@ export function SettingsView({ settings, connection, accountName, busy, error, o
   const set = <K extends keyof Settings>(key: K) => (event: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     onSettings((current) => ({ ...current, [key]: event.target.value }))
   const toggle = (key: 'autoArchive' | 'archiveAfterReply' | 'writeCategories' | 'fileReceipts') => (value: boolean) => onSettings((current) => ({ ...current, [key]: value }))
+
+  const update = useAppUpdate()
 
   return <>
     <Card title="microsoft account">
@@ -50,6 +53,11 @@ export function SettingsView({ settings, connection, accountName, busy, error, o
       <div className="stack">
         <Field label="my brain"><input autoComplete="off" inputMode="url" value={settings.brainUrl} onChange={set('brainUrl')} /></Field>
       </div>
+    </Card>
+
+    <Card title="app">
+      <p className="note">build {APP_COMMIT} · {new Date(APP_BUILD_TIME).toLocaleString()}</p>
+      <div className="actions"><button className={update.ready ? 'primary' : 'secondary'} disabled={update.checking} type="button" onClick={() => void checkForUpdate()}>{update.checking ? 'checking…' : update.ready ? 'update ready · restart' : 'check for updates'}</button></div>
     </Card>
   </>
 }

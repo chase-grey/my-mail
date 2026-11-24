@@ -31,7 +31,7 @@ import { InstallBanner, InstallStep, hasInstallStep } from './views/InstallOffer
 import { ReceiptsView, type ReceiptActions } from './views/ReceiptsView'
 import { RulesView } from './views/RulesView'
 import { SearchView, type SearchActions } from './views/SearchView'
-import { Shell, type ShellLink, type View } from './views/Shell'
+import { Shell, resumeView, type ShellLink, type View } from './views/Shell'
 import { SettingsView, type ConnectionStatus } from './views/SettingsView'
 import { ThreadContext, type ThreadActions } from './views/Thread'
 
@@ -130,7 +130,7 @@ export type MessageActions = {
 const emptyCleanup: CleanupState = { scanned: 0, groups: [], staleCount: 0, done: false }
 
 export default function App() {
-  const [view, setView] = useState<View>('inbox')
+  const [view, setView] = useState<View>(() => resumeView() ?? 'inbox')
   const [settings, setSettings] = useState<Settings>(loadSettings)
   const [services, setServices] = useState<Services>()
   const [connection, setConnection] = useState<ConnectionStatus>(configuredClientId() ? 'disconnected' : 'unconfigured')

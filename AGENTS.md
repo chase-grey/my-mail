@@ -41,5 +41,5 @@ When a task is finished, commit the files you edited by name and push to main wi
 
 - Any screen that lists messages (inbox, search, receipts) uses the list with a reading pane beside it from 60rem up. The row whose message is open is filled solid with the accent colour; a tint is not enough.
 - The inbox is saved on the device and shown on open while the mailbox is checked in the background. A check never blanks or blocks the list; the status line and progress bar say it is running.
-- A new deploy has to reach an open tab or installed window on its own (`src/appUpdate.ts`). Do not rely on a manual refresh.
+- A new deploy reaches an open tab or installed window on its own (`src/appUpdate.ts`, the pattern in `~/.claude/patterns/app-update.md`). The app reloads onto it at a quiet moment: off screen, just reopened and not yet touched, or left alone for five minutes. It never reloads over an open sheet, a draft, or a screen that called `holdUpdates`, and it comes back to the screen it left. Until the reload happens, settings wears a dot and its button restarts onto the new build. Do not reload any other way, and do not rely on a manual refresh.
 - Check layout changes in `dev/preview.html` at 3438x1440 and 1440x900 as well as the phone. Every screen is in the preview; add new ones to it.
