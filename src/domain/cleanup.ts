@@ -75,10 +75,18 @@ export function likelyNoise(group: SenderGroup, minimum = 3): boolean {
   return group.count >= minimum && group.unread / group.count >= 0.7
 }
 
-/** Read mail older than the cutoff that nobody flagged: safe to put away without looking. */
-export function staleIds(messages: ScanMessage[], olderThanDays: number, now = new Date()): string[] {
+/** What the old mail sweep would take, and what it leaves. */
+export type OldMail = { ids: string[]; unread: number; flagged: number }
+
+/**
+ * Mail older than the cutoff, read or not: its moment has passed, so all of it can be put away at once.
+ * Flagged mail stays, because a flag is something I set by hand.
+ */
+export function oldMail(messages: ScanMessage[], olderThanDays: number, now = new Date()): OldMail {
   const cutoff = new Date(now.getTime() - olderThanDays * 86_400_000).toISOString()
-  return messages.filter((message) => message.isRead && !message.flagged && message.receivedAt < cutoff).map((message) => message.id)
+  const old = messages.filter((message) => message.receivedAt < cutoff)
+  const taken = old.filter((message) => !message.flagged)
+  return { ids: taken.map((message) => message.id), unread: taken.filter((message) => !message.isRead).length, flagged: old.length - taken.length }
 }
 
 export function describeGroup(group: SenderGroup): string {

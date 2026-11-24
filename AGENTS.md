@@ -67,3 +67,5 @@ When a task is finished, commit the files you edited by name and push to main wi
 ## old mail
 
 Mail older than 30 days (`oldAfterDays` in `src/domain/triage.ts`) asks for nothing. It never counts as needs me, is never read by a model, and a rule never flags it or makes a task of it. Anything new that surfaces mail or acts on it goes through `isOld` first. Chase can still flag or make a task of an old message by hand.
+
+Clean up archives all of it in one press (`old mail`, `oldMail` in `src/domain/cleanup.ts`): read or unread, everything past the cutoff except what is flagged, with an undo that lasts until the next scan. Do not narrow that sweep to read mail; a backlog is mostly unread.

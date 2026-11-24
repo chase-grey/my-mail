@@ -535,6 +535,10 @@ trimmed bodies, numbered batches, low effort, drafts on request with `better dra
 `needs me` and `probably fine` groups with `archive all`. Unsubscribe from the header. The `clean up`
 screen with per-sender bulk actions and the stale sweep.
 
+**Old mail sweep, 2026-11-24.** The stale sweep took only read mail, so an unread backlog never
+qualified. `old mail` on clean up now archives everything older than thirty days in one press, read
+or not, leaves flagged mail, and can be undone until the next scan.
+
 **Phase 2b, next.** Message view with sanitized HTML, attachments, conversation history, and
 invitations. Delta sync and paint-from-cache. Handled list with undo. Swipe on phone, two panes and
 keys on PC. Find with KQL. `Contacts.Read` and the people rule for images and auto-archive.

@@ -14,12 +14,13 @@ import { MailSearch } from './data/mailSearch'
 import { MicrosoftAuth, configuredClientId } from './data/microsoftAuth'
 import { TodoProvider } from './data/todoProvider'
 import { arrivals, depthOf, dueHeld, newestOf, oldestOf, withArrivals } from './domain/arrivals'
-import { groupBySender, keepSenderKinds, sendersToAsk, staleIds, type ScanMessage, type SenderGroup, type SenderKinds } from './domain/cleanup'
+import { holdUpdates } from './appUpdate'
+import { groupBySender, keepSenderKinds, sendersToAsk, oldMail, type ScanMessage, type SenderGroup, type SenderKinds } from './domain/cleanup'
 import { historyTriage, noiseSenders, senderHistoryLine } from './domain/history'
 import { compileRule, planRuleSync } from './domain/outlookRules'
 import { applyRules, autoRuleSenders, newRule, recordHits, rememberDecision, retiredSenders, suggestRules, type RuleSuggestion } from './domain/rules'
 import { dueSnoozes, snoozeRecord, snoozeUntil, withoutSnoozes, type SnoozeOption } from './domain/snooze'
-import { ageTriage, autoArchivable, needsReading, outlookTriage, pruneTriage, rankTriaged, sharedOf, summarize, unsureBelow, worthSharing, writeShared, type RunSummary, type Triaged } from './domain/triage'
+import { ageTriage, autoArchivable, needsReading, oldAfterDays, outlookTriage, pruneTriage, rankTriaged, sharedOf, summarize, unsureBelow, worthSharing, writeShared, type RunSummary, type Triaged } from './domain/triage'
 import { emptyAutomation, type Action, type Automation, type Message, type OutlookRule, type Rule, type RuleAction, type Triage } from './domain/types'
 import { inboxThreads } from './domain/threads'
 import { parseUnsubscribe, unsubscribeMethod } from './domain/unsubscribe'
@@ -44,7 +45,6 @@ const inboxKey = 'my-mail.inbox.v1'
 const senderKindsKey = 'my-mail.senderKinds.v1'
 /** How much of the inbox is kept on this device to show on the next open, before the mailbox has answered. */
 const savedInboxSize = 200
-const staleDays = 30
 
 type Services = { auth: MicrosoftAuth; mail: MailProvider; compose: Composer; search: MailSearch; todo: TodoProvider; store: AutomationStore }
 /** `waiting` is mail that stayed and still wants a model, but was not allowed one this time. */
@@ -127,7 +127,7 @@ export type MessageActions = {
   restore: (message: Message) => Promise<void>
 }
 
-const emptyCleanup: CleanupState = { scanned: 0, groups: [], staleCount: 0, done: false }
+const emptyCleanup: CleanupState = { scanned: 0, groups: [], old: { count: 0, unread: 0, flagged: 0 }, done: false }
 
 export default function App() {
   const [view, setView] = useState<View>(() => resumeView() ?? 'inbox')
@@ -151,6 +151,8 @@ export default function App() {
   const scanRef = useRef<ScanMessage[]>([])
   /** What each sender's clear took away this visit, by address, so undo can put it back. */
   const clearedRef = useRef(new Map<string, { scan: ScanMessage[]; inbox: Message[]; ruleId?: string }>())
+  /** What the old mail sweep took away this visit, so undo can put it back. */
+  const sweptRef = useRef<{ scan: ScanMessage[]; inbox: Message[] }>({ scan: [], inbox: [] })
   const messagesRef = useRef(messages)
   messagesRef.current = messages
   const oldestRef = useRef<string | undefined>(undefined)
@@ -801,6 +803,7 @@ export default function App() {
       setError(undefined)
       setCleanup({ ...emptyCleanup })
       clearedRef.current.clear()
+      sweptRef.current = { scan: [], inbox: [] }
       try {
         const scanned = await services.mail.scanInbox((count) => setCleanup((current) => ({ ...current, scanned: count })))
         scanRef.current = scanned
@@ -811,7 +814,7 @@ export default function App() {
         const candidates = jevKey && aiSorts(settingsRef.current) ? sendersToAsk(groups, known) : []
         const labelled = (list: SenderGroup[], kinds: SenderKinds) => list.map((group) => kinds[group.address] ? { ...group, kind: kinds[group.address].kind, kindConfidence: kinds[group.address].confidence } : group)
         // The lists stay hidden until the senders are sorted, so none of them changes section after it is on screen.
-        setCleanup({ scanned: scanned.length, total: scanned.length, groups: labelled(groups, known), staleCount: staleIds(scanned, staleDays).length, done: !candidates.length })
+        setCleanup({ scanned: scanned.length, total: scanned.length, groups: labelled(groups, known), old: oldCount(), done: !candidates.length })
         writeJson(senderKindsKey, known)
         if (!candidates.length) return
         // One cheap question per sender, on the newest message only, to tell newsletters from people.
@@ -853,22 +856,23 @@ export default function App() {
         clearedRef.current.delete(group.address)
         const back = new Set(scanRef.current.map((message) => message.id))
         scanRef.current = [...scanRef.current, ...(taken?.scan ?? []).filter((message) => !back.has(message.id))]
-        setCleanup((current) => ({ ...current, working: undefined, total: (current.total ?? current.scanned) + group.count, groups: current.groups.map((item) => item.address === group.address ? { ...item, cleared: undefined, ruled: undefined } : item), staleCount: staleIds(scanRef.current, staleDays).length }))
+        setCleanup((current) => ({ ...current, working: undefined, total: (current.total ?? current.scanned) + group.count, groups: current.groups.map((item) => item.address === group.address ? { ...item, cleared: undefined, ruled: undefined } : item), old: oldCount() }))
         const inbox = taken?.inbox ?? []
-        if (inbox.length) {
-          setMessages((current) => [...current, ...inbox.filter((message) => !current.some((item) => item.id === message.id))])
-          setSummary((current) => current ? { ...current, inbox: current.inbox + inbox.length, needReply: current.needReply + inbox.filter((message) => triageRef.current[message.id]?.needsReply).length } : current)
-        }
+        putBack(inbox)
         await persistAutomation({ ...automationRef.current, decisions: automationRef.current.decisions.filter((decision) => decision.messageId !== group.sample.id) })
       } finally {
         setCleanup((current) => ({ ...current, working: undefined }))
       }
     },
     unsubscribe: (group) => unsubscribeFrom(group.sample.id, undefined, group.address),
-    archiveStale: async () => {
+    archiveOld: async () => {
       if (!services) return
-      const ids = staleIds(scanRef.current, staleDays)
+      const ids = oldMail(scanRef.current, oldAfterDays).ids
+      if (!ids.length) return
+      setError(undefined)
       setCleanup((current) => ({ ...current, working: `archiving ${ids.length}` }))
+      // Thousands of moves take minutes; a new build waits for them.
+      const release = holdUpdates()
       let stuck: string[]
       try {
         stuck = await services.mail.archiveMany(ids, (done) => setCleanup((current) => ({ ...current, working: `archived ${done} of ${ids.length}` })))
@@ -876,14 +880,66 @@ export default function App() {
         setCleanup((current) => ({ ...current, working: undefined }))
         setError(errorText(failure))
         return
+      } finally {
+        release()
       }
       const kept = new Set(stuck)
       const gone = new Set(ids.filter((id) => !kept.has(id)))
+      const here = messagesRef.current.filter((message) => gone.has(message.id))
+      sweptRef.current = { scan: [...sweptRef.current.scan, ...scanRef.current.filter((message) => gone.has(message.id))], inbox: [...sweptRef.current.inbox, ...here] }
       scanRef.current = scanRef.current.filter((message) => !gone.has(message.id))
-      setCleanup((current) => ({ ...current, working: undefined, total: scanRef.current.length, groups: regroup(current.groups), staleCount: stuck.length }))
-      drop(messages.filter((message) => gone.has(message.id)))
+      setCleanup((current) => ({ ...current, working: undefined, total: scanRef.current.length, groups: settle(current.groups), old: oldCount(), swept: sweptRef.current.scan.length || undefined }))
+      drop(here)
       if (stuck.length) setError(notMoved(stuck.length))
     },
+    undoOld: async () => {
+      if (!services) return
+      const taken = sweptRef.current
+      if (!taken.scan.length) return
+      setError(undefined)
+      setCleanup((current) => ({ ...current, working: `bringing back ${taken.scan.length}` }))
+      const release = holdUpdates()
+      let stuck: string[]
+      try {
+        stuck = await services.mail.moveMany(taken.scan.map((message) => message.id), 'inbox', (done) => setCleanup((current) => ({ ...current, working: `brought back ${done} of ${taken.scan.length}` })))
+      } catch (failure) {
+        setCleanup((current) => ({ ...current, working: undefined }))
+        setError(errorText(failure))
+        return
+      } finally {
+        release()
+      }
+      const kept = new Set(stuck)
+      const have = new Set(scanRef.current.map((message) => message.id))
+      scanRef.current = [...scanRef.current, ...taken.scan.filter((message) => !kept.has(message.id) && !have.has(message.id))]
+      sweptRef.current = { scan: taken.scan.filter((message) => kept.has(message.id)), inbox: taken.inbox.filter((message) => kept.has(message.id)) }
+      setCleanup((current) => ({ ...current, working: undefined, total: scanRef.current.length, groups: settle(current.groups), old: oldCount(), swept: sweptRef.current.scan.length || undefined }))
+      putBack(taken.inbox.filter((message) => !kept.has(message.id)))
+      if (stuck.length) setError(notMoved(stuck.length))
+    },
+  }
+
+  function oldCount(): CleanupState['old'] {
+    const old = oldMail(scanRef.current, oldAfterDays)
+    return { count: old.ids.length, unread: old.unread, flagged: old.flagged }
+  }
+
+  /** Mail a bulk undo returned to the inbox goes back on the list and the counts, and the next read leaves it there. */
+  function putBack(inbox: Message[]): void {
+    if (!inbox.length) return
+    for (const message of inbox) { leftRef.current.delete(message.id); backRef.current.set(message.id, message) }
+    setMessages((current) => [...current, ...inbox.filter((message) => !current.some((item) => item.id === message.id))])
+    setSummary((current) => current ? { ...current, inbox: current.inbox + inbox.length, needReply: current.needReply + inbox.filter((message) => triageRef.current[message.id]?.needsReply).length } : current)
+  }
+
+  /** The sender list after a sweep or its undo: rows keep their place, a sender with nothing left goes, cleared rows keep their undo. */
+  function settle(previous: SenderGroup[]): SenderGroup[] {
+    const now = new Map(regroup(previous).map((group) => [group.address, group]))
+    const seen = new Set(previous.map((group) => group.address))
+    return [
+      ...previous.flatMap((group) => group.cleared ? [group] : now.has(group.address) ? [now.get(group.address)!] : []),
+      ...[...now.values()].filter((group) => !seen.has(group.address)),
+    ]
   }
 
   /** Regroup what is left of the scan, keeping any classifier verdicts already attached to a sender. */
@@ -909,14 +965,14 @@ export default function App() {
         const moved = new Set(group.ids.filter((id) => !kept.has(id)))
         scanRef.current = scanRef.current.filter((message) => !moved.has(message.id))
         const rest = groupBySender(scanRef.current.filter((message) => kept.has(message.id)))[0]
-        setCleanup((current) => ({ ...current, total: (current.total ?? current.scanned) - moved.size, groups: current.groups.map((item) => item.address === group.address && rest ? { ...rest, kind: item.kind, kindConfidence: item.kindConfidence } : item), staleCount: staleIds(scanRef.current, staleDays).length }))
+        setCleanup((current) => ({ ...current, total: (current.total ?? current.scanned) - moved.size, groups: current.groups.map((item) => item.address === group.address && rest ? { ...rest, kind: item.kind, kindConfidence: item.kindConfidence } : item), old: oldCount() }))
         drop(messages.filter((message) => moved.has(message.id)))
         throw new Error(notMoved(stuck.length))
       }
       const gone = new Set(group.ids)
       clearedRef.current.set(group.address, { scan: scanRef.current.filter((message) => gone.has(message.id)), inbox: messagesRef.current.filter((message) => gone.has(message.id)), ruleId })
       scanRef.current = scanRef.current.filter((message) => !gone.has(message.id))
-      setCleanup((current) => ({ ...current, working: undefined, total: (current.total ?? current.scanned) - group.count, groups: current.groups.map((item) => item.address === group.address ? { ...item, cleared: action, ruled: Boolean(ruleId) } : item), staleCount: staleIds(scanRef.current, staleDays).length }))
+      setCleanup((current) => ({ ...current, working: undefined, total: (current.total ?? current.scanned) - group.count, groups: current.groups.map((item) => item.address === group.address ? { ...item, cleared: action, ruled: Boolean(ruleId) } : item), old: oldCount() }))
       drop(messages.filter((message) => gone.has(message.id)))
       await persistAutomation({ ...automationRef.current, decisions: rememberDecision(automationRef.current.decisions, asMessage(group.sample), action, new Date().toISOString()) })
     } finally {

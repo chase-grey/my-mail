@@ -2,7 +2,7 @@ import { StrictMode, useState } from 'react'
 import { Toast, type ToastState } from '../ui'
 import { createRoot } from 'react-dom/client'
 import type { MessageActions } from '../App'
-import { groupBySender } from '../domain/cleanup'
+import { groupBySender, oldMail } from '../domain/cleanup'
 import { groupInbox, rankTriaged, type Triaged } from '../domain/triage'
 import type { MailContent } from '../domain/mailHtml'
 import type { Action, Category, Message } from '../domain/types'
@@ -99,7 +99,8 @@ const search: SearchActions = {
 const scanned = seed.flatMap((item, at) => Array.from({ length: (at % 4) * 3 + 1 }, (_, copy) => ({ id: `${item.message.id}-${copy}`, from: item.message.from, subject: item.message.subject, preview: item.message.preview, receivedAt: hoursAgo(at * 30 + copy * 200), isRead: copy > 0, flagged: false })))
 // The second sender is already cleared with a rule, so the confirmation is on the screen.
 const senders = groupBySender(scanned).map((group, index) => ({ ...group, ...(index === 1 ? { cleared: 'archive' as const, ruled: true } : {}), kind: seed.find((item) => item.message.from.address === group.address)?.triage?.category }))
-const cleanupActions: CleanupActions = { scan: async () => {}, archiveSender: () => wait(400), deleteSender: () => wait(400), blockSender: () => wait(400), undoSender: () => wait(400), unsubscribe: async (group) => `unsubscribed from ${group.address}`, archiveStale: () => wait(400) }
+const cleanupActions: CleanupActions = { scan: async () => {}, archiveSender: () => wait(400), deleteSender: () => wait(400), blockSender: () => wait(400), undoSender: () => wait(400), unsubscribe: async (group) => `unsubscribed from ${group.address}`, archiveOld: () => wait(400), undoOld: () => wait(400) }
+const old = oldMail(scanned, 30)
 const receipts = Array.from({ length: 9 }, (_, at) => ({ ...seed[7].message, id: `r${at}`, from: at % 2 ? seed[7].message.from : { name: 'Harbor Outfitters', address: 'orders@harbor.example.com' }, subject: at % 2 ? 'Your receipt' : `Order ${4100 + at} confirmed`, receivedAt: hoursAgo(at * 190 + 20), body: `Order total $${(48.12 + at * 13.5).toFixed(2)}. Thanks for shopping with us.\n\nItems\n1 x olive oil\n2 x sourdough\n\nPaid with card ending 4417.` }))
 
 // Compose against a made-up mailbox: a reply comes back addressed, a forward brings the original's file.
@@ -157,7 +158,7 @@ function Preview() {
       suggestions={[{ from: 'news@weeklyfold.example.com', action: 'archive', count: 4 }]} snoozes={[]} actions={actions} onConnect={async () => {}} onDismissSuggestion={() => {}} />}
     {view === 'search' && <SearchView search={search} actions={actions} hasModel senders={seed.map((item) => item.message.from)} subjects={seed.map((item) => item.message.subject)} />}
     {view === 'receipts' && <ReceiptsView actions={{ load: async () => { await wait(300); return { messages: receipts, more: true } }, fromArchive: async () => { await wait(600); return 3 }, toInbox: () => wait(300), forward: (message) => setComposing({ mode: 'forward', message }) }} />}
-    {view === 'cleanup' && <CleanupView state={{ scanned: scanned.length, total: scanned.length, groups: senders, staleCount: 6, done: true }} actions={cleanupActions} onError={() => {}} />}
+    {view === 'cleanup' && <CleanupView state={{ scanned: scanned.length, total: scanned.length, groups: senders, old: { count: old.ids.length, unread: old.unread, flagged: 2 }, swept: params.has('swept') ? 1204 : undefined, working: params.has('sweeping') ? 'archived 640 of 1,204' : undefined, done: true }} actions={cleanupActions} onError={() => {}} />}
     {view === 'rules' && <RulesView rules={[{ id: 'r1', from: '@harbor.example.com', action: 'archive', enabled: true, createdAt: 'now', hits: 12, outlookId: 'o1' }, { id: 'r2', subject: 'receipt', action: 'read', enabled: true, createdAt: 'now', hits: 3 }]} outlookRules={[]} snoozes={[{ messageId: 's1', until: new Date(Date.now() + 86_400_000).toISOString(), subject: 'Renew passport', from: 'Travel Office' }]} onRules={async () => {}} />}
     {view === 'settings' && <SettingsView settings={defaultSettings} connection="connected" accountName="someone@example.com" busy={false} onSettings={() => {}} onConnect={async () => {}} onDisconnect={async () => {}} />}
     {composing && <Compose key={`${composing.mode}:${composing.message?.id ?? ''}`} request={composing} actions={composeActions} contacts={seed.map((item) => item.message.from)}

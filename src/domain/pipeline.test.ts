@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeGroup, groupBySender, keepSenderKinds, likelyNoise, sendersToAsk, staleIds, type ScanMessage } from './cleanup'
+import { describeGroup, groupBySender, keepSenderKinds, likelyNoise, oldMail, sendersToAsk, type ScanMessage } from './cleanup'
 import { message } from './fixtures'
 import { historyTriage, noiseSenders, senderHistoryLine } from './history'
 import { compilable, compileRule, describeOutlookRule, outlookRuleName, planRuleSync } from './outlookRules'
@@ -141,8 +141,13 @@ describe('cleanup', () => {
     expect(likelyNoise({ ...mom, kind: 'promo', kindConfidence: 0.99 })).toBe(false)
   })
 
-  it('finds read, unflagged mail older than the cutoff', () => {
-    expect(staleIds(messages, 30, new Date('2026-11-04T00:00:00Z')).sort()).toEqual(['4', '6'])
+  it('takes all mail older than the cutoff, unread included, and leaves what is flagged', () => {
+    const old = oldMail(messages, 30, new Date('2026-11-04T00:00:00Z'))
+    expect(old.ids.sort()).toEqual(['1', '3', '4', '6'])
+    expect(old.unread).toBe(2)
+    expect(old.flagged).toBe(0)
+    expect(oldMail([...messages, scan('7', 'mom@example.com', false, '2026-01-01T00:00:00Z', true)], 30, new Date('2026-11-04T00:00:00Z'))).toMatchObject({ unread: 2, flagged: 1 })
+    expect(oldMail(messages, 30, new Date('2026-09-10T00:00:00Z')).ids).toEqual(['6'])
   })
 
   it('asks about a sender once, and forgets senders that have left the inbox', () => {

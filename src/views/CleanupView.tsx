@@ -7,7 +7,10 @@ export type CleanupState = {
   scanned: number
   total?: number
   groups: SenderGroup[]
-  staleCount: number
+  /** Mail past thirty days that one press would archive, and the flagged mail it would leave. */
+  old: { count: number; unread: number; flagged: number }
+  /** How many the old mail sweep has archived this visit and can still bring back. */
+  swept?: number
   done: boolean
   working?: string
 }
@@ -21,7 +24,9 @@ export type CleanupActions = {
   /** Put a cleared sender's mail back in the inbox and drop the rule made with it. */
   undoSender: (group: SenderGroup) => Promise<void>
   unsubscribe: (group: SenderGroup) => Promise<string>
-  archiveStale: () => Promise<void>
+  /** Archive all mail older than thirty days, unread included. Flagged mail stays. */
+  archiveOld: () => Promise<void>
+  undoOld: () => Promise<void>
 }
 
 function SenderRow({ group, onError, actions }: { group: SenderGroup; onError: (text?: string) => void; actions: CleanupActions }) {
@@ -71,11 +76,15 @@ export function CleanupView({ state, error, actions, onError }: { state: Cleanup
     <p className="status" aria-live="polite">{state.working ?? `${state.total ?? state.scanned} in inbox · ${left(state.groups).length} senders`}</p>
     {error && <p className="note is-error" role="alert">{error}</p>}
 
-    {state.staleCount > 0 && <Card title="old and already read" className="is-wide">
-      <div className="suggest">
-        <span>{state.staleCount} read {state.staleCount === 1 ? 'message' : 'messages'} older than 30 days, none flagged</span>
-        <button className="secondary" type="button" disabled={Boolean(state.working)} onClick={() => void actions.archiveStale()}>archive them</button>
-      </div>
+    {(state.old.count > 0 || Boolean(state.swept)) && <Card title="old mail" className="is-wide">
+      {state.old.count > 0 && <div className="suggest">
+        <span>{[`${state.old.count.toLocaleString()} older than 30 days`, state.old.unread > 0 && `${state.old.unread.toLocaleString()} unread`, state.old.flagged > 0 && `${state.old.flagged.toLocaleString()} flagged stay`].filter(Boolean).join(' · ')}</span>
+        <button className="primary" type="button" disabled={Boolean(state.working)} onClick={() => void actions.archiveOld()}>archive all</button>
+      </div>}
+      {Boolean(state.swept) && <div className="suggest">
+        <span>archived {state.swept!.toLocaleString()}</span>
+        <button className="secondary" type="button" disabled={Boolean(state.working)} onClick={() => void actions.undoOld()}>undo</button>
+      </div>}
     </Card>}
 
     <Card title="probably noise" aside={left(noise).length > 0 && <span className="count">{left(noise).reduce((sum, group) => sum + group.count, 0)} messages</span>}>
