@@ -17,7 +17,7 @@ import { historyTriage, noiseSenders, senderHistoryLine } from './domain/history
 import { compileRule, planRuleSync } from './domain/outlookRules'
 import { applyRules, autoRuleSenders, newRule, recordHits, rememberDecision, retiredSenders, suggestRules, type RuleSuggestion } from './domain/rules'
 import { dueSnoozes, snoozeRecord, snoozeUntil, withoutSnoozes, type SnoozeOption } from './domain/snooze'
-import { autoArchivable, needsReading, outlookTriage, pruneTriage, rankTriaged, summarize, unsureBelow, type RunSummary, type Triaged } from './domain/triage'
+import { autoArchivable, groupInbox, needsReading, outlookTriage, pruneTriage, rankTriaged, summarize, unsureBelow, type RunSummary, type Triaged } from './domain/triage'
 import { emptyAutomation, type Action, type Automation, type Message, type OutlookRule, type Rule, type RuleAction, type Triage } from './domain/types'
 import { parseUnsubscribe, unsubscribeMethod } from './domain/unsubscribe'
 import { loadSettings, saveSettings, type Settings } from './settings'
@@ -821,6 +821,7 @@ export default function App() {
   const suggestions = useMemo<RuleSuggestion[]>(() => suggestRules(automation.decisions, automation.rules).filter((item) => !dismissed.includes(`${item.from}|${item.action}`)), [automation, dismissed])
   const triaged = useMemo<Triaged[]>(() => rankTriaged(messages.map((message) => ({ message, triage: triage[message.id] }))), [messages, triage])
   const connected = connection === 'connected' && Boolean(services)
+  const needsMe = useMemo(() => groupInbox(triaged.filter((item) => !kept[item.message.id])).needsMe.length, [triaged, kept])
   const searchActions: SearchActions = {
     find: (query, count) => services!.search.search(query, count),
     more: (next) => services!.search.more(next),
@@ -851,7 +852,7 @@ export default function App() {
     ...(settings.brainUrl ? [{ label: 'open my brain', onSelect: () => window.open(settings.brainUrl, '_blank', 'noreferrer') }] : []),
   ]
 
-  return <Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })}>
+  return <Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe } : undefined} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })}>
     {view === 'inbox' && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} hasModel={Boolean(settings.anthropicApiKey)} suggestions={suggestions} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
       onConnect={connect} onDismissSuggestion={(item) => setDismissed((current) => [...current, `${item.from}|${item.action}`])} />}
     {view === 'search' && connected && <SearchView search={searchActions} actions={actions} hasModel={Boolean(settings.anthropicApiKey)} />}
