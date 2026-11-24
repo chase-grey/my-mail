@@ -77,7 +77,6 @@ function Detail({ item, kept, quiet, pane, on }: { item: Triaged; kept: boolean;
           { label: 'snooze', onSelect: () => on.snooze(item) },
         ] : [{ label: kept ? 'kept' : 'keep in inbox', disabled: kept, onSelect: () => on.keep(item) }]),
         { label: message.flagged ? 'unflag' : 'flag', onSelect: () => on.flag(item) },
-        { label: 'open in outlook', onSelect: () => window.open(message.webLink, '_blank', 'noreferrer') },
         { label: 'unsubscribe', onSelect: () => on.unsubscribe(item) },
         { label: 'always do this for the sender', onSelect: () => on.rule(item) },
         { label: 'delete', danger: true, onSelect: () => on.remove(item) },

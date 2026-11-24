@@ -59,7 +59,6 @@ function Detail({ hit, pane, on }: { hit: SearchHit; pane: boolean; on: Handlers
     <div className="mail-actions">
       {hit.inInbox && <button type="button" onClick={() => on.archive(hit)}>archive</button>}
       <button type="button" onClick={() => on.task(hit)}>to do</button>
-      <button type="button" onClick={() => window.open(message.webLink, '_blank', 'noreferrer')}>open in outlook</button>
       <Menu label={`more for ${message.subject}`} items={[
         { label: message.flagged ? 'unflag' : 'flag', onSelect: () => on.flag(hit) },
         ...(hit.inInbox ? [] : [{ label: 'move to inbox', onSelect: () => on.toInbox(hit) }]),

@@ -33,7 +33,7 @@ The product specification, including why this is built rather than forked, lives
   category and how sure the sorter was, leads with archive, and has `archive all`.
 - **actions** · archive, to do (creates a To Do task and archives), reply (draft for me, edit, send
   or finish in Outlook), snooze (this evening, tomorrow, this weekend, next week), keep in inbox,
-  flag, delete, open in Outlook, unsubscribe, always do this for the sender.
+  flag, delete, unsubscribe, always do this for the sender.
 - **unsubscribe** · follows the sender's `List-Unsubscribe` header: a one-click POST when offered,
   otherwise a mail sent through Graph, otherwise the page opens. Pair it with a rule to be sure.
 - **clean up** · for a backlog. Reads the whole inbox headers-only, groups by sender, marks the ones

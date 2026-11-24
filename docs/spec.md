@@ -153,7 +153,7 @@ The home screen and the cold-start screen. Everything that still needs me, group
 Each card: sender display name, received time, subject, the model's one-line summary (or the preview
 when there is no key), a category chip when the category is not obvious from the group, and an action
 row with the suggested action first and visually heavier. Tapping the body opens the message. The `…`
-menu holds the rest: flag, delete, open in outlook, unsubscribe when the header exists, always do
+menu holds the rest: flag, delete, unsubscribe when the header exists, always do
 this for the sender, make a rule.
 
 Phone gestures: swipe right archives, swipe left snoozes. Both show a five-second undo. PC keys on a
@@ -290,7 +290,7 @@ what is left.
 ### receipts
 
 Behind `…`. The `receipts` folder newest first: sender, date, subject, preview. A row opens to the
-text with `open in outlook` and `move to inbox`. `move receipts from archive` brings in archived mail
+text with `move to inbox`. `move receipts from archive` brings in archived mail
 that carries the `receipt` category, for receipts sorted before the folder existed.
 
 ### rules
