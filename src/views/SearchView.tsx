@@ -67,7 +67,7 @@ function Detail({ hit, pane, on }: { hit: SearchHit; pane: boolean; on: Handlers
       ]} />
     </div>
     {pane && <h2 className="detail-subject">{message.subject}</h2>}
-    <p className="detail-meta"><span>{pane ? `${message.from.name} ` : ''}{`<${message.from.address}>`}</span><span>{dated(message.receivedAt, true)}</span></p>
+    <p className="detail-meta"><span>{pane && <b className="detail-from">{message.from.name}</b>}{`<${message.from.address}>`}</span><span>{dated(message.receivedAt, true)}</span></p>
     {facts && <p className="detail-meta">{facts}</p>}
     <div className="mail-body">{message.body || message.preview || '(empty)'}</div>
   </div>

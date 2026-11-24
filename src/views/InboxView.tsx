@@ -85,7 +85,7 @@ function Detail({ item, kept, quiet, pane, on }: { item: Triaged; kept: boolean;
     </div>
     {pane && <h2 className="detail-subject">{message.subject}</h2>}
     {pane && triage?.summary && <p className={`detail-summary${isLoud(item) ? ' is-loud' : ''}`}>{triage.summary}</p>}
-    <p className="detail-meta"><span>{pane ? `${message.from.name} ` : ''}{`<${message.from.address}>`}</span><span>{when(message.receivedAt, true)}</span></p>
+    <p className="detail-meta"><span>{pane && <b className="detail-from">{message.from.name}</b>}{`<${message.from.address}>`}</span><span>{when(message.receivedAt, true)}</span></p>
     {facts && <p className="detail-meta">{facts}</p>}
     <div className="mail-body">{message.body || message.preview || '(empty)'}</div>
   </div>

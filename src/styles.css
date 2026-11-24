@@ -160,7 +160,7 @@ a { color: var(--accent); }
 .fold-clip { min-height: 0; overflow: hidden; }
 .fold:not(.is-open) .fold-clip { opacity: 0; transition: opacity var(--quick); }
 .detail { display: flex; flex-direction: column; gap: 0.4rem; padding: 0 1rem 0.6rem; }
-.detail-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.1rem 0.75rem; color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }
+.detail-meta { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.1rem 0.75rem; color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }
 .mail-body { margin-top: 0.2rem; padding: 0.7rem 0.85rem; border-radius: 8px; background: var(--surface-2); font-size: 0.92rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .item .mail-body { background: color-mix(in srgb, var(--text) 5%, transparent); max-height: 22rem; overflow-y: auto; }
 .mail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; margin-inline: -0.5rem; }
@@ -242,13 +242,21 @@ a { color: var(--accent); }
   .list { grid-area: 3 / 1; min-height: 0; overflow-y: auto; padding: 0.25rem 1rem 5rem 1.5rem; scrollbar-width: thin; }
   .list > * { flex: none; }
   .lone { grid-column: 1 / -1; justify-self: start; margin-top: 0.5rem; margin-left: 1.5rem; }
-  .item .mail::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--accent); scale: 1 0; transition: scale var(--move) var(--ease); }
-  .item.is-open .mail::before { scale: 1 1; }
   .item.is-open .mail-subject, .item.is-open .mail-summary { white-space: nowrap; }
+  /* Beside a reading pane, the row whose message is open is filled solid so it reads from across the screen. */
+  @media (hover: hover) { .main:has(.reader) .item:not(.is-open) .mail:hover { background: var(--surface-2); } }
+  .main:has(.reader) .item.is-open .mail { background: var(--accent); color: var(--on-accent); }
+  .main:has(.reader) .item.is-open :is(small, .mail-summary, .quick) { color: inherit; }
+  .main:has(.reader) .item.is-open :is(small, .mail-summary) { opacity: 0.85; }
+  .main:has(.reader) .item.is-open .mail-row { opacity: 1; }
+  .main:has(.reader) .item.is-open .mail-from.is-unread::before { background: currentColor; }
+  .main:has(.reader) .item.is-open .quick:hover { background: color-mix(in srgb, var(--on-accent) 18%, transparent); }
+  .main:has(.reader) .item.is-open :focus-visible { outline-color: var(--on-accent); outline-offset: -3px; }
   .reader { grid-area: 1 / 2 / -1 / 3; min-height: 0; overflow-y: auto; border-left: 1px solid var(--border); background: var(--surface); scrollbar-width: thin; }
-  .reader-inner { max-width: 54rem; margin-inline: auto; padding: 0.6rem 2rem 3rem; animation: rise var(--move) var(--ease); }
+  .reader-inner { max-width: 60rem; padding: 0.6rem 2.25rem 3rem; animation: rise var(--move) var(--ease); }
   .reader .detail { gap: 0.5rem; padding: 0; }
-  .reader .mail-actions { position: sticky; top: 0; z-index: 2; margin: 0 -0.5rem 0.75rem; padding: 0.4rem 0; background: var(--surface); }
+  .reader .mail-actions { position: sticky; top: 0; z-index: 2; margin: 0 -0.5rem 0.75rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .detail-from { margin-right: 0.45rem; color: var(--text); font-size: 1rem; font-weight: 600; }
   .detail-subject { font-size: 1.35rem; letter-spacing: -0.01em; line-height: 1.25; overflow-wrap: anywhere; }
   .detail-summary { color: var(--muted); }
   .reader .mail-body { margin-top: 0.75rem; padding: 0; background: none; font-size: 1rem; line-height: 1.6; }
