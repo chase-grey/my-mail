@@ -859,9 +859,11 @@ export default function App() {
   // It waits for the saved sign-in to be looked for, so a tab that is already connected never sees it.
   const installFirst = !connected && Boolean(services) && !busy && hasInstallStep(install, installSkipped)
   const needsMe = useMemo(() => groupInbox(triaged.filter((item) => !kept[item.message.id])).needsMe.length, [triaged, kept])
+  const senders = useMemo(() => messages.map((message) => message.from), [messages])
   const searchActions: SearchActions = {
     find: (query, count) => services!.search.search(query, count),
     more: (next) => services!.search.more(next),
+    senders: (word) => services!.search.senders(word),
     translate: (question) => translateQuery(anthropic(), settingsRef.current.strongModel, question, new Date().toLocaleDateString('en-CA')),
     answer: (question, hits) => answerFromMail(anthropic(), settingsRef.current.strongModel, question, hits, { aboutMe: settingsRef.current.aboutMe, today: new Date().toLocaleDateString('en-CA') }),
   }
@@ -897,7 +899,7 @@ export default function App() {
     {view === 'inbox' && connected && <InstallBanner install={install} />}
     {view === 'inbox' && !installFirst && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} hasModel={Boolean(settings.anthropicApiKey)} suggestions={suggestions} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
       onConnect={connect} onDismissSuggestion={(item) => setDismissed((current) => [...current, `${item.from}|${item.action}`])} />}
-    {view === 'search' && connected && <SearchView search={searchActions} actions={actions} hasModel={Boolean(settings.anthropicApiKey)} />}
+    {view === 'search' && connected && <SearchView search={searchActions} actions={actions} hasModel={Boolean(settings.anthropicApiKey)} senders={senders} />}
     {view === 'receipts' && connected && <ReceiptsView actions={receiptActions} />}
     {view === 'rules' && <RulesView rules={automation.rules} outlookRules={outlookRules} snoozes={automation.snoozes} error={error} onRules={updateRules} />}
     {view === 'cleanup' && <CleanupView state={cleanup} error={error} actions={cleanupActions} onError={setError} />}

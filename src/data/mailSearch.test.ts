@@ -27,3 +27,12 @@ it('searches every folder, names the folder a hit is in, and reads the folder li
   expect(request.mock.calls.filter(([called]) => called.startsWith('/me/mailFolders'))).toHaveLength(2)
   expect(searchParam(' dinner ')).toBe('"dinner"')
 })
+
+it('asks the mailbox who matches a word, reading only who sent each message', async () => {
+  const request = vi.fn(async (_path: string) => ({ value: [{ from: { emailAddress: { name: 'Ruth Okafor', address: 'ruth@example.com' } } }, {}, { from: { emailAddress: { address: 'ruiz@example.com' } } }] }))
+  const found = await new MailSearch({ request } as unknown as GraphClient).senders('ru')
+  const query = new URLSearchParams(request.mock.calls[0][0].split('?')[1])
+  expect(query.get('$search')).toBe('"from:ru"')
+  expect(query.get('$select')).toBe('from')
+  expect(found).toEqual([{ name: 'Ruth Okafor', address: 'ruth@example.com' }, { name: '', address: 'ruiz@example.com' }])
+})

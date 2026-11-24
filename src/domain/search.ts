@@ -26,6 +26,37 @@ export function searchMode(text: string): SearchMode {
   return words >= 6 || (words >= 3 && asking.test(value)) ? 'ask' : 'find'
 }
 
+export type Sender = { name: string; address: string }
+
+/** The word being typed, when it could be the start of a sender: the last one, two letters or more, and not already an operator or a phrase. */
+export function senderWord(text: string): string {
+  const word = /(\S+)$/.exec(text)?.[1].toLowerCase() ?? ''
+  return word.length < 2 || /[:"<>=()]/.test(word) ? '' : word
+}
+
+/** Senders whose name or address starts with the word being typed, in the order given, one per address. */
+export function suggestSenders(text: string, senders: Sender[], limit = 4): Sender[] {
+  const word = senderWord(text)
+  if (!word) return []
+  const seen = new Set<string>()
+  const found: Sender[] = []
+  for (const sender of senders) {
+    const address = sender.address.toLowerCase()
+    if (!address || seen.has(address)) continue
+    const starts = [address, address.split('@')[1] ?? '', ...sender.name.toLowerCase().split(/[^\p{L}\p{N}]+/u)]
+    if (!starts.some((part) => part.startsWith(word))) continue
+    seen.add(address)
+    found.push(sender)
+    if (found.length === limit) break
+  }
+  return found
+}
+
+/** The search with the word being typed swapped for mail from that address. */
+export function fromSender(text: string, address: string): string {
+  return text.replace(/\S+$/, `from:${address}`)
+}
+
 /** Newest first, no repeats, capped. */
 export function rememberSearch(recent: string[], text: string, limit = 8): string[] {
   const value = text.trim()

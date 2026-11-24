@@ -1,4 +1,4 @@
-import type { SearchPage } from '../domain/search'
+import type { SearchPage, Sender } from '../domain/search'
 import type { GraphClient } from './graphClient'
 import { fromGraph, messageSelect } from './mailProvider'
 
@@ -26,6 +26,12 @@ export class MailSearch {
    */
   search(query: string, count = searchPageSize): Promise<SearchPage> {
     return this.page(`/me/messages?${new URLSearchParams({ '$search': searchParam(query), '$top': String(count), '$select': searchSelect })}`)
+  }
+
+  /** Who sent the newest mail from anyone matching the word, for suggesting senders. Only the sender of each message is read. */
+  async senders(word: string): Promise<Sender[]> {
+    const page = await this.graph.request<{ value: { from?: { emailAddress?: { name?: string; address?: string } } }[] }>(`/me/messages?${new URLSearchParams({ '$search': searchParam(`from:${word}`), '$top': '25', '$select': 'from' })}`)
+    return page.value.flatMap(({ from }) => from?.emailAddress?.address ? { name: from.emailAddress.name ?? '', address: from.emailAddress.address } : [])
   }
 
   /** The page after the one `search` returned. */

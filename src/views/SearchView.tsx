@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from 'react'
 import type { MessageActions } from '../App'
-import { answerParts, rememberSearch, searchMode, type SearchHit, type SearchMode, type SearchPage } from '../domain/search'
+import { answerParts, fromSender, rememberSearch, searchMode, senderWord, suggestSenders, type SearchHit, type SearchMode, type SearchPage, type Sender } from '../domain/search'
 import type { Message } from '../domain/types'
 import { Card, Field, Fold, Menu, Segmented, Toast, useMediaQuery, type ToastState } from '../ui'
 import { MailBody } from './MailBody'
@@ -13,6 +13,8 @@ export type SearchActions = {
   translate: (question: string) => Promise<string>
   /** Reads the messages found and answers, citing them by number as `[2]`. */
   answer: (question: string, hits: SearchHit[]) => Promise<string>
+  /** Who in the whole mailbox matches the word being typed. */
+  senders?: (word: string) => Promise<Sender[]>
 }
 
 /** What is on screen: what a find matched, or what an ask searched for, read, and said. */
@@ -42,6 +44,7 @@ function dated(receivedAt: string, long = false): string {
   return long ? `${day}, ${time}` : day
 }
 
+const noSenders: Sender[] = []
 const failed = (error: unknown) => error instanceof Error ? error.message.toLowerCase() : 'search failed'
 
 type Handlers = {
@@ -94,7 +97,7 @@ function Row({ hit, index, open, pane, on }: { hit: SearchHit; index: number; op
   </li>
 }
 
-export function SearchView({ search, actions, hasModel }: { search: SearchActions; actions: MessageActions; hasModel: boolean }) {
+export function SearchView({ search, actions, hasModel, senders = noSenders }: { search: SearchActions; actions: MessageActions; hasModel: boolean; senders?: Sender[] }) {
   const [text, setText] = useState('')
   const [override, setOverride] = useState<SearchMode>()
   const [query, setQuery] = useState('')
@@ -111,6 +114,18 @@ export function SearchView({ search, actions, hasModel }: { search: SearchAction
   const hits = result?.hits ?? []
   const selected = hits.find((hit) => hit.message.id === openId) ?? (pane ? hits[0] : undefined)
   const selectedId = selected?.message.id
+  const [looked, setLooked] = useState<{ word: string; senders: Sender[] }>()
+  const word = mode === 'find' ? senderWord(text) : ''
+  const lookUp = search.senders
+  const suggested = word ? suggestSenders(text, [...senders, ...hits.map((hit) => hit.message.from), ...(looked && word.startsWith(looked.word) ? looked.senders : [])]) : []
+
+  // The loaded mail answers at once. The mailbox is asked when typing pauses, and only adds to what is shown.
+  useEffect(() => {
+    if (!word || !lookUp) return
+    let current = true
+    const timer = setTimeout(() => void lookUp(word).then((found) => { if (current) setLooked({ word, senders: found }) }).catch(() => {}), 300)
+    return () => { current = false; clearTimeout(timer) }
+  }, [word, lookUp])
 
   useEffect(() => {
     if (!follow.current || !selectedId) return
@@ -229,6 +244,9 @@ export function SearchView({ search, actions, hasModel }: { search: SearchAction
         <input type="search" aria-label="search" placeholder={hasModel ? 'search or ask' : 'search'} autoFocus enterKeyHint="search" value={text} onChange={(event) => { setText(event.target.value); if (!event.target.value.trim()) setOverride(undefined) }} />
         {hasModel && <Segmented label="how to search" options={modeOptions} value={mode} onChange={setOverride} />}
       </form>
+      {suggested.length > 0 && <div className="suggest">
+        {suggested.map((sender) => <button key={sender.address.toLowerCase()} type="button" title={sender.name} onClick={() => { const next = fromSender(text, sender.address); setText(next); setOverride(undefined); void run(next, 'find') }}>{sender.address}</button>)}
+      </div>}
       <p className={`status${busy ? ' is-busy' : ''}`} aria-live="polite">{status}</p>
       {error && <p className="note is-error" role="alert">{error}</p>}
 

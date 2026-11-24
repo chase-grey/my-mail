@@ -2,6 +2,9 @@
 .search-form { display: flex; flex-direction: column; gap: 0.5rem; }
 .search-form input { width: 100%; min-height: 2.75rem; padding: 0.55rem 1rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font-size: max(16px, 1rem); transition: border-color var(--quick); }
 .search-form input:focus { outline: none; border-color: var(--accent); }
+.suggest { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.suggest button { max-width: 100%; min-height: 2rem; padding: 0.2rem 0.75rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.suggest button:hover { border-color: var(--accent); color: var(--accent); }
 .answer { padding-bottom: 0.4rem; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 .cite { min-width: 1.4rem; margin: 0 0.1rem; padding: 0 0.3rem; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 0.8rem; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.5; }
 .cite:hover { background: var(--accent); color: var(--on-accent); }

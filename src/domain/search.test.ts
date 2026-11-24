@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { answerParts, rememberSearch, searchMode } from './search'
+import { answerParts, fromSender, rememberSearch, searchMode, suggestSenders } from './search'
 
 describe('search', () => {
   it('finds on operators and bare words, asks on questions and sentences', () => {
@@ -18,6 +18,24 @@ describe('search', () => {
     expect(rememberSearch(['tax', 'dinner'], ' Dinner ')).toEqual(['Dinner', 'tax'])
     expect(rememberSearch(['a', 'b'], 'c', 2)).toEqual(['c', 'a'])
     expect(rememberSearch(['a'], '  ')).toEqual(['a'])
+  })
+
+  it('suggests senders that start with the word being typed', () => {
+    const senders = [
+      { name: 'Ruth Okafor', address: 'ruth@example.com' },
+      { name: 'Harbor Outfitters', address: 'orders@harbor.example.com' },
+      { name: 'Ruth Okafor', address: 'Ruth@example.com' },
+      { name: 'Dana Ruiz', address: 'dana@example.com' },
+    ]
+    expect(suggestSenders('ru', senders).map((item) => item.address)).toEqual(['ruth@example.com', 'dana@example.com'])
+    expect(suggestSenders('invoice har', senders).map((item) => item.address)).toEqual(['orders@harbor.example.com'])
+    expect(suggestSenders('ord', senders)).toHaveLength(1)
+    expect(suggestSenders('ru', senders, 1)).toHaveLength(1)
+    expect(suggestSenders('r', senders)).toEqual([])
+    expect(suggestSenders('from:ru', senders)).toEqual([])
+    expect(suggestSenders('ruth ', senders)).toEqual([])
+    expect(suggestSenders('uth', senders)).toEqual([])
+    expect(fromSender('invoice har', 'orders@harbor.example.com')).toBe('invoice from:orders@harbor.example.com')
   })
 
   it('splits an answer at the message numbers it cites', () => {
