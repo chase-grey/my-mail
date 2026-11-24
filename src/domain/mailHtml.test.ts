@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { frameDocument, framePolicy, linkParts, wearsAppColours } from './mailHtml'
+import { brightness, darkened, frameDocument, framePolicy, linkParts, mailLook, wearsAppColours } from './mailHtml'
+
+const designed = '<html><body><table bgcolor="#ffffff"><tr><td style="color:#222222">sale</td></tr></table></body></html>'
+const plain = '<p>Does <b>five</b> work?</p>'
+const on = `<html class="${darkened}">`
 
 describe('mail markup for reading', () => {
   it('puts the policy ahead of anything the message brings and opens links in a new tab', () => {
@@ -12,12 +16,43 @@ describe('mail markup for reading', () => {
     expect(framePolicy).not.toMatch(/script|frame|connect/)
   })
 
-  it('lets plain markup follow dark mode and lays designed mail on white', () => {
-    expect(wearsAppColours('<p>Does <b>five</b> work?</p>')).toBe(true)
+  it('darkens every message in dark mode, with a way back to light for one', () => {
+    expect(mailLook(true, false)).toEqual({ look: 'dark', toggle: 'light mode' })
+    expect(mailLook(true, true)).toEqual({ look: 'light', toggle: 'dark mode' })
+    // Designed mail is turned dark; mail with no colours of its own takes the app's dark ones.
+    expect(frameDocument(designed, 'dark')).toContain(on)
+    expect(frameDocument(designed, 'dark')).not.toContain('background: #fff')
+    for (const html of [designed, plain]) expect(frameDocument(html, 'dark')).toContain('color-scheme: dark')
+    expect(frameDocument(plain, 'dark')).toContain('color: #ececea')
+    // Switched to light, either kind is on white as it was sent.
+    for (const html of [designed, plain]) {
+      const page = frameDocument(html, 'light')
+      expect(page).not.toContain(on)
+      expect(page).toContain('color-scheme: light')
+      expect(page).toContain('html { background: #fff; }')
+    }
+  })
+
+  it('offers nothing to switch in light mode and darkens nothing', () => {
+    expect(mailLook(false, false)).toEqual({ look: 'app' })
+    expect(mailLook(false, true)).toEqual({ look: 'app' })
+    for (const html of [designed, plain]) {
+      expect(frameDocument(html, 'app')).not.toContain(on)
+      expect(frameDocument(html)).toContain('color-scheme: light')
+    }
+  })
+
+  it('tells markup with colours of its own from markup without', () => {
+    expect(wearsAppColours(plain)).toBe(true)
     expect(wearsAppColours('<div style="color:rgb(0,0,0)">hi</div>')).toBe(false)
-    expect(wearsAppColours('<table bgcolor="#ffffff"><tr><td>sale</td></tr></table>')).toBe(false)
-    expect(frameDocument('<p>hi</p>')).toContain('color-scheme: light dark')
-    expect(frameDocument('<p style="background:#fff">hi</p>')).toContain('color-scheme: light;')
+    expect(wearsAppColours(designed)).toBe(false)
+  })
+
+  it('reads how bright a painted background is, and nothing from a see-through one', () => {
+    expect(brightness('rgb(255, 255, 255)')).toBeCloseTo(1)
+    expect(brightness('rgb(16, 17, 20)')).toBeLessThan(0.35)
+    expect(brightness('rgba(0, 0, 0, 0)')).toBeUndefined()
+    expect(brightness('transparent')).toBeUndefined()
   })
 
   it('finds the links in bare text and leaves the full stop after one alone', () => {
