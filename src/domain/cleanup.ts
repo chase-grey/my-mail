@@ -27,6 +27,8 @@ export type SenderGroup = {
   kindConfidence?: number
   /** Already put away this visit. The row stays where it was so the list does not move under the pointer. */
   cleared?: 'archive' | 'delete'
+  /** A rule was made along with it, so the next one from this sender never lands. */
+  ruled?: boolean
 }
 
 export function groupBySender(messages: ScanMessage[]): SenderGroup[] {
@@ -83,6 +85,13 @@ export function describeGroup(group: SenderGroup): string {
   const parts = [`${group.count} ${group.count === 1 ? 'message' : 'messages'}`]
   if (group.unread) parts.push(`${group.unread} unread`)
   if (group.flagged) parts.push(`${group.flagged} flagged`)
+  return parts.join(' · ')
+}
+
+/** What a cleared row says in place of its counts: what happened to the mail, and the rule when one was made. */
+export function describeCleared(group: SenderGroup): string {
+  const parts = [`${group.cleared === 'delete' ? 'deleted' : 'archived'} ${group.count}`]
+  if (group.ruled) parts.push('rule added')
   return parts.join(' · ')
 }
 

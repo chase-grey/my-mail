@@ -853,7 +853,7 @@ export default function App() {
         clearedRef.current.delete(group.address)
         const back = new Set(scanRef.current.map((message) => message.id))
         scanRef.current = [...scanRef.current, ...(taken?.scan ?? []).filter((message) => !back.has(message.id))]
-        setCleanup((current) => ({ ...current, working: undefined, total: (current.total ?? current.scanned) + group.count, groups: current.groups.map((item) => item.address === group.address ? { ...item, cleared: undefined } : item), staleCount: staleIds(scanRef.current, staleDays).length }))
+        setCleanup((current) => ({ ...current, working: undefined, total: (current.total ?? current.scanned) + group.count, groups: current.groups.map((item) => item.address === group.address ? { ...item, cleared: undefined, ruled: undefined } : item), staleCount: staleIds(scanRef.current, staleDays).length }))
         const inbox = taken?.inbox ?? []
         if (inbox.length) {
           setMessages((current) => [...current, ...inbox.filter((message) => !current.some((item) => item.id === message.id))])
@@ -916,7 +916,7 @@ export default function App() {
       const gone = new Set(group.ids)
       clearedRef.current.set(group.address, { scan: scanRef.current.filter((message) => gone.has(message.id)), inbox: messagesRef.current.filter((message) => gone.has(message.id)), ruleId })
       scanRef.current = scanRef.current.filter((message) => !gone.has(message.id))
-      setCleanup((current) => ({ ...current, working: undefined, total: (current.total ?? current.scanned) - group.count, groups: current.groups.map((item) => item.address === group.address ? { ...item, cleared: action } : item), staleCount: staleIds(scanRef.current, staleDays).length }))
+      setCleanup((current) => ({ ...current, working: undefined, total: (current.total ?? current.scanned) - group.count, groups: current.groups.map((item) => item.address === group.address ? { ...item, cleared: action, ruled: Boolean(ruleId) } : item), staleCount: staleIds(scanRef.current, staleDays).length }))
       drop(messages.filter((message) => gone.has(message.id)))
       await persistAutomation({ ...automationRef.current, decisions: rememberDecision(automationRef.current.decisions, asMessage(group.sample), action, new Date().toISOString()) })
     } finally {

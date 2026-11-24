@@ -101,8 +101,11 @@ a { color: var(--accent); }
 .row-buttons > button:hover { background: var(--surface-2); color: var(--text); }
 .row-buttons > button.is-suggested { color: var(--accent); font-weight: 600; }
 .sender { transition: opacity var(--move); }
-.sender.is-working, .sender.is-cleared .row-main { opacity: 0.45; }
-.sender.is-cleared .row-main { transition: opacity var(--move); }
+.sender.is-working { opacity: 0.45; }
+.sender.is-cleared .row-title { color: var(--muted); }
+.sender.is-cleared .chip { display: none; }
+.sender-done { color: var(--accent); font-weight: 600; animation: rise var(--move) var(--ease); }
+.sender-done::before { content: "✓ "; }
 .suggest { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; padding: 0.5rem 0; border-top: 1px solid var(--border); }
 .suggest span { flex: 1 1 14rem; }
 .card > .suggest:first-child { border-top: 0; }

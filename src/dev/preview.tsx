@@ -97,7 +97,8 @@ const search: SearchActions = {
 
 // Clean up reads thousands of messages; a few senders with several each is enough to see the screen.
 const scanned = seed.flatMap((item, at) => Array.from({ length: (at % 4) * 3 + 1 }, (_, copy) => ({ id: `${item.message.id}-${copy}`, from: item.message.from, subject: item.message.subject, preview: item.message.preview, receivedAt: hoursAgo(at * 30 + copy * 200), isRead: copy > 0, flagged: false })))
-const senders = groupBySender(scanned).map((group) => ({ ...group, kind: seed.find((item) => item.message.from.address === group.address)?.triage?.category }))
+// The second sender is already cleared with a rule, so the confirmation is on the screen.
+const senders = groupBySender(scanned).map((group, index) => ({ ...group, ...(index === 1 ? { cleared: 'archive' as const, ruled: true } : {}), kind: seed.find((item) => item.message.from.address === group.address)?.triage?.category }))
 const cleanupActions: CleanupActions = { scan: async () => {}, archiveSender: () => wait(400), deleteSender: () => wait(400), blockSender: () => wait(400), undoSender: () => wait(400), unsubscribe: async (group) => `unsubscribed from ${group.address}`, archiveStale: () => wait(400) }
 const receipts = Array.from({ length: 9 }, (_, at) => ({ ...seed[7].message, id: `r${at}`, from: at % 2 ? seed[7].message.from : { name: 'Harbor Outfitters', address: 'orders@harbor.example.com' }, subject: at % 2 ? 'Your receipt' : `Order ${4100 + at} confirmed`, receivedAt: hoursAgo(at * 190 + 20), body: `Order total $${(48.12 + at * 13.5).toFixed(2)}. Thanks for shopping with us.\n\nItems\n1 x olive oil\n2 x sourdough\n\nPaid with card ending 4417.` }))
 

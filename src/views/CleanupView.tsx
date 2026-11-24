@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { describeGroup, likelyNoise, type SenderGroup } from '../domain/cleanup'
+import { describeCleared, describeGroup, likelyNoise, type SenderGroup } from '../domain/cleanup'
 import { categoryLabel } from '../domain/triage'
 import { Card, Empty, Menu } from '../ui'
 
@@ -35,7 +35,9 @@ function SenderRow({ group, onError, actions }: { group: SenderGroup; onError: (
   return <li className={`row sender${working ? ' is-working' : ''}${group.cleared ? ' is-cleared' : ''}`}>
     <div className="row-main">
       <span className="row-title" title={group.address}>{group.name}{group.kind && <span className={`chip${noise ? '' : ' is-quiet'}`}>{categoryLabel[group.kind]}</span>}</span>
-      <small>{[describeGroup(group), note, group.cleared && (group.cleared === 'archive' ? 'archived' : 'deleted')].filter(Boolean).join(' · ')}</small>
+      {group.cleared
+        ? <small className="sender-done" role="status">{describeCleared(group)}</small>
+        : <small>{[describeGroup(group), note].filter(Boolean).join(' · ')}</small>}
     </div>
     {group.cleared ? <div className="row-buttons">
       <button type="button" disabled={working} onClick={() => perform(() => actions.undoSender(group))}>undo</button>
