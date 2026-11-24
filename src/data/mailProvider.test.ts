@@ -103,6 +103,15 @@ describe('mail provider', () => {
     expect(sleep).toHaveBeenCalledWith(7000)
   })
 
+  it('asks for immutable ids on every move inside a batch', async () => {
+    const request = vi.fn(async (_path: string, init?: RequestInit) => ({
+      responses: (JSON.parse(init!.body as string) as { requests: { id: string }[] }).requests.map(({ id }) => ({ id, status: 201 })),
+    }))
+    await new MailProvider({ request } as unknown as GraphClient).archiveMany(['a', 'b'])
+    const sent = JSON.parse(request.mock.calls[0][1]!.body as string) as { requests: { headers: Record<string, string> }[] }
+    for (const item of sent.requests) expect(item.headers.Prefer).toContain('IdType="ImmutableId"')
+  })
+
   it('treats a vanished snoozed message as already handled', async () => {
     const request = vi.fn(async () => { throw new GraphError(404, 'gone') })
     await expect(new MailProvider({ request } as unknown as GraphClient).unsnooze('m1')).resolves.toBe(false)

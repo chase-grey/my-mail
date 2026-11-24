@@ -63,6 +63,7 @@ function errorText(error: unknown): string {
 }
 
 const notMoved = (count: number) => `${count} did not move`
+const resumeAfterMs = 60_000
 
 async function createServices(clientId: string): Promise<Services> {
   const auth = await MicrosoftAuth.create(clientId)
@@ -141,6 +142,9 @@ export default function App() {
   triageRef.current = triage
   const settingsRef = useRef(settings)
   settingsRef.current = settings
+  const busyRef = useRef(busy)
+  busyRef.current = busy
+  const lastRunRef = useRef(0)
 
   useEffect(() => saveSettings(settings), [settings])
   useEffect(() => writeJson(triageKey, triage), [triage])
@@ -251,12 +255,17 @@ export default function App() {
       if (quiet.length) {
         const receipts = quiet.filter(toReceipts)
         const receiptSenders = new Set(receipts.map((message) => message.from.address.trim().toLowerCase()))
-        await current.mail.fileReceipts(receipts.map((message) => message.id))
-        if (quiet.length > receipts.length) await current.mail.archiveMany(quiet.filter((message) => !toReceipts(message)).map((message) => message.id))
-        autoArchived = quiet.length
-        filed = receipts.length
-        const gone = new Set(quiet.map((message) => message.id))
-        const sure = quiet.map((message) => ({ message, triage: cache[message.id] }))
+        // What Outlook refused to move stays on screen; saying it left would hide mail that is still in the inbox.
+        const stuck = new Set([
+          ...await current.mail.fileReceipts(receipts.map((message) => message.id)),
+          ...await current.mail.archiveMany(quiet.filter((message) => !toReceipts(message)).map((message) => message.id)),
+        ])
+        const moved = quiet.filter((message) => !stuck.has(message.id))
+        if (stuck.size) setError(notMoved(stuck.size))
+        autoArchived = moved.length
+        filed = receipts.filter((message) => !stuck.has(message.id)).length
+        const gone = new Set(moved.map((message) => message.id))
+        const sure = moved.map((message) => ({ message, triage: cache[message.id] }))
         inbox = inbox.filter((message) => !gone.has(message.id))
         cache = Object.fromEntries(Object.entries(cache).filter(([id]) => !gone.has(id)))
 
@@ -278,7 +287,17 @@ export default function App() {
     setBusy('checking mail')
     setError(undefined)
     const now = new Date().toISOString()
+    lastRunRef.current = Date.now()
     try {
+      // The other device may have added rules or snoozes since this one last looked. Working from an old copy
+      // would take its rules back out of Outlook, so the shared file is read again before anything is synced.
+      try {
+        const loaded = await current.store.load()
+        automationRef.current = loaded
+        setAutomation(loaded)
+      } catch (failure) {
+        setError(errorText(failure))
+      }
       let automationState = automationRef.current
       // Snoozed mail whose time has come returns first, so the inbox read below already includes it.
       const due = dueSnoozes(automationState.snoozes)
@@ -360,16 +379,24 @@ export default function App() {
       if (!account) return
       setAccountName(account.username)
       setConnection('connected')
-      try {
-        const loaded = await created.store.load()
-        automationRef.current = loaded
-        setAutomation(loaded)
-      } catch (failure) {
-        setError(errorText(failure))
-      }
       await run(created, { settings: loadSettings() })
     }).catch((failure: unknown) => setError(errorText(failure)))
   }, [run])
+
+  // The installed app stays alive in the background, so coming back to it has to look for new mail.
+  useEffect(() => {
+    if (!services || connection !== 'connected') return
+    const check = () => {
+      if (document.visibilityState !== 'visible' || busyRef.current || Date.now() - lastRunRef.current < resumeAfterMs) return
+      void run(services, { settings: settingsRef.current })
+    }
+    document.addEventListener('visibilitychange', check)
+    window.addEventListener('focus', check)
+    return () => {
+      document.removeEventListener('visibilitychange', check)
+      window.removeEventListener('focus', check)
+    }
+  }, [services, connection, run])
 
   async function connect(): Promise<void> {
     setBusy('connecting')
@@ -382,9 +409,6 @@ export default function App() {
       const account = await current.auth.signIn()
       setAccountName(account.username)
       setConnection('connected')
-      const loaded = await current.store.load()
-      automationRef.current = loaded
-      setAutomation(loaded)
       await run(current, { settings })
     } catch (failure) {
       setError(errorText(failure))
@@ -464,11 +488,15 @@ export default function App() {
       if (!services || !list.length) return
       setError(undefined)
       try {
-        await services.mail.fileReceipts(list.filter(isReceipt).map((message) => message.id))
-        await services.mail.archiveMany(list.filter((message) => !isReceipt(message)).map((message) => message.id))
-        drop(list)
+        const stuck = new Set([
+          ...await services.mail.fileReceipts(list.filter(isReceipt).map((message) => message.id)),
+          ...await services.mail.archiveMany(list.filter((message) => !isReceipt(message)).map((message) => message.id)),
+        ])
+        const moved = list.filter((message) => !stuck.has(message.id))
+        drop(moved)
+        if (stuck.size) setError(notMoved(stuck.size))
         const at = new Date().toISOString()
-        await persistAutomation({ ...automationRef.current, decisions: list.reduce((decisions, message) => rememberDecision(decisions, message, 'archive', at, undefined, isReceipt(message)), automationRef.current.decisions) })
+        await persistAutomation({ ...automationRef.current, decisions: moved.reduce((decisions, message) => rememberDecision(decisions, message, 'archive', at, undefined, isReceipt(message)), automationRef.current.decisions) })
       } catch (failure) {
         setError(errorText(failure))
       }
@@ -672,8 +700,8 @@ export default function App() {
     load: (before) => services!.mail.receipts(inboxPageSize, before),
     fromArchive: async (onProgress) => {
       const ids = await services!.mail.archivedReceipts()
-      await services!.mail.fileReceipts(ids, onProgress)
-      return ids.length
+      const stuck = await services!.mail.fileReceipts(ids, onProgress)
+      return ids.length - stuck.length
     },
     toInbox: (message) => actions.restore(message),
   }

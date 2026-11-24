@@ -169,7 +169,8 @@ export class MailProvider {
     for (const group of chunk(ids, batchLimit)) {
       let pending = group
       for (let attempt = 0; pending.length && attempt < moveAttempts; attempt++) {
-        const requests = pending.map((id, index) => ({ id: String(index), method: 'POST', url: `/me/messages/${encodeURIComponent(id)}/move`, headers: { 'Content-Type': 'application/json' }, body: { destinationId } }))
+        // Headers on the batch itself do not reach the requests inside it, and these ids are only valid with this one.
+        const requests = pending.map((id, index) => ({ id: String(index), method: 'POST', url: `/me/messages/${encodeURIComponent(id)}/move`, headers: { 'Content-Type': 'application/json', ...mailDefaultHeaders }, body: { destinationId } }))
         const again: string[] = []
         let wait = 2 ** attempt
         try {
@@ -298,8 +299,9 @@ export class MailProvider {
     await this.move(id, await this.receiptsFolder())
   }
 
-  async fileReceipts(ids: string[], onProgress?: (done: number) => void): Promise<void> {
-    if (ids.length) await this.moveMany(ids, await this.receiptsFolder(), onProgress)
+  /** Returns the ids that did not move. */
+  async fileReceipts(ids: string[], onProgress?: (done: number) => void): Promise<string[]> {
+    return ids.length ? this.moveMany(ids, await this.receiptsFolder(), onProgress) : []
   }
 
   /** Ids of archived mail that carries the receipt category: receipts sorted before the folder existed. */
