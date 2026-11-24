@@ -10,8 +10,19 @@ export class GraphError extends Error {
     public readonly status: number,
     public readonly responseBody: string,
   ) {
-    super(`microsoft graph returned ${status}`)
+    const reason = graphReason(responseBody)
+    super(reason ? `microsoft graph returned ${status}: ${reason}` : `microsoft graph returned ${status}`)
     this.name = 'GraphError'
+  }
+}
+
+/** Graph says why in `error.message`; without it a 400 cannot be told apart from any other. */
+function graphReason(responseBody: string): string | undefined {
+  try {
+    const message = (JSON.parse(responseBody) as { error?: { message?: unknown } }).error?.message
+    return typeof message === 'string' && message.trim() ? message.trim().slice(0, 200) : undefined
+  } catch {
+    return undefined
   }
 }
 
