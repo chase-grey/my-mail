@@ -136,7 +136,7 @@ export function useMediaQuery(query: string): boolean {
   )
 }
 
-export type IconName = 'more' | 'refresh' | 'back' | 'inbox' | 'search' | 'receipt' | 'clean' | 'rules' | 'settings' | 'out' | 'keys' | 'compose' | 'close'
+export type IconName = 'more' | 'refresh' | 'back' | 'inbox' | 'search' | 'receipt' | 'clean' | 'rules' | 'settings' | 'out' | 'keys' | 'compose' | 'close' | 'reply' | 'replyAll' | 'forward' | 'todo' | 'snooze' | 'archive' | 'archiveRule' | 'trash'
 
 export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
   const common = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true }
@@ -163,6 +163,22 @@ export function Icon({ name, size = 20 }: { name: IconName; size?: number }) {
       return <svg {...common}><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M7 10h.01M11 10h.01M15 10h.01M8 14h8" /></svg>
     case 'compose':
       return <svg {...common}><path d="M12 5H6a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6" /><path d="M17.5 4.5l2 2L12 14l-2.8.8.8-2.8z" /></svg>
+    case 'reply':
+      return <svg {...common}><path d="M10 7l-5 5 5 5" /><path d="M5 12h9a5 5 0 0 1 5 5v1" /></svg>
+    case 'replyAll':
+      return <svg {...common}><path d="M8 7l-5 5 5 5" /><path d="M13 7l-5 5 5 5" /><path d="M8 12h8a5 5 0 0 1 5 5v1" /></svg>
+    case 'forward':
+      return <svg {...common}><path d="M14 7l5 5-5 5" /><path d="M19 12h-9a5 5 0 0 0-5 5v1" /></svg>
+    case 'todo':
+      return <svg {...common}><circle cx="12" cy="12" r="8.5" /><path d="M8.4 12.3l2.5 2.5 4.7-5.2" /></svg>
+    case 'snooze':
+      return <svg {...common}><circle cx="12" cy="12" r="8.5" /><path d="M12 7.5V12l3 2" /></svg>
+    case 'archive':
+      return <svg {...common}><path d="M4 5h16v4H4z" /><path d="M5.5 9v9a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V9" /><path d="M10 13h4" /></svg>
+    case 'archiveRule':
+      return <svg {...common}><path d="M4 5h16v4H4z" /><path d="M5.5 9v9a1 1 0 0 0 1 1h11a1 1 0 0 0 1-1V9" /><path d="M12 11.5v5M9.5 14h5" /></svg>
+    case 'trash':
+      return <svg {...common}><path d="M5 7h14" /><path d="M9.5 7V5h5v2" /><path d="M7 7l.8 12h8.4L17 7" /></svg>
     case 'close':
       return <svg {...common}><path d="M6 6l12 12M18 6L6 18" /></svg>
     case 'out':

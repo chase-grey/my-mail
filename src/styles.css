@@ -154,14 +154,6 @@ a { color: var(--accent); }
 .quick.is-suggested { color: var(--accent); font-weight: 600; }
 .quick:hover { background: var(--surface-2); }
 .quick:active { scale: 0.94; }
-/* The tick on a wide screen's row. Ticked rows are what the bar acts on. */
-.pick { flex: none; display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: 50%; color: var(--muted); }
-.pick::before { content: ""; grid-area: 1 / 1; width: 1.15rem; height: 1.15rem; border: 1.5px solid currentColor; border-radius: 50%; opacity: 0.55; transition: background var(--quick), opacity var(--quick); }
-.pick::after { content: ""; grid-area: 1 / 1; width: 0.3rem; height: 0.55rem; margin-top: -0.12rem; border: solid var(--on-accent); border-width: 0 2px 2px 0; rotate: 45deg; opacity: 0; }
-.pick:hover::before { opacity: 1; }
-.pick[aria-checked="true"] { color: var(--accent); }
-.pick[aria-checked="true"]::before { background: currentColor; opacity: 1; }
-.pick[aria-checked="true"]::after { opacity: 1; }
 .zero { padding: 3rem 0; color: var(--muted); text-align: center; animation: rise var(--move) var(--ease); }
 
 /* the open message */
@@ -174,8 +166,9 @@ a { color: var(--accent); }
 .mail-body { margin-top: 0.2rem; padding: 0.7rem 0.85rem; border-radius: 8px; background: var(--surface-2); font-size: 0.92rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
 .item .mail-body { background: color-mix(in srgb, var(--text) 5%, transparent); max-height: 22rem; overflow-y: auto; }
 .mail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; margin-inline: -0.5rem; }
-.item .mail-actions { order: 1; }
-.mail-actions > button { min-height: 2.5rem; padding: 0 0.8rem; border-radius: 999px; color: var(--muted); font-size: 0.9rem; transition: background var(--quick), color var(--quick), scale var(--quick); }
+.item .mail-actions { order: 1; flex-wrap: nowrap; }
+.item .mail-actions > button { gap: 0.3rem; padding: 0 0.5rem; font-size: 0.85rem; white-space: nowrap; }
+.mail-actions > button { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 2.5rem; padding: 0 0.8rem; border-radius: 999px; color: var(--muted); font-size: 0.9rem; transition: background var(--quick), color var(--quick), scale var(--quick); }
 .mail-actions > button:hover { background: var(--surface-2); color: var(--text); }
 .mail-actions > button:active { scale: 0.94; }
 .mail-actions > button.is-suggested, .mail-actions > button.is-suggested:hover { background: var(--accent); color: var(--on-accent); font-weight: 600; }
@@ -288,14 +281,10 @@ kbd { display: inline-grid; place-items: center; min-width: 1.75rem; height: 1.7
   .bar { grid-area: 1 / 2; align-self: end; flex-wrap: nowrap; max-width: 66rem; margin: 0 0.75rem 0 0; padding: 1rem 0 0.4rem; }
   .bar > button { white-space: nowrap; }
   .bar .menu { margin-left: 0; }
-  .bar-count { display: inline-flex; align-items: center; gap: 0.35rem; margin-left: auto; }
   .bar-all { margin-left: auto; border: 1px solid var(--border); }
-  .bar-count + .bar-all { margin-left: 0; }
   .inbox > .reader { grid-row: 2 / -1; margin-top: 0.35rem; }
-  .list .item.is-picked .item-clip { border-color: var(--accent); }
-  .list .item.is-picked:not(.is-open) .mail { background: var(--accent-soft); }
-  .main:has(.reader) .item.is-open .pick { color: inherit; }
-  .main:has(.reader) .item.is-open .pick::after { border-color: var(--accent); }
+  /* Shift and click highlights rows; it should not also select their text. */
+  .list .mail-open { user-select: none; }
   .reader-inner { padding: 0.6rem 2.25rem 3rem; animation: rise var(--move) var(--ease); }
   .reader .detail { gap: 0.5rem; padding: 0; }
   .reader .mail-actions { position: sticky; top: 0; z-index: 2; margin: 0 -0.5rem 0.75rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border); background: var(--surface); }

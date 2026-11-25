@@ -36,7 +36,7 @@ const long = 'Hi,\n\nDoes five work on Sunday? Dad is doing the roast again and 
 const seed: Triaged[] = [
   mail(1, 'Ruth Calder', 'Dinner Sunday?', long, 'reply', 'reply', 'asks if 5pm sunday works, bring a salad and the folding chairs'),
   mail(2, 'Linden County Treasurer', 'Property tax statement', 'Your second installment is due January 31. Amount due: $2,140.00. Pay online or by mail.', 'action', 'task', 'second installment due jan 31, $2,140', { hasAttachments: true }),
-  mail(3, 'Owen Marsh', 'Re: cabin weekend', 'I can drive if someone else books the place. Are we still thinking the second weekend of February?', 'reply', 'reply', 'will drive if someone books; wants the february weekend confirmed', { flagged: true, conversationId: 'cabin' }),
+  mail(3, 'Owen Marsh', 'Re: cabin weekend', 'I can drive if someone else books the place. Are we still thinking the second weekend of February?', 'reply', 'reply', 'will drive if someone books; wants the february weekend confirmed', { flagged: true, conversationId: 'cabin', recipients: 3 }),
   mail(4, 'Northside Dental', 'Your appointment is confirmed', 'This confirms your cleaning on Tuesday, December 8 at 9:40 am. Reply C to confirm.', 'waiting', 'keep', 'cleaning tuesday dec 8 at 9:40'),
   mail(5, 'Harbor Outfitters', 'Members: 20% off through Sunday', 'Members save 20% on one full-price item and an extra 20% on one outlet item.', 'promo', 'archive', '20% off one item through sunday', {}, 0.72),
   mail(6, 'The Weekly Fold', 'Issue 214: slow mornings', 'This week: a case for doing less before nine, three recipes, and a reader letter.', 'newsletter', 'archive', 'weekly newsletter, issue 214'),

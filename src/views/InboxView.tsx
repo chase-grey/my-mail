@@ -1,18 +1,16 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import type { MessageActions } from '../App'
-import { ruleActionLabel, senderDomain } from '../domain/rules'
 import { snoozeOptions, type SnoozeOption } from '../domain/snooze'
 import { inboxThreads, type InboxThread } from '../domain/threads'
 import { categoryLabel, type RunSummary, type Triaged } from '../domain/triage'
-import type { Message, RuleAction, Snooze } from '../domain/types'
-import { Card, Field, Fold, Icon, Menu, Segmented, Sheet, Toast, useMediaQuery, usePresence, type MenuItem, type ToastState } from '../ui'
+import type { Message, Snooze } from '../domain/types'
+import { Card, Field, Fold, Icon, Menu, Sheet, Toast, useMediaQuery, usePresence, type IconName, type MenuItem, type ToastState } from '../ui'
 import type { ConnectionStatus } from './SettingsView'
 import { Conversation } from './Thread'
 
 type SheetState =
   | { kind: 'snooze'; threads: InboxThread[] }
   | { kind: 'task'; thread: InboxThread; title: string }
-  | { kind: 'rule'; message: Message }
 
 /** Which way a row slides as it leaves, and how long it waits when a whole group goes at once. */
 type Leave = { to: 'right' | 'left' | 'fade'; delay?: number }
@@ -23,28 +21,22 @@ type Leave = { to: 'right' | 'left' | 'fade'; delay?: number }
  */
 type Handlers = {
   open: (item: InboxThread) => void
-  /** Ticks or unticks a row on a wide screen. With shift held, every row from the last ticked one to this one. */
-  pick: (item: InboxThread, range?: boolean) => void
+  /** Shift and click on a wide screen: the row joins the highlighted ones, or leaves them. */
+  pick: (item: InboxThread) => void
   archive: (item: InboxThread) => void
-  /** Archive, and add a rule that archives the sender from now on. */
+  /** Archive everything on the list from the sender, and add a rule that archives what they send next. */
   block: (item: InboxThread) => void
   remove: (item: InboxThread) => void
-  keep: (item: InboxThread) => void
-  flag: (item: InboxThread) => void
   task: (item: InboxThread) => void
   reply: (item: InboxThread) => void
   replyAll: (item: InboxThread) => void
   forward: (item: InboxThread) => void
   snooze: (item: InboxThread) => void
-  rule: (item: InboxThread) => void
-  unsubscribe: (item: InboxThread) => void
   archiveOthers: (item: InboxThread) => void
-  archiveSender: (item: InboxThread) => void
 }
 
 const swipeAt = 88
 const keyOf = (item: InboxThread) => item.key
-const sameSender = (a: InboxThread, b: InboxThread) => a.message.from.address.toLowerCase() === b.message.from.address.toLowerCase()
 
 async function each(list: Message[], work: (message: Message) => Promise<void>): Promise<void> {
   for (const message of list) await work(message)
@@ -63,38 +55,72 @@ function when(receivedAt: string, long = false): string {
 const percent = (value: number) => `${Math.round(value * 100)}% sure`
 const isLoud = (item: Triaged) => Boolean(item.triage?.needsReply || item.triage?.category === 'action')
 
-/** What `more` holds for one conversation. The same list on a phone row and in the bar on a wide screen. */
-function moreItems(item: InboxThread, kept: boolean, on: Handlers): MenuItem[] {
-  return [
-    { label: kept ? 'kept' : 'keep in inbox', disabled: kept, onSelect: () => on.keep(item) },
-    { label: 'reply all', onSelect: () => on.replyAll(item) },
-    { label: 'forward', onSelect: () => on.forward(item) },
-    { label: item.message.flagged ? 'unflag' : 'flag', onSelect: () => on.flag(item) },
-    { label: 'unsubscribe', onSelect: () => on.unsubscribe(item) },
-    { label: 'always do this for the sender', onSelect: () => on.rule(item) },
-    { label: 'archive everything else', onSelect: () => on.archiveOthers(item) },
-    { label: 'archive all from sender', onSelect: () => on.archiveSender(item) },
-    { label: 'delete', onSelect: () => on.remove(item) },
-  ]
+/** One thing that can be done to mail: a button where there is room for it, a line in `more` where there is not. */
+type Act = { label: string; icon: IconName; run: () => void; disabled?: boolean; suggested?: boolean }
+
+/** Mail with more than one other person on it: sent to several, or a conversation several have written in. */
+function isGroup(item: InboxThread): boolean {
+  return item.all.some((message) => (message.recipients ?? 0) > 1) || new Set(item.all.map((message) => message.from.address.toLowerCase())).size > 1
 }
+
+/**
+ * Every action on mail, in the one order they are always shown: reply, to do, snooze, archive, archive + rule, then the rest.
+ * Group mail leads with reply all and the plain reply joins the rest. `one` is the single conversation acted on; with several, what needs one is off.
+ */
+export function mailActs(list: InboxThread[], on: Handlers, many: { archive: () => void; task: () => void; snooze: () => void; remove: () => void }): { main: Act[]; rest: Act[] } {
+  const one = list.length === 1 ? list[0] : undefined
+  const suggested = one?.triage?.suggested
+  const reply: Act = { label: 'reply', icon: 'reply', run: () => one && on.reply(one), disabled: !one }
+  const replyAll: Act = { label: 'reply all', icon: 'replyAll', run: () => one && on.replyAll(one), disabled: !one }
+  const group = Boolean(one && isGroup(one))
+  return {
+    main: [
+      { ...(group ? replyAll : reply), suggested: suggested === 'reply' },
+      { label: 'to do', icon: 'todo', run: many.task, suggested: suggested === 'task' },
+      { label: 'snooze', icon: 'snooze', run: many.snooze, suggested: suggested === 'snooze' },
+      { label: 'archive', icon: 'archive', run: many.archive, suggested: suggested === 'archive' },
+      { label: 'archive + rule', icon: 'archiveRule', run: () => one && on.block(one), disabled: !one },
+    ],
+    rest: [
+      group ? reply : replyAll,
+      { label: 'forward', icon: 'forward', run: () => one && on.forward(one), disabled: !one },
+      { label: 'delete', icon: 'trash', run: many.remove, suggested: suggested === 'delete' },
+      { label: 'archive everything else', icon: 'archive', run: () => one && on.archiveOthers(one), disabled: !one },
+    ],
+  }
+}
+
+/** Room, in rem, for the five main buttons, the menu and `archive all but these`; then a rem for every letter of a button and four for its icon and padding. */
+const barBase = 47
+export function extrasThatFit(labels: string[], barRem: number): number {
+  let used = barBase
+  let count = 0
+  for (const label of labels) {
+    used += 4 + label.length * 0.37
+    if (used > barRem) break
+    count++
+  }
+  // The last one out frees the menu's own room.
+  return count
+}
+
+const ActButton = ({ act }: { act: Act }) => <button type="button" className={act.suggested ? 'is-suggested' : ''} disabled={act.disabled} onClick={act.run}><Icon name={act.icon} size={16} />{act.label}</button>
+const asMenu = (acts: Act[]): MenuItem[] => acts.map((act) => ({ label: act.label, disabled: act.disabled, onSelect: act.run }))
 
 /**
  * The full message. On a phone it opens under its row, whose archive and to do sit just above, so it adds only the rest.
  * In the reading pane it has no buttons at all: the bar above the pane acts on it.
  */
-function Detail({ item, kept, pane, on }: { item: InboxThread; kept: boolean; pane: boolean; on: Handlers }) {
+function Detail({ item, pane, on }: { item: InboxThread; pane: boolean; on: Handlers }) {
   const { message, triage } = item
-  const suggested = triage?.suggested
-  const button = (label: string, action: string, run: () => void) =>
-    <button key={label} type="button" className={suggested === action ? 'is-suggested' : ''} onClick={run}>{label}</button>
+  const acts = mailActs([item], on, { archive: () => on.archive(item), task: () => on.task(item), snooze: () => on.snooze(item), remove: () => on.remove(item) })
+  const shown = acts.main.filter((act) => act.label !== 'archive' && act.label !== 'to do')
   const facts = [message.flagged && 'flagged', message.hasAttachments && 'attachment', triage && `${categoryLabel[triage.category]} · ${percent(triage.confidence)}`].filter(Boolean).join(' · ')
 
   return <div className="detail">
     {!pane && <div className="mail-actions">
-      <button type="button" onClick={() => on.block(item)}>archive + rule</button>
-      {button('reply', 'reply', () => on.reply(item))}
-      {button('snooze', 'snooze', () => on.snooze(item))}
-      <Menu label={`more for ${message.subject}`} items={moreItems(item, kept, on)} />
+      {shown.map((act) => <ActButton key={act.label} act={act} />)}
+      <Menu label={`more for ${message.subject}`} items={asMenu(acts.rest)} />
     </div>}
     {pane && <h2 className="detail-subject">{message.subject}</h2>}
     {pane && triage?.summary && <p className="detail-summary">{triage.summary}</p>}
@@ -104,7 +130,7 @@ function Detail({ item, kept, pane, on }: { item: InboxThread; kept: boolean; pa
   </div>
 }
 
-function Row({ item, index, kept, quiet, open, picked, pane, leave, on }: { item: InboxThread; index: number; kept: boolean; quiet: boolean; open: boolean; picked: boolean; pane: boolean; leave?: Leave; on: Handlers }) {
+function Row({ item, index, kept, quiet, open, lit, pane, leave, on }: { item: InboxThread; index: number; kept: boolean; quiet: boolean; open: boolean; /** Filled with the accent: the open message, or every highlighted row when several are. */ lit: boolean; pane: boolean; leave?: Leave; on: Handlers }) {
   const { message, triage } = item
   const drag = useRef<{ x: number; y: number; active: boolean }>(undefined)
   const dragged = useRef(false)
@@ -153,13 +179,13 @@ function Row({ item, index, kept, quiet, open, picked, pane, leave, on }: { item
     else if (dx <= -swipeAt) on.snooze(item)
   }
 
-  return <li id={`mail-${item.key}`} className={`item${leave ? ' is-leaving' : ''}${open ? ' is-open' : ''}${picked ? ' is-picked' : ''}${kept ? ' is-kept' : ''}`} data-leave={leave?.to} style={{ '--i': Math.min(index, 12), '--d': leave?.delay ?? 0 } as CSSProperties}>
+  return <li id={`mail-${item.key}`} className={`item${leave ? ' is-leaving' : ''}${(pane ? lit : open) ? ' is-open' : ''}${kept ? ' is-kept' : ''}`} data-leave={leave?.to} style={{ '--i': Math.min(index, 12), '--d': leave?.delay ?? 0 } as CSSProperties}>
     <div className="item-clip">
       <div className="item-under" aria-hidden="true"><span>archive</span><span>snooze</span></div>
       <article className="mail" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}
         onClickCapture={(event) => { if (dragged.current) { dragged.current = false; event.stopPropagation(); event.preventDefault() } }}>
         <div className="mail-row">
-          <button className="mail-open" type="button" aria-expanded={open} onClick={(event) => { if (pane && !kept && (event.ctrlKey || event.metaKey || event.shiftKey)) on.pick(item, event.shiftKey); else on.open(item) }}>
+          <button className="mail-open" type="button" aria-expanded={open} onMouseDown={(event) => { if (event.shiftKey) event.preventDefault() }} onClick={(event) => { if (pane && !kept && (event.shiftKey || event.ctrlKey || event.metaKey)) on.pick(item); else on.open(item) }}>
             <span className="mail-top">
               <span className={`mail-from${message.isRead ? '' : ' is-unread'}`} title={message.from.address}>{message.from.name}{item.all.length > 1 && <span className="mail-count">{item.all.length}</span>}</span>
               <small>{kind ? `${kind} · ` : ''}{when(message.receivedAt)}</small>
@@ -167,15 +193,13 @@ function Row({ item, index, kept, quiet, open, picked, pane, leave, on }: { item
             <span className="mail-subject">{message.subject}</span>
             {line && <span className="mail-summary">{line}</span>}
           </button>
-          {/* The same two buttons on every row, in the same place. On a wide screen the bar has them and the row has a tick. */}
-          {pane
-            ? !kept && <button className="pick" type="button" role="checkbox" aria-checked={picked} aria-label={`select ${message.subject}`} onClick={(event) => on.pick(item, event.shiftKey)} />
-            : <>
+          {/* The same two buttons on every row, in the same place. On a wide screen the bar has them and the row has none. */}
+          {!pane && <>
               <button className={`quick${suggested === 'archive' ? ' is-suggested' : ''}`} type="button" onClick={() => on.archive(item)}>archive</button>
               <button className={`quick${suggested === 'task' ? ' is-suggested' : ''}`} type="button" onClick={() => on.task(item)}>to do</button>
             </>}
         </div>
-        {!pane && <Fold open={open}><Detail item={item} kept={kept} pane={false} on={on} /></Fold>}
+        {!pane && <Fold open={open}><Detail item={item} pane={false} on={on} /></Fold>}
       </article>
     </div>
   </li>
@@ -200,10 +224,12 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
   const [localError, setLocalError] = useState<string>()
   const [openId, setOpenId] = useState<string>()
   const [pickedKeys, setPickedKeys] = useState<string[]>([])
-  const lastPick = useRef<string>(undefined)
   const [leaving, setLeaving] = useState<Record<string, Leave>>({})
   const [toast, setToast] = useState<ToastState>()
   const pane = useMediaQuery('(min-width: 60rem)')
+  // How wide the bar is, in rem. The wider it is, the more of the actions come out of the menu.
+  const [barRem, setBarRem] = useState(0)
+  const barRef = useRef<HTMLDivElement>(null)
   // One row per conversation. A kept conversation comes back when something new arrives in it.
   const threads = inboxThreads(items)
   const live = threads.filter((item) => !kept[item.message.id])
@@ -217,17 +243,28 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
   const onMoreRef = useRef(onMore)
   onMoreRef.current = onMore
   const follow = useRef(false)
+  const hasBar = pane && connection === 'connected'
+  useEffect(() => {
+    const bar = barRef.current
+    if (!bar || typeof ResizeObserver === 'undefined') return
+    const measure = () => setBarRem(bar.clientWidth / parseFloat(getComputedStyle(document.documentElement).fontSize))
+    const observer = new ResizeObserver(measure)
+    observer.observe(bar)
+    measure()
+    return () => observer.disconnect()
+  }, [hasBar, items.length > 0])
 
   // Rows still in play, top to bottom. The reading pane always shows one of them when there is one.
   const order = [...groups.needsMe, ...groups.probablyFine].filter((item) => !leaving[item.key])
   const selected = threads.find((item) => item.key === openId && !leaving[item.key]) ?? (pane ? order[0] : undefined)
   const selectedId = selected?.key
-  // What the bar acts on: the ticked rows, or the open message when none is ticked.
+  // What the bar acts on is what is filled with colour: the rows highlighted with shift and click, or the open message.
   const picked = pane ? order.filter((item) => pickedKeys.includes(item.key)) : []
-  const targets = picked.length ? picked : selected ? [selected] : []
+  const several = picked.length > 1
+  const targets = several ? picked : selected ? [selected] : []
   const one = targets.length === 1 ? targets[0] : undefined
-  // Archive all takes every row in the list but the ticked ones.
-  const unpicked = order.filter((item) => !pickedKeys.includes(item.key))
+  // Archive all takes every row in the list but the highlighted ones.
+  const unpicked = several ? order.filter((item) => !pickedKeys.includes(item.key)) : order
 
   // Older mail loads as the end of the list scrolls into view. A failed load waits for a tap instead of retrying.
   useEffect(() => {
@@ -327,33 +364,41 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
   }
 
   const on: Handlers = {
-    open: (item) => setOpenId(pane || selectedId !== item.key ? item.key : undefined),
-    pick: (item, range) => {
-      const from = range && lastPick.current ? order.findIndex((entry) => entry.key === lastPick.current) : -1
-      const to = order.findIndex((entry) => entry.key === item.key)
-      lastPick.current = item.key
-      if (from >= 0 && to >= 0) {
-        const span = order.slice(Math.min(from, to), Math.max(from, to) + 1).map(keyOf)
-        setPickedKeys((current) => [...new Set([...current, ...span])])
-      } else setPickedKeys((current) => current.includes(item.key) ? current.filter((key) => key !== item.key) : [...current, item.key])
+    open: (item) => { setPickedKeys([]); setOpenId(pane || selectedId !== item.key ? item.key : undefined) },
+    pick: (item) => {
+      // The open message is the first highlighted row. Down to one again, that one is simply the open message.
+      const base = several ? picked.map(keyOf) : selectedId && order.some((entry) => entry.key === selectedId) ? [selectedId] : []
+      const next = base.includes(item.key) ? base.filter((key) => key !== item.key) : [...base, item.key]
+      if (next.length > 1) { setPickedKeys(next); return }
+      setPickedKeys([])
+      if (next[0]) setOpenId(next[0])
     },
     archive: (item) => archive([item]),
     block,
     remove: (item) => clear([item], 'fade', oneByOne(actions.remove), 'deleted', true),
-    keep: (item) => clear([item], 'fade', oneByOne(actions.keep)),
-    flag: (item) => void actions.flag(item.message).catch(() => undefined),
     task: (item) => setSheet({ kind: 'task', thread: item, title: item.triage?.task ?? item.message.subject }),
     reply: (item) => answer(item, 'reply'),
     replyAll: (item) => answer(item, 'replyAll'),
     forward: (item) => actions.compose({ mode: 'forward', message: item.message }),
     snooze: (item) => setSheet({ kind: 'snooze', threads: [item] }),
-    rule: (item) => setSheet({ kind: 'rule', message: item.message }),
-    unsubscribe: (item) => void actions.unsubscribe(item.message).then((text) => say(text)).catch(() => undefined),
     archiveOthers: (item) => sweep(order.filter((entry) => entry.key !== item.key)),
-    archiveSender: (item) => sweep(order.filter((entry) => sameSender(entry, item))),
   }
 
-  // Keys act on what the bar acts on: j and k move, x ticks, e archive, r reply, a reply all, f forward, t to do, s snooze, # delete, u undo.
+  /** The actions that take several conversations at once, on whatever the bar acts on. */
+  const bulk = {
+    archive: () => archive(targets),
+    task: () => task(targets),
+    snooze: () => setSheet({ kind: 'snooze', threads: targets }),
+    remove: () => clear(targets, 'fade', oneByOne(actions.remove), counted('deleted', targets), true),
+  }
+  const acts = mailActs(targets, on, bulk)
+
+  // The main five always show. The rest come out of the menu in order, as many as the bar has room for.
+  const fits = extrasThatFit(acts.rest.map((act) => act.label), barRem)
+  const inBar = [...acts.main, ...acts.rest.slice(0, fits)]
+  const inMenu = acts.rest.slice(fits)
+
+  // Keys act on what the bar acts on: j and k move, e archive, r reply, a reply all, f forward, t to do, s snooze, # delete, u undo.
   const onKey = useRef<(event: KeyboardEvent) => void>(undefined)
   onKey.current = (event) => {
     if (event.metaKey || event.ctrlKey || event.altKey || sheet) return
@@ -362,16 +407,15 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
     if (event.key === 'j' || event.key === 'k') {
       const at = selected ? order.findIndex((entry) => entry.key === selected.key) : -1
       const next = order[Math.max(0, Math.min(order.length - 1, at + (event.key === 'j' ? 1 : -1)))]
-      if (next) { follow.current = true; setOpenId(next.key) }
+      if (next) { follow.current = true; setPickedKeys([]); setOpenId(next.key) }
       return
     }
     if (event.key === 'Escape') { if (pane) setPickedKeys([]); else setOpenId(undefined); return }
-    if (event.key === 'x' && pane && selected && order.includes(selected)) { on.pick(selected); return }
-    const many = ({ e: archive, t: task, s: (list) => setSheet({ kind: 'snooze', threads: list }), '#': (list) => clear(list, 'fade', oneByOne(actions.remove), counted('deleted', list), true) } as Record<string, ((list: InboxThread[]) => void) | undefined>)[event.key]
+    const many = ({ e: bulk.archive, t: bulk.task, s: bulk.snooze, '#': bulk.remove } as Record<string, (() => void) | undefined>)[event.key]
     const single = ({ r: on.reply, a: on.replyAll, f: on.forward } as Record<string, ((item: InboxThread) => void) | undefined>)[event.key]
     if (!targets.length || (!many && !(single && one))) return
     event.preventDefault()
-    if (many) many(targets)
+    if (many) many()
     else single!(one!)
   }
   useEffect(() => {
@@ -388,7 +432,7 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
   }
 
   const rows = (entries: { key: string; item: InboxThread; leaving: boolean }[], quiet: boolean, isKept = false) => <ul className="items">
-    {entries.map((entry, index) => <Row key={entry.key} item={entry.item} index={index} kept={isKept} quiet={quiet} open={selectedId === entry.key} picked={!isKept && pickedKeys.includes(entry.key)} pane={pane} leave={leaving[entry.key] ?? (entry.leaving ? { to: 'fade' } : undefined)} on={on} />)}
+    {entries.map((entry, index) => <Row key={entry.key} item={entry.item} index={index} kept={isKept} quiet={quiet} open={selectedId === entry.key} lit={several ? !isKept && pickedKeys.includes(entry.key) : selectedId === entry.key} pane={pane} leave={leaving[entry.key] ?? (entry.leaving ? { to: 'fade' } : undefined)} on={on} />)}
   </ul>
 
   return <div className="inbox">
@@ -420,23 +464,15 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
       </details>}
     </div>
 
-    {/* One set of buttons for the whole screen, always in the same place. They act on the ticked rows, or the open message. */}
-    {pane && targets.length > 0 && <div className="bar mail-actions" role="toolbar" aria-label="actions">
-      <button type="button" className={one?.triage?.suggested === 'archive' ? 'is-suggested' : ''} onClick={() => archive(targets)}>archive</button>
-      <button type="button" disabled={!one} onClick={() => one && on.block(one)}>archive + rule</button>
-      <button type="button" className={one?.triage?.suggested === 'task' ? 'is-suggested' : ''} onClick={() => task(targets)}>to do</button>
-      <button type="button" className={one?.triage?.suggested === 'reply' ? 'is-suggested' : ''} disabled={!one} onClick={() => one && on.reply(one)}>reply</button>
-      <button type="button" className={one?.triage?.suggested === 'snooze' ? 'is-suggested' : ''} onClick={() => setSheet({ kind: 'snooze', threads: targets })}>snooze</button>
-      <Menu label="more" items={one ? moreItems(one, Boolean(kept[one.message.id]), on) : [
-        { label: 'keep in inbox', onSelect: () => clear(targets, 'fade', oneByOne(actions.keep)) },
-        { label: 'delete', onSelect: () => clear(targets, 'fade', oneByOne(actions.remove), counted('deleted', targets), true) },
-      ]} />
-      {picked.length > 0 && <button className="bar-count" type="button" onClick={() => setPickedKeys([])}>{picked.length} selected<Icon name="close" size={14} /></button>}
-      <button className="bar-all" type="button" disabled={!unpicked.length} onClick={() => sweep(unpicked)}>{picked.length === 0 ? 'archive all' : picked.length === 1 ? 'archive all but this' : 'archive all but these'}</button>
+    {/* One set of buttons for the whole screen, always in the same place and order. They act on the highlighted rows, or the open message. */}
+    {pane && targets.length > 0 && <div className="bar mail-actions" role="toolbar" aria-label="actions" ref={barRef}>
+      {inBar.map((act) => <ActButton key={act.label} act={act} />)}
+      {inMenu.length > 0 && <Menu label="more" items={asMenu(inMenu)} />}
+      <button className="bar-all" type="button" disabled={!unpicked.length} onClick={() => sweep(unpicked)}><Icon name="archive" size={16} />{several ? 'archive all but these' : 'archive all'}</button>
     </div>}
 
     {pane && <section className="reader" aria-label="message">
-      {selected && <div className="reader-inner" key={selected.key}><Detail item={selected} kept={Boolean(kept[selected.message.id])} pane on={on} /></div>}
+      {selected && <div className="reader-inner" key={selected.key}><Detail item={selected} pane on={on} /></div>}
     </section>}
 
     <Toast toast={toast} onDone={() => setToast(undefined)} />
@@ -445,7 +481,6 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
       <div className="options">{snoozeOptions.map((option) => <button key={option} type="button" onClick={() => { setSheet(undefined); clear(sheet.threads, 'left', oneByOne((message) => actions.snooze(message, option as SnoozeOption)), `${counted('snoozed', sheet.threads)} until ${option}`, true) }}>{option}</button>)}</div>
     </Sheet>}
     {sheet?.kind === 'task' && <TaskSheet title={sheet.title} onClose={() => setSheet(undefined)} onSave={(title) => actions.task(sheet.thread.message, title).then(() => { setSheet(undefined); say('added to to do'); clearRest(sheet.thread) }).catch(() => undefined)} />}
-    {sheet?.kind === 'rule' && <RuleSheet message={sheet.message} onClose={() => setSheet(undefined)} onSave={(input) => actions.makeRule(input).then(() => { setSheet(undefined); say('rule saved') }).catch(() => undefined)} />}
   </div>
 }
 
@@ -456,25 +491,6 @@ function TaskSheet({ title, onClose, onSave }: { title: string; onClose: () => v
     <form className="stack" onSubmit={(event) => { event.preventDefault(); setSaving(true); void onSave(value).finally(() => setSaving(false)) }}>
       <Field label="task"><input autoFocus value={value} onChange={(event) => setValue(event.target.value)} /></Field>
       <div className="actions"><button className="primary" type="submit" disabled={!value.trim() || saving}>{saving ? 'adding' : 'add and archive'}</button><button className="plain" type="button" onClick={onClose}>cancel</button></div>
-    </form>
-  </Sheet>
-}
-
-const ruleActionOptions = (Object.keys(ruleActionLabel) as RuleAction[]).map((value) => ({ value, label: ruleActionLabel[value] }))
-
-function RuleSheet({ message, onClose, onSave }: { message: Message; onClose: () => void; onSave: (input: { from?: string; subject?: string; action: RuleAction }) => Promise<void> }) {
-  const [from, setFrom] = useState(message.from.address)
-  const [subject, setSubject] = useState('')
-  const [action, setAction] = useState<RuleAction>('archive')
-  const [saving, setSaving] = useState(false)
-  const domain = senderDomain(message.from.address)
-  return <Sheet title="always" onClose={onClose}>
-    <form className="stack" onSubmit={(event) => { event.preventDefault(); setSaving(true); void onSave({ from, subject, action }).finally(() => setSaving(false)) }}>
-      <Segmented label="what to do" options={ruleActionOptions} value={action} onChange={setAction} />
-      <Field label="from"><input value={from} onChange={(event) => setFrom(event.target.value)} /></Field>
-      {from !== domain && <button className="link" type="button" onClick={() => setFrom(domain)}>anyone {domain}</button>}
-      <Field label="subject has"><input value={subject} onChange={(event) => setSubject(event.target.value)} /></Field>
-      <div className="actions"><button className="primary" type="submit" disabled={saving || (!from.trim() && !subject.trim())}>{saving ? 'saving' : 'save rule'}</button><button className="plain" type="button" onClick={onClose}>cancel</button></div>
     </form>
   </Sheet>
 }

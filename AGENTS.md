@@ -31,7 +31,9 @@ Clearing mail never brings other mail in to take its place. A full check reads t
 
 ## buttons on mail
 
-A button never changes what it is. On a phone every inbox row has `archive` and `to do`, in that order, in the same spot; the verdict only marks one of them, and the open message under a row adds the rest without repeating those two. From 60rem up the rows and the reading pane have no buttons: one bar across the top of the inbox has `archive`, `to do`, `reply`, `snooze` and more, and it acts on the ticked rows, or on the open message when none is ticked. `archive all` lives at the end of that bar; with rows ticked it reads `archive all but these` and leaves them. Do not put a button on a row whose label depends on the message, and do not repeat the bar's buttons over the message.
+A button never changes what it is, and the actions always come in one order: `reply`, `to do`, `snooze`, `archive`, `archive + rule`, then `reply all`, `forward`, `delete` and `archive everything else` (`mailActs` in `src/views/InboxView.tsx`). Mail with more than one other person on it leads with `reply all` and the plain `reply` joins the rest. Each has an icon. There is no `keep in inbox`, `flag`, `unsubscribe` or `always do this for the sender` on inbox mail.
+
+On a phone every inbox row has `archive` and `to do`, in that order, in the same spot; the verdict only marks one of them, and the open message under a row adds the rest without repeating those two. From 60rem up the rows and the reading pane have no buttons: one bar across the top of the inbox has them, and the wider the bar, the more of the rest come out of the menu, in order (`extrasThatFit`). The bar acts on whatever is filled with the accent colour: the open message, or the rows highlighted with shift and click. There are no tick boxes. `archive all` lives at the end of that bar; with rows highlighted it reads `archive all but these` and leaves them. Do not put a button on a row whose label depends on the message, and do not repeat the bar's buttons over the message.
 
 ## threads
 
@@ -53,7 +55,7 @@ An open message has a `chat` link beside `find related`, wherever it is opened. 
 
 ## archiving many
 
-The inbox has three ways to archive in bulk, and all three go through `sweep` in `src/views/InboxView.tsx`: `archive all` (at the end of the bar from 60rem up, where ticked rows turn it into `archive all but these`; at the top of the list on a phone), and `archive everything else` and `archive all from sender` in a message's menu. Each clears whole conversations, leaves mail kept in the inbox alone, covers only what is loaded in the list, and offers undo for everything it moved. A new bulk action goes through `sweep` too; do not add one that skips undo or touches kept mail.
+The inbox has two ways to archive in bulk, and both go through `sweep` in `src/views/InboxView.tsx`: `archive all` (at the end of the bar from 60rem up, where highlighted rows turn it into `archive all but these`; at the top of the list on a phone), and `archive everything else` among a message's actions. Archiving everything from one sender is `archive + rule`. Each clears whole conversations, leaves mail kept in the inbox alone, covers only what is loaded in the list, and offers undo for everything it moved. A new bulk action goes through `sweep` too; do not add one that skips undo or touches kept mail.
 
 ## new mail
 

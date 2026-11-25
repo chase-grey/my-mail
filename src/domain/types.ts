@@ -11,6 +11,8 @@ export type Message = {
   flagged: boolean
   importance: 'low' | 'normal' | 'high'
   hasAttachments: boolean
+  /** How many people it was sent to, to and cc together. More than one makes it group mail. */
+  recipients?: number
   /** Outlook categories on the message. The model's verdict is written here so every device shares it. */
   categories: string[]
   /** The whole verdict, when a device has written one onto the message. Every device reads it with the mail, so none pays to sort or read it again. */

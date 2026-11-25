@@ -20,6 +20,8 @@ type GraphMessage = {
   flag?: { flagStatus?: 'notFlagged' | 'flagged' | 'complete' }
   importance?: 'low' | 'normal' | 'high'
   hasAttachments?: boolean
+  toRecipients?: GraphRecipient[]
+  ccRecipients?: GraphRecipient[]
   categories?: string[]
   webLink: string
   singleValueExtendedProperties?: { id: string; value: string }[]
@@ -30,7 +32,7 @@ type GraphFolder = { id: string; displayName: string }
 type GraphRule = { id: string; displayName: string; isEnabled: boolean; sequence: number; conditions?: Record<string, unknown>; actions?: Record<string, unknown> }
 type BatchResponse = { responses: { id: string; status: number; headers?: Record<string, string>; body?: unknown }[] }
 
-export const messageSelect = 'id,conversationId,subject,from,receivedDateTime,bodyPreview,body,isRead,flag,importance,hasAttachments,categories,webLink'
+export const messageSelect = 'id,conversationId,subject,from,receivedDateTime,bodyPreview,body,isRead,flag,importance,hasAttachments,categories,webLink,toRecipients,ccRecipients'
 export const scanSelect = 'id,subject,from,receivedDateTime,bodyPreview,isRead,flag'
 /** Where the whole verdict is kept on a message: a named property of ours that Outlook stores and never shows. */
 export const verdictProperty = 'String {6f1d3c2a-8b7e-4c59-9a41-2e5d0c7b9f13} Name my-mail.verdict'
@@ -80,6 +82,7 @@ export function fromGraph(message: GraphMessage): Message {
     flagged: message.flag?.flagStatus === 'flagged',
     importance: message.importance ?? 'normal',
     hasAttachments: Boolean(message.hasAttachments),
+    recipients: (message.toRecipients?.length ?? 0) + (message.ccRecipients?.length ?? 0),
     categories: message.categories ?? [],
     verdict: readShared(message.singleValueExtendedProperties?.[0]?.value),
     webLink: message.webLink,
