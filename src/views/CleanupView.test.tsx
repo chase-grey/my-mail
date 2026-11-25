@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { CleanupView, type CleanupActions, type CleanupState } from './CleanupView'
 
 const nothing = async () => {}
-const actions: CleanupActions = { scan: nothing, archiveSender: nothing, deleteSender: nothing, blockSender: nothing, undoSender: nothing, unsubscribe: async () => '', archiveOld: nothing, undoOld: nothing }
+const actions: CleanupActions = { scan: nothing, archiveSender: nothing, deleteSender: nothing, blockSender: nothing, undoSender: nothing, unsubscribe: async () => '', archiveOld: nothing, undoOld: nothing, markNotNoise: nothing }
 const state = (over: Partial<CleanupState>): CleanupState => ({ scanned: 0, groups: [], old: { count: 0, unread: 0, flagged: 0 }, done: true, ...over })
 const render = (over: Partial<CleanupState>) => renderToStaticMarkup(<CleanupView state={state(over)} actions={actions} onError={() => {}} />)
 
