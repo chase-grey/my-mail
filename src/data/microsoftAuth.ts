@@ -4,7 +4,7 @@ import {
   PublicClientApplication,
   type AccountInfo,
 } from '@azure/msal-browser'
-import { signInReturnUrl } from '../site'
+import { keepSignIn, signInReturnUrl } from '../site'
 
 /** Same Entra registration as My Brain; this app asks for the mail scopes My Brain never requests. */
 export const mailScopes = [
@@ -31,6 +31,7 @@ export class MicrosoftAuth {
       cache: { cacheLocation: BrowserCacheLocation.LocalStorage },
     })
     await client.initialize()
+    keepSignIn()
     return new MicrosoftAuth(client)
   }
 
