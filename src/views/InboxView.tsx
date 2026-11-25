@@ -494,10 +494,9 @@ export function InboxView({ items, kept, read, busy, error, connection, archiveA
 
   return <div className="inbox">
     <div className="list">
-      {/* A phone has no bar, so the check's status and archive all sit here. A wide screen has the status beside the title. */}
-      {!pane && <div className="list-head">
-        <p className={`status${busy ? ' is-busy' : ''}`} aria-live="polite">{busy ?? ''}</p>
-        {order.length > 1 && <button className="link" type="button" onClick={() => sweepOn([])}>archive all</button>}
+      {/* A phone has no bar, so archive all sits here. */}
+      {!pane && order.length > 1 && <div className="list-head">
+        <button className="link" type="button" onClick={() => sweepOn([])}>archive all</button>
       </div>}
 
       {(needsRows.length > 0 || fineRows.length > 0) && <div className="lanes">

@@ -65,7 +65,8 @@ it('says inbox zero while a check is still running, once the inbox has been read
   const noop = async () => {}
   const view = (props: { read?: boolean; connection?: 'starting' | 'connected' }) => renderToStaticMarkup(<InboxView items={[]} kept={{}} read={props.read} busy="checking mail" connection={props.connection ?? 'connected'} snoozes={[]} actions={{} as MessageActions} onConnect={noop} />)
   expect(view({ read: true })).toContain('inbox zero')
-  expect(view({ read: true })).toContain('checking mail')
+  // The spinning check mail button is the only sign of a check; the list says nothing.
+  expect(view({ read: true })).not.toContain('checking mail')
   // Before the first read an empty list only means the mail has not come yet.
   expect(view({})).not.toContain('inbox zero')
 })

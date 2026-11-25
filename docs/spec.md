@@ -141,7 +141,7 @@ The home screen and the cold-start screen. Everything that still needs me, group
 ```
 
 - **search or ask** at the top. One field. See [search](#search).
-- **no summary line.** The line under search says only that a check is running.
+- **no summary line, no status text.** The spinning check mail button is the only sign that a check is running.
 - **needs me**, with its count beside the heading: reply, action, and waiting categories, plus anything flagged or marked important by
   the sender, plus anything the model was under 60% sure about in any category. Ranked by category
   (reply, action, waiting) then newest. Mail older than 30 days is never here, whatever flag,
