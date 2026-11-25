@@ -48,13 +48,14 @@ export class GraphClient {
   }
 
   private async response(path: string, init: RequestInit): Promise<Response> {
+    const url = this.url(path)
     const token = await this.getAccessToken()
     const headers = new Headers(init.headers)
     for (const [name, value] of Object.entries(this.defaultHeaders)) if (!headers.has(name)) headers.set(name, value)
     headers.set('Authorization', `Bearer ${token}`)
     if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
 
-    const response = await this.fetcher(this.url(path), { ...init, headers })
+    const response = await this.fetcher(url, { ...init, headers })
     if (!response.ok) throw new GraphError(response.status, await response.text())
     return response
   }
@@ -70,8 +71,15 @@ export class GraphClient {
     return values
   }
 
+  /**
+   * Where a request goes. Every request carries the sign-in token, so a whole address (a next page link Graph handed back)
+   * is followed only when it is Graph's own; anything else is refused before the token is fetched.
+   */
   private url(path: string): string {
-    if (path.startsWith('https://')) return path
+    if (/^[a-z][a-z0-9+.-]*:/i.test(path) || path.startsWith('//')) {
+      if (!path.startsWith(`${new URL(this.baseUrl).origin}/`)) throw new Error('refused to send the microsoft sign-in to another address')
+      return path
+    }
     return `${this.baseUrl}${path.startsWith('/') ? path : `/${path}`}`
   }
 }
