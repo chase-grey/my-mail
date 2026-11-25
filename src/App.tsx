@@ -23,7 +23,7 @@ import { dueSnoozes, snoozeRecord, snoozeUntil, withoutSnoozes, type SnoozeOptio
 import { ageTriage, autoArchivable, codeTriage, oldAfterDays, outlookTriage, pruneTriage, rankTriaged, sharedOf, summarize, unsureBelow, worthSharing, writeShared, type RunSummary, type Triaged } from './domain/triage'
 import { emptyAutomation, type Action, type Automation, type Message, type OutlookRule, type Rule, type RuleAction, type Triage } from './domain/types'
 import { inboxThreads } from './domain/threads'
-import { parseUnsubscribe, unsubscribeMethod } from './domain/unsubscribe'
+import { parseUnsubscribe, unsubscribeMail, unsubscribeMethod } from './domain/unsubscribe'
 import { useInstallPrompt } from './installPrompt'
 import { aiSorts, aiStartsItself, loadSettings, saveSettings, type Settings } from './settings'
 import { Toast, type ToastState } from './ui'
@@ -695,7 +695,7 @@ export default function App() {
       // RFC 8058: a bare POST is the whole protocol. The response is opaque across origins, so success is assumed.
       await fetch(target.oneClick!, { method: 'POST', mode: 'no-cors', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'List-Unsubscribe=One-Click' })
     } else if (method === 'mail') {
-      await services.mail.send(target.mailto!.to, target.mailto!.subject, target.mailto!.body)
+      await services.mail.send(target.mailto!.to, unsubscribeMail.subject, unsubscribeMail.body)
     } else {
       window.open(target.url, '_blank', 'noreferrer')
     }

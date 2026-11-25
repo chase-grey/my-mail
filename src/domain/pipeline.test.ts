@@ -7,7 +7,7 @@ import { compilable, compileRule, describeOutlookRule, outlookRuleName, planRule
 import { rememberDecision } from './rules'
 import { trimForModel } from './text'
 import type { Decision, OutlookRule, Rule } from './types'
-import { parseUnsubscribe, unsubscribeMethod } from './unsubscribe'
+import { parseUnsubscribe, unsubscribeMail, unsubscribeMethod } from './unsubscribe'
 
 const rule = (id: string, extra: Partial<Rule>): Rule => ({ id, action: 'archive', enabled: true, createdAt: 'then', hits: 0, ...extra })
 const outlook = (id: string, displayName: string, isEnabled = true, marksRead = true): OutlookRule => ({ id, displayName, isEnabled, sequence: 1, marksRead, sparesCodes: true, description: '' })
@@ -106,13 +106,45 @@ describe('unsubscribe', () => {
     ]
     const target = parseUnsubscribe(headers)!
     expect(target.oneClick).toBe('https://list.example.com/u/1')
-    expect(target.mailto).toEqual({ to: 'leave@list.example.com', subject: 'unsub me', body: 'unsubscribe' })
+    expect(target.mailto).toEqual({ to: 'leave@list.example.com' })
     expect(unsubscribeMethod(target)).toBe('one-click')
     const pageOnly = parseUnsubscribe([{ name: 'list-unsubscribe', value: '<https://x.example.com/bye>' }])!
     expect(pageOnly).toEqual({ url: 'https://x.example.com/bye' })
     expect(unsubscribeMethod(pageOnly)).toBe('page')
-    expect(unsubscribeMethod({ mailto: { to: 'a@b.c', subject: 's', body: 'b' } })).toBe('mail')
+    expect(unsubscribeMethod({ mailto: { to: 'a@b.c' } })).toBe('mail')
     expect(parseUnsubscribe([{ name: 'Subject', value: 'hi' }])).toBeUndefined()
+  })
+
+  it('takes only the address from a mailto, and always sends the same words', () => {
+    const mailto = (value: string) => parseUnsubscribe([{ name: 'List-Unsubscribe', value: `<${value}>` }])?.mailto
+    // The sender's subject and body never leave this mailbox.
+    expect(mailto('mailto:leave@list.example.com?subject=I%20agree%20to%20pay&body=wire%20the%20money')).toEqual({ to: 'leave@list.example.com' })
+    expect(mailto('MAILTO:leave%40list.example.com')).toEqual({ to: 'leave@list.example.com' })
+    expect(unsubscribeMail).toEqual({ subject: 'unsubscribe', body: '' })
+    // More than one recipient, by any route, is refused outright.
+    for (const value of [
+      'mailto:leave@list.example.com,boss@work.example.com',
+      'mailto:leave@list.example.com%2Cboss@work.example.com',
+      'mailto:leave@list.example.com;boss@work.example.com',
+      'mailto:leave@list.example.com?cc=boss@work.example.com',
+      'mailto:leave@list.example.com?subject=x&BCC=boss@work.example.com',
+      'mailto:leave@list.example.com?to=boss@work.example.com',
+      'mailto:?to=boss@work.example.com',
+      'mailto:Boss <boss@work.example.com>',
+      'mailto:not-an-address',
+      'mailto:%E0%A4%A',
+    ]) expect(mailto(value), value).toBeUndefined()
+    // A refused mailto leaves the page, when there is one.
+    expect(parseUnsubscribe([{ name: 'List-Unsubscribe', value: '<mailto:a@list.example.com?cc=b@work.example.com>, <https://list.example.com/bye>' }])).toEqual({ url: 'https://list.example.com/bye' })
+  })
+
+  it('follows only https, for the one-click post and for the page', () => {
+    const post = { name: 'List-Unsubscribe-Post', value: 'List-Unsubscribe=One-Click' }
+    expect(parseUnsubscribe([{ name: 'List-Unsubscribe', value: '<http://list.example.com/u/1>' }, post])).toBeUndefined()
+    expect(parseUnsubscribe([{ name: 'List-Unsubscribe', value: '<http://list.example.com/u/1>' }])).toBeUndefined()
+    expect(parseUnsubscribe([{ name: 'List-Unsubscribe', value: '<http://list.example.com/u/1>, <mailto:leave@list.example.com>' }, post])).toEqual({ mailto: { to: 'leave@list.example.com' } })
+    expect(parseUnsubscribe([{ name: 'List-Unsubscribe', value: '<http://list.example.com/u/1>, <https://list.example.com/u/2>' }, post])).toEqual({ oneClick: 'https://list.example.com/u/2' })
+    expect(parseUnsubscribe([{ name: 'List-Unsubscribe', value: '<javascript:alert(1)>, <data:text/html,x>' }, post])).toBeUndefined()
   })
 })
 
