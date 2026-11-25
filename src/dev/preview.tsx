@@ -172,7 +172,7 @@ function Preview() {
   }
 
   return <BodySource value={readBody}><ThreadContext value={threads}><Shell view={view} views={['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings']} counts={{ inbox: groupInbox(items.filter((item) => !kept[item.message.id])).needsMe.length }} busy={params.has('busy')} alert={params.has('error')} status={params.has('busy') ? 'checking mail' : undefined} canRefresh links={[{ label: 'open my brain', onSelect: () => {} }]} onView={setView} onRefresh={() => setItems(seed)} onCompose={() => setComposing({ mode: 'new' })}>
-    {view === 'inbox' && <InboxView items={items} kept={kept} summary={{ inbox: items.length, needReply: items.filter((item) => item.triage?.needsReply).length, byRules: 14, autoArchived: 0, returned: 0, withoutModel: 0 }} busy={params.has('busy') ? 'checking mail' : loading ? 'loading more' : undefined} connection="connected"
+    {view === 'inbox' && <InboxView items={items} kept={kept} read busy={params.has('busy') ? 'checking mail' : loading ? 'loading more' : undefined} connection="connected"
       snoozes={params.has('snoozed') ? [{ messageId: 's1', until: new Date(Date.now() + 86_400_000).toISOString(), subject: 'Renew passport', from: 'Travel Office' }] : []} actions={actions} onConnect={async () => {}} more={!params.has('empty') && pages < olderPages}
       onMore={async () => { setLoading(true); await wait(700); setItems((current) => [...current, ...older(pages)]); setPages(pages + 1); setLoading(false) }} />}
     {view === 'search' && <SearchView search={search} actions={actions} hasModel senders={seed.map((item) => item.message.from)} subjects={seed.map((item) => item.message.subject)} />}

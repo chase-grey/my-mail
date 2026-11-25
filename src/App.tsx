@@ -43,6 +43,8 @@ import { brainChatUrl } from './domain/brain'
 const triageKey = 'my-mail.triage.v1'
 const keptKey = 'my-mail.kept.v1'
 const inboxKey = 'my-mail.inbox.v1'
+/** Set once the inbox has been read here, so an empty saved inbox can say inbox zero on open instead of waiting for the check. */
+const readKey = 'my-mail.inbox.read.v1'
 const senderKindsKey = 'my-mail.senderKinds.v1'
 /** How much of the inbox is kept on this device to show on the next open, before the mailbox has answered. */
 const savedInboxSize = 200
@@ -140,15 +142,16 @@ export default function App() {
   const [view, setView] = useState<View>(() => resumeView() ?? 'inbox')
   const [settings, setSettings] = useState<Settings>(loadSettings)
   const [services, setServices] = useState<Services>()
-  const [connection, setConnection] = useState<ConnectionStatus>(configuredClientId() ? 'disconnected' : 'unconfigured')
+  const [connection, setConnection] = useState<ConnectionStatus>(configuredClientId() ? 'starting' : 'unconfigured')
   const [accountName, setAccountName] = useState<string>()
   const [messages, setMessages] = useState<Message[]>(() => readJson(inboxKey, []))
   const [more, setMore] = useState(false)
+  const [read, setRead] = useState<boolean>(() => readJson(readKey, false))
   const [triage, setTriage] = useState<Record<string, Triage>>(() => readJson(triageKey, {}))
   const [kept, setKept] = useState<Record<string, string>>(() => readJson(keptKey, {}))
   const [automation, setAutomation] = useState<Automation>(emptyAutomation)
   const [outlookRules, setOutlookRules] = useState<OutlookRule[]>([])
-  const [summary, setSummary] = useState<RunSummary>()
+  const [, setSummary] = useState<RunSummary>()
   const [busy, setBusy] = useState<string>()
   const [error, setError] = useState<string>()
   /** Jev could not be reached from this network. A standing fact, said in settings, not something to flag. */
@@ -195,6 +198,7 @@ export default function App() {
   useEffect(() => writeJson(triageKey, triage), [triage])
   useEffect(() => writeJson(keptKey, kept), [kept])
   useEffect(() => writeJson(inboxKey, messages.slice(0, savedInboxSize)), [messages])
+  useEffect(() => writeJson(readKey, read), [read])
 
   const persistAutomation = useCallback(async (next: Automation, current = services) => {
     automationRef.current = next
@@ -384,6 +388,9 @@ export default function App() {
       // Rescued mail is sorted this run even when it is older than the page, or the inbox read has not caught up with the move.
       const inPage = new Set(page.messages.map((message) => message.id))
       const batch = [...page.messages, ...rescued.filter((message) => !inPage.has(message.id))]
+      // An empty inbox is said the moment the read comes back empty, not after the rules and the rest of the check.
+      setRead(true)
+      if (!batch.length && !backRef.current.size) { messagesRef.current = []; setMessages([]); setMore(false) }
 
       // Outlook has had its turn on anything that arrived while the app was closed; rules run here too for what it missed,
       // and they are the only rules junked mail ever meets.
@@ -571,11 +578,11 @@ export default function App() {
     void createServices(clientId).then(async (created) => {
       setServices(created)
       const account = created.auth.account()
-      if (!account) { setMessages([]); return }
+      if (!account) { setMessages([]); setRead(false); setConnection('disconnected'); return }
       setAccountName(account.username)
       setConnection('connected')
       await run(created, { settings: loadSettings() })
-    }).catch((failure: unknown) => setError(errorText(failure)))
+    }).catch((failure: unknown) => { setConnection((was) => was === 'starting' ? 'disconnected' : was); setError(errorText(failure)) })
   }, [run])
 
   // New mail is looked for every few seconds while the app is on screen, and the moment it comes back to the screen.
@@ -634,6 +641,7 @@ export default function App() {
       setAccountName(undefined)
       setMessages([])
       setMore(false)
+      setRead(false)
       setSummary(undefined)
     } catch (failure) {
       setError(errorText(failure))
@@ -1099,7 +1107,7 @@ export default function App() {
   return <BodySource value={connected ? readBody : undefined}><ThreadContext value={connected ? threadActions : undefined}><Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe } : undefined} busy={Boolean(busy)} alert={Boolean(error)} status={connected ? busy : undefined} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })} onCompose={connected ? () => setComposing({ mode: 'new' }) : undefined}>
     {view === 'inbox' && installFirst && <InstallStep install={install} onSkip={() => setInstallSkipped(true)} />}
     {view === 'inbox' && connected && <InstallBanner install={install} />}
-    {view === 'inbox' && !installFirst && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} archiveAfterReply={settings.archiveAfterReply} snoozes={automation.snoozes} actions={actions} more={more} onMore={(sweeping) => services ? loadMore(services, { settings }, !sweeping) : undefined}
+    {view === 'inbox' && !installFirst && <InboxView items={triaged} kept={kept} read={read} busy={busy} error={error} connection={connection} archiveAfterReply={settings.archiveAfterReply} snoozes={automation.snoozes} actions={actions} more={more} onMore={(sweeping) => services ? loadMore(services, { settings }, !sweeping) : undefined}
       onConnect={connect} />}
     {view === 'search' && connected && <SearchView search={searchActions} actions={actions} hasModel={Boolean(settings.anthropicApiKey)} senders={senders} subjects={subjects} />}
     {view === 'receipts' && connected && <ReceiptsView actions={receiptActions} />}

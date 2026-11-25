@@ -3,7 +3,8 @@ import { modelOptions, type Settings } from '../settings'
 import { Card, Field, Switch } from '../ui'
 import { AccentPicker } from './AccentPicker'
 
-export type ConnectionStatus = 'unconfigured' | 'disconnected' | 'connected'
+/** `starting` is the moment on open before the saved sign-in has been looked for; nothing asks to connect until it has. */
+export type ConnectionStatus = 'unconfigured' | 'starting' | 'disconnected' | 'connected'
 
 export function SettingsView({ settings, connection, accountName, busy, error, onSettings, onConnect, onDisconnect }: {
   settings: Settings
@@ -26,7 +27,7 @@ export function SettingsView({ settings, connection, accountName, busy, error, o
     <Card title="microsoft account">
       {connection === 'connected'
         ? <><p className="note">{accountName}</p><div className="actions"><button className="plain" disabled={busy} type="button" onClick={() => void onDisconnect()}>disconnect</button></div></>
-        : <div className="actions"><button className="primary" disabled={busy || connection === 'unconfigured'} type="button" onClick={() => void onConnect()}>{connection === 'unconfigured' ? 'no microsoft app id' : busy ? 'connecting' : 'connect microsoft'}</button></div>}
+        : connection !== 'starting' && <div className="actions"><button className="primary" disabled={busy || connection === 'unconfigured'} type="button" onClick={() => void onConnect()}>{connection === 'unconfigured' ? 'no microsoft app id' : busy ? 'connecting' : 'connect microsoft'}</button></div>}
     </Card>
 
     <Card title="ai">

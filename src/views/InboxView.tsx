@@ -4,7 +4,7 @@ import { holdUpdates } from '../appUpdate'
 import { codeOf } from '../domain/codes'
 import { snoozeOptions, type SnoozeOption } from '../domain/snooze'
 import { inboxThreads, sweepStep, type InboxThread } from '../domain/threads'
-import { categoryLabel, holdsCode, isOld, type RunSummary, type Triaged } from '../domain/triage'
+import { categoryLabel, holdsCode, isOld, type Triaged } from '../domain/triage'
 import type { Message, Snooze } from '../domain/types'
 import { Card, Field, Fold, Icon, Menu, Sheet, Toast, useMediaQuery, usePresence, type IconName, type MenuItem, type ToastState } from '../ui'
 import type { ConnectionStatus } from './SettingsView'
@@ -223,10 +223,11 @@ function Row({ item, index, kept, quiet, open, lit, pane, leave, on }: { item: I
   </li>
 }
 
-export function InboxView({ items, kept, summary, busy, error, connection, archiveAfterReply, snoozes, actions, more, onMore, onConnect }: {
+export function InboxView({ items, kept, read, busy, error, connection, archiveAfterReply, snoozes, actions, more, onMore, onConnect }: {
   items: Triaged[]
   kept: Record<string, string>
-  summary?: RunSummary
+  /** The inbox has been read on this device, so an empty list is an empty inbox and not one still on its way. */
+  read?: boolean
   busy?: string
   error?: string
   connection: ConnectionStatus
@@ -479,6 +480,7 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
     return () => window.removeEventListener('keydown', listen)
   }, [])
 
+  if (connection === 'starting') return null
   if (connection !== 'connected') {
     return <div className="lone"><Card title="microsoft account">
       <div className="actions"><button className="primary" type="button" disabled={connection === 'unconfigured' || Boolean(busy)} onClick={() => void onConnect()}>{connection === 'unconfigured' ? 'no microsoft app id' : busy ? 'connecting' : 'connect microsoft'}</button></div>
@@ -510,7 +512,7 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
 
       {more && onMore && <NearEnd busy={Boolean(busy)} failed={Boolean(error)} onNear={() => { if (!run.current) void onMore() }} />}
 
-      {!busy && items.length === 0 && !more && summary && <div className="zero">
+      {items.length === 0 && !more && read && <div className="zero">
         <svg viewBox="0 0 100 100" role="img" aria-label="inbox zero">
           <mask id="zero-cut"><rect width="100" height="100" fill="#fff" /><path d="M29 52.5 43.5 67 72 36" fill="none" stroke="#000" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" /></mask>
           <circle cx="50" cy="50" r="50" mask="url(#zero-cut)" />

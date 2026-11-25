@@ -24,7 +24,7 @@ it('shows triaged mail with the suggested action highlighted and kept mail folde
     { message: message('m2', 'news@daily.example.com', 'Daily digest'), triage: { messageId: 'm2', category: 'newsletter' as const, summary: 'daily digest', needsReply: false, suggested: 'archive' as const, confidence: 0.9, source: 'jev' as const, triagedAt: 'now' } },
     { message: message('m3', 'kept@example.com', 'Keep me') },
   ]
-  const html = renderToStaticMarkup(<InboxView items={items} kept={{ m3: 'now' }} summary={{ inbox: 3, needReply: 1, byRules: 2, autoArchived: 0, returned: 0, withoutModel: 1 }} connection="connected" snoozes={[]} actions={actions} onConnect={noop} />)
+  const html = renderToStaticMarkup(<InboxView items={items} kept={{ m3: 'now' }} read connection="connected" snoozes={[]} actions={actions} onConnect={noop} />)
   expect(html).not.toContain('in inbox ·')
   expect(html).toContain('mom asks about sunday dinner')
   expect(html).not.toContain('is-loud')
@@ -59,4 +59,18 @@ it('offers one search field, with find or ask only when there is a model', () =>
   const without = renderToStaticMarkup(<SearchView search={search} actions={actions} hasModel={false} />)
   expect(without).toContain('placeholder="search"')
   expect(without).not.toContain('>ask<')
+})
+
+it('says inbox zero while a check is still running, once the inbox has been read here', () => {
+  const noop = async () => {}
+  const view = (props: { read?: boolean; connection?: 'starting' | 'connected' }) => renderToStaticMarkup(<InboxView items={[]} kept={{}} read={props.read} busy="checking mail" connection={props.connection ?? 'connected'} snoozes={[]} actions={{} as MessageActions} onConnect={noop} />)
+  expect(view({ read: true })).toContain('inbox zero')
+  expect(view({ read: true })).toContain('checking mail')
+  // Before the first read an empty list only means the mail has not come yet.
+  expect(view({})).not.toContain('inbox zero')
+})
+
+it('does not ask to connect before the saved sign-in has been looked for', () => {
+  const html = renderToStaticMarkup(<InboxView items={[]} kept={{}} connection="starting" snoozes={[]} actions={{} as MessageActions} onConnect={async () => {}} />)
+  expect(html).not.toContain('connect microsoft')
 })
