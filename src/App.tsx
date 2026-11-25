@@ -38,6 +38,7 @@ import { SearchView, type SearchActions } from './views/SearchView'
 import { Shell, resumeView, type ShellLink, type View } from './views/Shell'
 import { SettingsView, type ConnectionStatus } from './views/SettingsView'
 import { ThreadContext, type ThreadActions } from './views/Thread'
+import { brainChatUrl } from './domain/brain'
 
 const triageKey = 'my-mail.triage.v1'
 const keptKey = 'my-mail.kept.v1'
@@ -1015,6 +1016,7 @@ export default function App() {
   const threadActions: ThreadActions = {
     thread: (message) => message.conversationId ? services!.mail.conversation(message.conversationId) : Promise.resolve([]),
     fromSender: async (message) => (await services!.search.search(`from:${message.from.address}`)).hits,
+    chat: settings.brainUrl.trim() ? (message) => { window.open(brainChatUrl(settings.brainUrl, message.id), '_blank', 'noreferrer') } : undefined,
     related: settings.anthropicApiKey ? (message, onStep) => findRelated(anthropic(), settingsRef.current.strongModel, message, (query, count) => services!.search.search(query, count), new Date().toLocaleDateString('en-CA'), onStep) : undefined,
   }
 

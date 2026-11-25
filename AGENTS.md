@@ -41,6 +41,10 @@ In dark mode every message is darkened, whatever colours it was sent with. Each 
 
 All mail is written in one screen (`Compose`): new message, reply, reply all, forward. Nothing sends the user to Outlook to finish a message. Do not add a second place that writes or sends mail, and do not add a link out to Outlook for something compose can do. Closing compose keeps what was written as an Outlook draft; only `discard` throws it away.
 
+## chat
+
+An open message has a `chat` link beside `find related`, wherever it is opened. It opens My Brain's personal chat about that conversation (`brainChatUrl`), passing the message id and nothing else. There is no chat in this app: do not build one here, and do not put any of a message's text in the link.
+
 ## new mail
 
 Mail should show up about as fast as it does in Outlook. While the app is on screen it asks for new mail every few seconds (`peek`), and again the moment it comes back to the screen. What arrives is shown as soon as the rules have had their say, before any model sorts it; sorting then relabels it or takes it away. Do not hold fetched mail off screen until sorting finishes, and do not put a wait in front of the look for new mail. The quiet look changes nothing on screen when nothing came, and it stays one small request (`glance`: ids and the junk count, no bodies); full messages are fetched only once it finds something.

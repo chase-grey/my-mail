@@ -25,7 +25,9 @@ The 2026-11-02 build is phase 1 of this spec. Later phases are listed at the end
 6. **Opened a few times a day for two minutes.** Cold start renders the inbox from cache before any
    network call. There is no daily ritual, no streak, no count on an icon.
 7. **Personal data, personal key.** Full message bodies go to Claude on my own Anthropic key. This is my
-   mail; there is no customer data here. Work mail never enters this app, on any account.
+   mail; there is no customer data here. Work mail never enters this app, on any account. The one
+   exception is a chat about a message, which happens in My Brain and runs on the work pc's Claude
+   Code when I am at it (see the decisions log).
 8. **Nothing runs while closed except what Outlook runs.** Rules that Outlook can express are written
    to Outlook and run on the server all day. Everything else waits for the next open and does not
    pretend otherwise.
@@ -55,6 +57,7 @@ The 2026-11-02 build is phase 1 of this spec. Later phases are listed at the end
 | **Backlog** | **A `clean up` screen that reads the inbox headers-only, groups by sender, and clears a sender in one tap with a rule attached.** *Resolved 2026-11-04.* | Inbox zero from thousands is a per-sender problem, not a per-message one. Twenty senders are most of the volume. Jev reads one sample per sender to tell lists from people for a fraction of a cent. |
 | **Receipts** | **Their own `receipts` folder, with the `receipt` category kept on the message.** Archiving a receipt files it there. A receipt the sorter is sure about is filed on its own, whether or not auto-archive is on, and its sender gets a `move to receipts` rule in Outlook. A `receipts` screen lists the folder. On by default, with a setting. *Resolved 2026-11-19.* | I go back over receipts, so they need one place to look, in this app and in Outlook on any device. A folder is one tap in every Outlook client; a category inside the archive needs a filter each time. The Outlook rule moves the next one on arrival, so it never sits in the inbox or notifies. |
 | **Junk** | **There is no junk folder. Every open moves whatever Outlook put in Junk Email into the inbox, where it is sorted like any other mail.** Blocking a sender is a rule, made here. *Resolved 2026-11-24.* | Real mail was landing in junk and being missed. A personal account cannot switch Outlook's junk filter off, and Outlook's own rules never see junked mail, so the app brings it back on open and runs the rules itself. Until the app is opened, junked mail still waits in Outlook's junk folder and Outlook mobile does not notify for it. |
+| **Chat about a message** | **A `chat` link on every open message hands the conversation to My Brain's personal chat.** Only the message id goes in the link; My Brain reads the conversation from the mailbox itself. At the work pc that chat runs on work Claude Code, as a bare model with no tools or files; anywhere else it runs on my personal key. *Resolved 2026-11-25.* | The chat that knows my tasks, notes and memory already exists in My Brain, so a second one here would know less. Sending only the id keeps mail out of links and history. |
 
 ## why not fork
 

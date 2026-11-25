@@ -13,6 +13,8 @@ export type ThreadActions = {
   fromSender: (message: Message) => Promise<SearchHit[]>
   /** Mail about the same matter, found by a model. Missing when there is no model. */
   related?: (message: Message, onStep: (step: string) => void) => Promise<SearchHit[]>
+  /** Opens My Brain's chat about this conversation. Missing when no My Brain is set. */
+  chat?: (message: Message) => void
 }
 
 /** Given by the app once it is connected. Without it an open message shows only itself. */
@@ -120,6 +122,7 @@ function Related({ message, actions }: { message: Message; actions: ThreadAction
     <div className="related-actions">
       <button className="link" type="button" aria-pressed={picked === 'sender'} onClick={() => look('sender')}>more from {message.from.name}</button>
       {actions.related && <button className="link" type="button" aria-pressed={picked === 'related'} onClick={() => look('related')}>find related</button>}
+      {actions.chat && <button className="link" type="button" onClick={() => actions.chat!(message)}>chat</button>}
     </div>
     {busy && <p className="status is-busy" aria-live="polite">{busy.step}</p>}
     {error && <p className="note is-error" role="alert">{error}</p>}

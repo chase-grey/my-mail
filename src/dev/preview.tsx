@@ -85,6 +85,7 @@ const threads: ThreadActions = {
     await wait(500); onStep('searching'); await wait(500); onStep('reading 14 messages'); await wait(700)
     return [elsewhere(seed[11], 700, 'Lake house deposit'), elsewhere(seed[1], 5000, 'Cabin rental agreement')]
   },
+  chat: () => {},
 }
 
 const found = () => seed.slice(0, 4).map((item, index) => ({ message: { ...item.message, receivedAt: hoursAgo(index * 4000 + 30) }, inInbox: index === 0, folder: index === 0 ? undefined : 'Archive' }))
