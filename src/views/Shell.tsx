@@ -35,11 +35,13 @@ export const shortcuts: [string, string][] = [
 ]
 
 /** The frame around every screen: a side rail on wide screens, a top bar with a menu on a phone. */
-export function Shell({ view, views, counts = {}, busy, canRefresh, links, onView, onRefresh, onCompose, children }: {
+export function Shell({ view, views, counts = {}, busy, status, canRefresh, links, onView, onRefresh, onCompose, children }: {
   view: View
   views: View[]
   counts?: Partial<Record<View, number>>
   busy: boolean
+  /** What the inbox check is doing. A wide screen shows it beside the title, so the list gives it no line. */
+  status?: string
   canRefresh: boolean
   links: ShellLink[]
   onView: (view: View) => void
@@ -84,6 +86,7 @@ export function Shell({ view, views, counts = {}, busy, canRefresh, links, onVie
       <header className="topbar">
         {view !== 'inbox' && <button className="back icon-button" type="button" aria-label="back to inbox" onClick={() => onView('inbox')}><Icon name="back" /></button>}
         <h1>{viewLabel[view]}</h1>
+        {view === 'inbox' && <p className={`status topbar-status${status ? ' is-busy' : ''}`} aria-live="polite">{status ?? ''}</p>}
         {view === 'inbox' && onCompose && <button className="icon-button to-compose" type="button" aria-label="new message" title="new message" onClick={onCompose}><Icon name="compose" /></button>}
         {view === 'inbox' && views.includes('search') && <button className="icon-button to-search" type="button" aria-label="search" title="search" onClick={() => onView('search')}><Icon name="search" /></button>}
         {view === 'inbox' && <button className={`icon-button${busy ? ' is-spinning' : ''}`} type="button" aria-label="check mail" title="check mail" disabled={!canRefresh} onClick={onRefresh}><Icon name="refresh" /></button>}

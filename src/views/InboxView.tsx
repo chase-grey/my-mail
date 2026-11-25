@@ -393,11 +393,11 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
 
   return <div className="inbox">
     <div className="list">
-      <div className="list-head">
+      {/* A phone has no bar, so the check's status and archive all sit here. A wide screen has the status beside the title. */}
+      {!pane && <div className="list-head">
         <p className={`status${busy ? ' is-busy' : ''}`} aria-live="polite">{busy ?? ''}</p>
-        {/* A phone has no bar, so archive all sits here. */}
-        {!pane && order.length > 1 && <button className="link" type="button" onClick={() => sweep(order)}>archive all</button>}
-      </div>
+        {order.length > 1 && <button className="link" type="button" onClick={() => sweep(order)}>archive all</button>}
+      </div>}
       {shownError && <p className="note is-error" role="alert">{shownError}</p>}
 
       {(needsRows.length > 0 || fineRows.length > 0) && <div className="lanes">
