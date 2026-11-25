@@ -141,6 +141,13 @@ describe('cleanup', () => {
     expect(likelyNoise({ ...mom, kind: 'promo', kindConfidence: 0.99 })).toBe(false)
   })
 
+  it('never calls a sender noise once I said it is not', () => {
+    const [news, , bank] = groupBySender(messages)
+    expect(likelyNoise(news, [news.address])).toBe(false)
+    expect(likelyNoise({ ...bank, kind: 'newsletter', kindConfidence: 0.95 }, [bank.address])).toBe(false)
+    expect(likelyNoise(news, [bank.address])).toBe(true)
+  })
+
   it('takes all mail older than the cutoff, unread included, and leaves what is flagged', () => {
     const old = oldMail(messages, 30, new Date('2026-11-04T00:00:00Z'))
     expect(old.ids.sort()).toEqual(['1', '3', '4', '6'])

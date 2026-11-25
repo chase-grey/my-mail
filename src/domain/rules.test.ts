@@ -43,6 +43,7 @@ describe('rules', () => {
     decisions = rememberDecision(decisions, message('m5', 'news@daily.example.com'), 'task', at)
     expect(suggestRules(decisions, [])).toEqual([{ from: 'news@daily.example.com', action: 'archive', count: 3 }])
     expect(suggestRules(decisions, [rule({ from: '@daily.example.com' })])).toEqual([])
+    expect(suggestRules(decisions, [], ['news@daily.example.com'])).toEqual([])
   })
 
   it('replaces an earlier decision about the same message', () => {

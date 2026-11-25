@@ -292,7 +292,9 @@ For a backlog. Behind `…`.
 Reads the inbox headers-only in pages of 500 (no bodies, up to 20,000 messages), groups by
 sender, and asks Jev one `kind` question about each sender's newest message. A sender is `probably
 noise` when Jev calls the sample a list or notice at 70% or more, or when I have opened under 30%
-of what they sent. Flagged mail keeps a sender out of that group. Each row: `archive all + rule`
+of what they sent. Flagged mail keeps a sender out of that group, and so does `not noise` in the
+row's menu: the sender is kept in `noRules`, is never suggested again here or as a rule in the
+inbox, and the sorter makes it no rule. Each row: `archive all + rule`
 first, then archive all, unsubscribe, open latest, delete all + rule, delete all. Moves go through
 Graph's batch endpoint twenty at a time with progress in the status line. The inbox refreshes from
 what is left.

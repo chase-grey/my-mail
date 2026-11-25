@@ -48,7 +48,7 @@ export type RuleSuggestion = { from: string; action: RuleAction; count: number }
 const suggestible: Record<string, RuleAction | undefined> = { archive: 'archive', delete: 'delete' }
 
 /** After the same sender has been handled the same way a few times, offer to make it a rule. */
-export function suggestRules(decisions: Decision[], rules: Rule[], minimum = 3): RuleSuggestion[] {
+export function suggestRules(decisions: Decision[], rules: Rule[], noRules: readonly string[] = [], minimum = 3): RuleSuggestion[] {
   const tally = new Map<string, { from: string; action: RuleAction; ids: Set<string> }>()
   for (const decision of decisions) {
     const action = decision.receipt && decision.action === 'archive' ? 'receipts' : suggestible[decision.action]
@@ -60,7 +60,7 @@ export function suggestRules(decisions: Decision[], rules: Rule[], minimum = 3):
     tally.set(key, entry)
   }
   return [...tally.values()]
-    .filter((entry) => entry.ids.size >= minimum)
+    .filter((entry) => entry.ids.size >= minimum && !noRules.includes(entry.from))
     .filter((entry) => !rules.some((rule) => rule.from && entry.from.includes(normalize(rule.from)) && !rule.subject))
     .map((entry) => ({ from: entry.from, action: entry.action, count: entry.ids.size }))
     .sort((a, b) => b.count - a.count)

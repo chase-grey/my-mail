@@ -67,10 +67,10 @@ export const noiseKinds: Category[] = ['newsletter', 'promo', 'notification', 's
 
 /**
  * Senders worth clearing in bulk: a classifier called the sample noise, or I never open them.
- * Flagged mail is never part of a bulk guess.
+ * Flagged mail is never part of a bulk guess, and neither is a sender I said is not noise.
  */
-export function likelyNoise(group: SenderGroup, minimum = 3): boolean {
-  if (group.flagged) return false
+export function likelyNoise(group: SenderGroup, notNoise: readonly string[] = [], minimum = 3): boolean {
+  if (group.flagged || notNoise.includes(group.address)) return false
   if (group.kind && noiseKinds.includes(group.kind) && (group.kindConfidence ?? 0) >= 0.7) return true
   return group.count >= minimum && group.unread / group.count >= 0.7
 }

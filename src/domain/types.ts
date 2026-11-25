@@ -99,7 +99,7 @@ export type Automation = {
   rules: Rule[]
   decisions: Decision[]
   snoozes: Snooze[]
-  /** Senders whose auto-made rule I deleted. The sorter does not make them another. */
+  /** Senders I marked not noise in clean up, or whose auto-made rule I deleted. Nothing makes or suggests them a rule. */
   noRules?: string[]
 }
 

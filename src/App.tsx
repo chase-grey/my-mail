@@ -849,6 +849,10 @@ export default function App() {
         setCleanup((current) => ({ ...current, done: true, working: undefined }))
       }
     },
+    markNotNoise: async (group, on) => {
+      const others = (automationRef.current.noRules ?? []).filter((address) => address !== group.address)
+      await persistAutomation({ ...automationRef.current, noRules: on ? [...others, group.address] : others })
+    },
     archiveSender: (group) => clearSender(group, 'archive'),
     deleteSender: (group) => clearSender(group, 'delete'),
     blockSender: async (group, action) => {
@@ -1008,7 +1012,7 @@ export default function App() {
     forward: (message) => setComposing({ mode: 'forward', message }),
   }
 
-  const suggestions = useMemo<RuleSuggestion[]>(() => suggestRules(automation.decisions, automation.rules).filter((item) => !dismissed.includes(`${item.from}|${item.action}`)), [automation, dismissed])
+  const suggestions = useMemo<RuleSuggestion[]>(() => suggestRules(automation.decisions, automation.rules, automation.noRules).filter((item) => !dismissed.includes(`${item.from}|${item.action}`)), [automation, dismissed])
   const triaged = useMemo<Triaged[]>(() => rankTriaged(messages.map((message) => ({ message, triage: triage[message.id], pending: pending.has(message.id) }))), [messages, triage, pending])
   const connected = connection === 'connected' && Boolean(services)
   const install = useInstallPrompt()
@@ -1069,7 +1073,7 @@ export default function App() {
     {view === 'search' && connected && <SearchView search={searchActions} actions={actions} hasModel={Boolean(settings.anthropicApiKey)} senders={senders} subjects={subjects} />}
     {view === 'receipts' && connected && <ReceiptsView actions={receiptActions} />}
     {view === 'rules' && <RulesView rules={automation.rules} outlookRules={outlookRules} snoozes={automation.snoozes} error={error} onRules={updateRules} />}
-    {view === 'cleanup' && <CleanupView state={cleanup} error={error} actions={cleanupActions} onError={setError} />}
+    {view === 'cleanup' && <CleanupView state={{ ...cleanup, notNoise: automation.noRules }} error={error} actions={cleanupActions} onError={setError} />}
     {view === 'settings' && <SettingsView settings={settings} connection={connection} accountName={accountName} busy={Boolean(busy)} error={error} onSettings={setSettings} onConnect={connect} onDisconnect={disconnect} />}
     {composing && services && <Compose key={`${composing.mode}:${composing.message?.id ?? ''}`} request={composing} actions={services.compose} contacts={senders}
       onDraft={settings.anthropicApiKey && composing.message && composing.mode !== 'forward' ? (strong, instruction) => actions.draft(composing.message!, strong, instruction) : undefined}
