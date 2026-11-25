@@ -48,3 +48,16 @@ export function hitThreads(hits: SearchHit[], except?: string): HitThread[] {
   }
   return [...byKey.values()].sort((a, b) => b.message.receivedAt.localeCompare(a.message.receivedAt))
 }
+
+/** What a sweep that keeps going does next: archive what is on the list, load older mail, or end. */
+export type SweepStep = { do: 'archive'; batch: InboxThread[] } | { do: 'load' } | { do: 'end' }
+
+/**
+ * A sweep that keeps going takes every conversation on the list it was not told to leave, then asks for older mail and takes that too,
+ * until the mailbox has no more. Mail newer than what was on screen when it began arrived after the press and is never taken.
+ */
+export function sweepStep(order: InboxThread[], spare: ReadonlySet<string>, upTo: string, more: boolean): SweepStep {
+  const batch = order.filter((item) => !spare.has(item.key) && item.message.receivedAt <= upTo)
+  if (batch.length) return { do: 'archive', batch }
+  return more ? { do: 'load' } : { do: 'end' }
+}

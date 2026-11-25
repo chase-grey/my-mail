@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { message } from './fixtures'
 import { readable } from './text'
-import { hitThreads, inboxThreads, threadKey } from './threads'
+import { hitThreads, inboxThreads, sweepStep, threadKey } from './threads'
 import type { Triage } from './types'
 
 const triage = (messageId: string, overrides: Partial<Triage>): Triage => ({
@@ -49,5 +49,37 @@ describe('threads', () => {
     expect(readable(body, true)).toBe('Sounds good.')
     expect(readable(body, false)).toBe('Sounds good.\n\nOn Mon, Nov 2, 2026 at 9:00 AM Owen wrote:\n> Who is in?')
     expect(readable('x'.repeat(5000), true)).toHaveLength(5000)
+  })
+})
+
+describe('an archive all that keeps going', () => {
+  const at = (day: number) => `2026-11-${String(day).padStart(2, '0')}T09:00:00Z`
+  const row = (id: string, day: number, conversationId?: string) => ({ message: message(id, `${id}@example.com`, id, { receivedAt: at(day), conversationId }) })
+  const list = (...rows: ReturnType<typeof row>[]) => inboxThreads(rows)
+  const keys = (step: ReturnType<typeof sweepStep>) => step.do === 'archive' ? step.batch.map((item) => item.key) : step.do
+
+  it('takes everything on the list but what it was told to leave', () => {
+    expect(keys(sweepStep(list(row('a', 5), row('b', 4), row('c', 3)), new Set(['b']), at(5), true))).toEqual(['a', 'c'])
+  })
+
+  it('asks for older mail once the list is clear, and takes that too', () => {
+    const spare = new Set(['b'])
+    expect(sweepStep(list(row('b', 4)), spare, at(5), true)).toEqual({ do: 'load' })
+    expect(keys(sweepStep(list(row('b', 4), row('d', 2), row('e', 1)), spare, at(5), true))).toEqual(['d', 'e'])
+  })
+
+  it('ends when the mailbox has no more', () => {
+    expect(sweepStep(list(row('b', 4)), new Set(['b']), at(5), false)).toEqual({ do: 'end' })
+    expect(sweepStep([], new Set(), at(5), false)).toEqual({ do: 'end' })
+  })
+
+  it('leaves mail that arrived after it began, and a conversation that got a new message', () => {
+    const order = list(row('new', 9), row('old1', 2, 'thread'), row('old2', 8, 'thread'), row('c', 3))
+    expect(keys(sweepStep(order, new Set(), at(5), true))).toEqual(['c'])
+  })
+
+  it('keeps leaving a spared conversation when older mail in it loads', () => {
+    const order = list(row('b', 4, 'kept'), row('b0', 1, 'kept'), row('d', 2))
+    expect(keys(sweepStep(order, new Set(['kept']), at(5), true))).toEqual(['d'])
   })
 })

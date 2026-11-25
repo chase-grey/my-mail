@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useReducer, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import type { MessageActions } from '../App'
+import { holdUpdates } from '../appUpdate'
 import { snoozeOptions, type SnoozeOption } from '../domain/snooze'
-import { inboxThreads, type InboxThread } from '../domain/threads'
-import { categoryLabel, type RunSummary, type Triaged } from '../domain/triage'
+import { inboxThreads, sweepStep, type InboxThread } from '../domain/threads'
+import { categoryLabel, isOld, type RunSummary, type Triaged } from '../domain/triage'
 import type { Message, Snooze } from '../domain/types'
 import { Card, Field, Fold, Icon, Menu, Sheet, Toast, useMediaQuery, usePresence, type IconName, type MenuItem, type ToastState } from '../ui'
 import type { ConnectionStatus } from './SettingsView'
@@ -14,6 +15,12 @@ type SheetState =
 
 /** Which way a row slides as it leaves, and how long it waits when a whole group goes at once. */
 type Leave = { to: 'right' | 'left' | 'fade'; delay?: number }
+
+/**
+ * An archive all that is still going: it clears the list, loads older mail, and clears that, until the mailbox runs out or it is stopped.
+ * `spare` is what it was told to leave, `upTo` the newest mail on screen when it began, `moved` everything undo would bring back.
+ */
+type Run = { id: number; spare: Set<string>; upTo: string; moved: Message[]; count: number; working: boolean; stopped: boolean; release: () => void }
 
 /**
  * Everything a row or the open message can ask for. Each one animates, acts, and offers undo where it can.
@@ -217,7 +224,8 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
   snoozes: Snooze[]
   actions: MessageActions
   more?: boolean
-  onMore?: () => void
+  /** Loads the next older page. `sweeping` says it is being loaded only to be archived, so no model reads it. */
+  onMore?: (sweeping?: boolean) => Promise<void> | void
   onConnect: () => Promise<void>
 }) {
   const [sheet, setSheet] = useState<SheetState>()
@@ -243,6 +251,8 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
   const onMoreRef = useRef(onMore)
   onMoreRef.current = onMore
   const follow = useRef(false)
+  const run = useRef<Run>(undefined)
+  const [, again] = useReducer((count: number) => count + 1, 0)
   const hasBar = pane && connection === 'connected'
   useEffect(() => {
     const bar = barRef.current
@@ -270,7 +280,7 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
   useEffect(() => {
     const target = moreRef.current
     if (!target || busy || error || typeof IntersectionObserver === 'undefined') return
-    const observer = new IntersectionObserver((entries) => { if (entries.some((entry) => entry.isIntersecting)) onMoreRef.current?.() }, { rootMargin: '600px' })
+    const observer = new IntersectionObserver((entries) => { if (entries.some((entry) => entry.isIntersecting) && !run.current) void onMoreRef.current?.() }, { rootMargin: '600px' })
     observer.observe(target)
     return () => observer.disconnect()
   }, [more, busy, error, items.length])
@@ -350,6 +360,51 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
     }, () => count ? `archived ${count}` : '', true, 20_000, undefined, () => moved)
   }
 
+  const progress = (going: Run): ToastState => ({ key: going.id, text: going.count ? `archived ${going.count.toLocaleString()}` : 'archiving', stop: () => { going.stopped = true; again() } })
+
+  /** Archive all, and keep going: older mail is loaded and archived until none is left. `spare` and rows highlighted along the way are left alone. */
+  function sweepOn(spare: string[]): void {
+    if (run.current) return
+    const upTo = order.reduce((newest, item) => item.message.receivedAt > newest ? item.message.receivedAt : newest, '')
+    // Years of mail take a while; a new build waits for it.
+    run.current = { id: Date.now(), spare: new Set(spare), upTo, moved: [], count: 0, working: false, stopped: false, release: holdUpdates() }
+    setToast(progress(run.current))
+    again()
+  }
+
+  /** One list's worth leaves. Anything that would not move ends the run, so it is not tried again and again. */
+  async function take(going: Run, batch: InboxThread[], messages: Message[]): Promise<void> {
+    const moved = await actions.archiveAll(messages)
+    const gone = new Set(moved.map((message) => message.id))
+    const now = new Date().toISOString()
+    // Old mail is never read by a model, so its text is not held onto for an undo that may never come.
+    going.moved.push(...moved.map((message) => isOld(message, now) ? { ...message, body: '' } : message))
+    going.count += batch.filter((item) => item.all.every((message) => gone.has(message.id))).length
+    if (moved.length < messages.length) going.stopped = true
+    if (run.current === going) setToast(progress(going))
+  }
+
+  function end(going: Run): void {
+    run.current = undefined
+    going.release()
+    if (going.count) say(`archived ${going.count.toLocaleString()}`, () => { setToast(undefined); void actions.restoreAll(going.moved).catch(() => undefined) }, 20_000)
+    else setToast(undefined)
+  }
+
+  // The run's next move, whenever the list, the load, or the run itself changes.
+  useEffect(() => {
+    const going = run.current
+    if (!going || going.working || busy) return
+    const step = going.stopped || shownError ? { do: 'end' as const } : sweepStep(order, new Set([...going.spare, ...(several ? pickedKeys : [])]), going.upTo, Boolean(more && onMore))
+    if (step.do === 'end') { end(going); return }
+    going.working = true
+    const work = step.do === 'archive'
+      ? new Promise<void>((resolve) => clear(step.batch, 'right', (messages) => take(going, step.batch, messages).finally(resolve)))
+      : Promise.resolve(onMore?.(true))
+    void work.catch(() => { going.stopped = true }).finally(() => { going.working = false; again() })
+  })
+  useEffect(() => () => { run.current?.release(); run.current = undefined }, [])
+
   /** The newest message was handled on its own; the older ones in the conversation are archived behind it. */
   function clearRest(item: InboxThread): void {
     const rest = item.all.slice(1)
@@ -381,7 +436,7 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
     replyAll: (item) => answer(item, 'replyAll'),
     forward: (item) => actions.compose({ mode: 'forward', message: item.message }),
     snooze: (item) => setSheet({ kind: 'snooze', threads: [item] }),
-    archiveOthers: (item) => sweep(order.filter((entry) => entry.key !== item.key)),
+    archiveOthers: (item) => sweepOn([item.key]),
   }
 
   /** The actions that take several conversations at once, on whatever the bar acts on. */
@@ -440,7 +495,7 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
       {/* A phone has no bar, so the check's status and archive all sit here. A wide screen has the status beside the title. */}
       {!pane && <div className="list-head">
         <p className={`status${busy ? ' is-busy' : ''}`} aria-live="polite">{busy ?? ''}</p>
-        {order.length > 1 && <button className="link" type="button" onClick={() => sweep(order)}>archive all</button>}
+        {order.length > 1 && <button className="link" type="button" onClick={() => sweepOn([])}>archive all</button>}
       </div>}
       {shownError && <p className="note is-error" role="alert">{shownError}</p>}
 
@@ -454,7 +509,7 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
         </section>}
       </div>}
 
-      {more && <div className="actions"><button ref={moreRef} className="secondary" type="button" disabled={Boolean(busy)} onClick={onMore}>load more</button></div>}
+      {more && <div className="actions"><button ref={moreRef} className="secondary" type="button" disabled={Boolean(busy)} onClick={() => void onMore?.()}>load more</button></div>}
 
       {!busy && items.length === 0 && !more && summary && <p className="zero">inbox zero{snoozes.length ? ` · ${snoozes.length} snoozed` : ''}</p>}
 
@@ -468,7 +523,7 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
     {pane && targets.length > 0 && <div className="bar mail-actions" role="toolbar" aria-label="actions" ref={barRef}>
       {inBar.map((act) => <ActButton key={act.label} act={act} />)}
       {inMenu.length > 0 && <Menu label="more" items={asMenu(inMenu)} />}
-      <button className="bar-all" type="button" disabled={!unpicked.length} onClick={() => sweep(unpicked)}><Icon name="archive" size={16} />{several ? 'archive all but these' : 'archive all'}</button>
+      <button className="bar-all" type="button" disabled={!unpicked.length} onClick={() => sweepOn(several ? picked.map(keyOf) : [])}><Icon name="archive" size={16} />{several ? 'archive all but these' : 'archive all'}</button>
     </div>}
 
     {pane && <section className="reader" aria-label="message">

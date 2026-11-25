@@ -69,13 +69,14 @@ export function Fold({ open, children }: { open: boolean; children: ReactNode })
 }
 
 /** `ms` is how long it stays; a few seconds unless what it can undo is big. */
-export type ToastState = { key: number; text: string; undo?: () => void; ms?: number }
+/** With `stop` the toast is the progress of something still running: it stays up until that ends. */
+export type ToastState = { key: number; text: string; undo?: () => void; stop?: () => void; ms?: number }
 
 export function Toast({ toast, onDone }: { toast?: ToastState; onDone: () => void }) {
   const done = useRef(onDone)
   done.current = onDone
   useEffect(() => {
-    if (!toast) return
+    if (!toast || toast.stop) return
     const timer = setTimeout(() => done.current(), toast.ms ?? 5000)
     return () => clearTimeout(timer)
   }, [toast])
@@ -83,6 +84,7 @@ export function Toast({ toast, onDone }: { toast?: ToastState; onDone: () => voi
   return <div className="toast" role="status" key={toast.key}>
     <span>{toast.text}</span>
     {toast.undo && <button type="button" onClick={toast.undo}>undo</button>}
+    {toast.stop && <button type="button" onClick={toast.stop}>stop</button>}
   </div>
 }
 

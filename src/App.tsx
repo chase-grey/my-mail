@@ -129,6 +129,8 @@ export type MessageActions = {
   block: (message: Message) => Promise<(() => Promise<void>) | undefined>
   /** Undo: bring a message that was just archived, deleted, or snoozed back to the inbox. */
   restore: (message: Message) => Promise<void>
+  /** Undo for a sweep: many come back in as few round trips as it takes. */
+  restoreAll: (messages: Message[]) => Promise<void>
 }
 
 const emptyCleanup: CleanupState = { scanned: 0, groups: [], old: { count: 0, unread: 0, flagged: 0 }, done: false }
@@ -545,16 +547,17 @@ export default function App() {
   }, [run, sortBatch, syncPending])
 
   /** The next page of older mail, put through the same sorting as the first. */
-  const loadMore = useCallback(async (current: Services, options: { settings: Settings }) => {
+  const loadMore = useCallback(async (current: Services, options: { settings: Settings }, spend = true) => {
     const before = oldestRef.current
-    if (!before) return
+    if (!before) { setMore(false); return }
     setBusy('loading more')
     setError(undefined)
     try {
       const page = await current.mail.inbox(inboxPageSize, before)
       const have = new Set(messagesRef.current.map((message) => message.id))
       const fresh = page.messages.filter((message) => !have.has(message.id))
-      const sorting = aiSorts(options.settings)
+      // A page loaded only to be archived is not worth a model's time.
+      const sorting = spend && aiSorts(options.settings)
       const sorted = await sortBatch(current, fresh, triageRef.current, automationRef.current, options.settings, new Date().toISOString(), () => sorting)
       oldestRef.current = oldestOf(page.messages) ?? before
 
@@ -797,6 +800,30 @@ export default function App() {
       } catch (failure) {
         setError(errorText(failure))
         throw failure
+      }
+    },
+    restoreAll: async (list) => {
+      if (!services || !list.length) return
+      setError(undefined)
+      // Thousands of moves take minutes; a new build waits for them.
+      const release = holdUpdates()
+      try {
+        const stuck = new Set(await services.mail.moveMany(list.map((message) => message.id), 'inbox'))
+        const back = list.filter((message) => !stuck.has(message.id))
+        const ids = new Set(back.map((message) => message.id))
+        for (const message of back) { leftRef.current.delete(message.id); backRef.current.set(message.id, message) }
+        const have = new Set(messagesRef.current.map((message) => message.id))
+        const returned = back.filter((message) => !have.has(message.id))
+        setMessages((current) => [...current, ...returned])
+        setSummary((current) => current ? { ...current, inbox: current.inbox + returned.length, needReply: current.needReply + returned.filter((message) => triageRef.current[message.id]?.needsReply).length } : current)
+        if (stuck.size) setError(notMoved(stuck.size))
+        const state = automationRef.current
+        await persistAutomation({ ...state, snoozes: withoutSnoozes(state.snoozes, [...ids]), decisions: state.decisions.filter((decision) => !ids.has(decision.messageId)) })
+      } catch (failure) {
+        setError(errorText(failure))
+        throw failure
+      } finally {
+        release()
       }
     },
   }
@@ -1071,7 +1098,7 @@ export default function App() {
   return <BodySource value={connected ? readBody : undefined}><ThreadContext value={connected ? threadActions : undefined}><Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe, rules: suggestions.length } : undefined} busy={Boolean(busy)} status={connected ? busy : undefined} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })} onCompose={connected ? () => setComposing({ mode: 'new' }) : undefined}>
     {view === 'inbox' && installFirst && <InstallStep install={install} onSkip={() => setInstallSkipped(true)} />}
     {view === 'inbox' && connected && <InstallBanner install={install} />}
-    {view === 'inbox' && !installFirst && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} archiveAfterReply={settings.archiveAfterReply} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
+    {view === 'inbox' && !installFirst && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} archiveAfterReply={settings.archiveAfterReply} snoozes={automation.snoozes} actions={actions} more={more} onMore={(sweeping) => services ? loadMore(services, { settings }, !sweeping) : undefined}
       onConnect={connect} />}
     {view === 'search' && connected && <SearchView search={searchActions} actions={actions} hasModel={Boolean(settings.anthropicApiKey)} senders={senders} subjects={subjects} />}
     {view === 'receipts' && connected && <ReceiptsView actions={receiptActions} />}

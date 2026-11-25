@@ -55,7 +55,9 @@ An open message has a `chat` link beside `find related`, wherever it is opened. 
 
 ## archiving many
 
-The inbox has two ways to archive in bulk, and both go through `sweep` in `src/views/InboxView.tsx`: `archive all` (at the end of the bar from 60rem up, where highlighted rows turn it into `archive all but these`; at the top of the list on a phone), and `archive everything else` among a message's actions. Archiving everything from one sender is `archive + rule`. Each clears whole conversations, leaves mail kept in the inbox alone, covers only what is loaded in the list, and offers undo for everything it moved. A new bulk action goes through `sweep` too; do not add one that skips undo or touches kept mail.
+The inbox has two ways to archive in bulk, and both go through `sweep` in `src/views/InboxView.tsx`: `archive all` (at the end of the bar from 60rem up, where highlighted rows turn it into `archive all but these`; at the top of the list on a phone), and `archive everything else` among a message's actions. Archiving everything from one sender is `archive + rule`. Each clears whole conversations, leaves mail kept in the inbox alone, and offers undo for everything it moved. A new bulk action goes through `sweep` or `sweepOn`; do not add one that skips undo or touches kept mail.
+
+`archive all`, `archive all but these` and `archive everything else` keep going (`sweepOn`, with `sweepStep` in `src/domain/threads.ts`): once the list is clear they load older mail and archive that too, page after page, until the mailbox has no more. That is how years of mail get cleared in one press. What was highlighted or named stays through every page, and so does mail that arrived after the press. The toast counts what has gone and has `stop`; when the run ends, by itself or by `stop`, one `undo` brings back everything it moved. Pages loaded this way are never sent to a model. Do not make these stop at the loaded list again, and do not let a run go on without `stop` on screen.
 
 ## new mail
 

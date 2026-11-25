@@ -50,6 +50,12 @@ const seed: Triaged[] = [
   mail(14, 'Owen Marsh', 'cabin weekend', 'Who is in for a cabin weekend this winter? Thinking February.', 'fyi', 'archive', 'asks who is in for a cabin weekend in february', { conversationId: 'cabin' }),
 ]
 
+// Older mail behind `load more`: three pages, so an archive all that keeps going has something to keep going through.
+const olderPages = 3
+const older = (page: number): Triaged[] => ['Harbor Outfitters', 'The Weekly Fold', 'Parcel Post', 'Juniper Books', 'Trail Club', 'Cloud Storage'].map((name, index) =>
+  mail(200 + page * 40 + index * 6, name, `${name} · ${page * 6 + index + 1}`, 'Older mail from further down the inbox.', 'newsletter', 'archive', 'older mail'))
+const everything = [...seed, ...Array.from({ length: olderPages }, (_, page) => older(page)).flat()]
+
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 // What the mailbox would send for an open message: a plain note, a note written in Outlook, a designed mailing, and bare text.
@@ -132,6 +138,8 @@ function Preview() {
   const [view, setView] = useState<View>((params.get('view') as View) || 'inbox')
   const [items, setItems] = useState(params.has('empty') ? [] : seed)
   const [kept, setKept] = useState<Record<string, string>>({ m12: 'now' })
+  const [pages, setPages] = useState(0)
+  const [loading, setLoading] = useState(false)
   const asked = params.get('compose') as ComposeRequest['mode'] | null
   const [composing, setComposing] = useState<ComposeRequest | undefined>(asked ? { mode: asked, message: asked === 'new' ? undefined : seed[2].message, text: asked === 'reply' ? 'Sounds good, see you then.' : '' } : undefined)
   const [note, setNote] = useState<ToastState>()
@@ -152,12 +160,14 @@ function Preview() {
     unsubscribe: async (message) => `unsubscribed from ${message.from.address}`,
     makeRule: async () => wait(200),
     block: async () => { await wait(200); return () => wait(200) },
-    restore: async (message) => { await wait(250); setItems((current) => rankTriaged([...current, ...seed.filter((item) => item.message.id === message.id)])) },
+    restore: async (message) => { await wait(250); setItems((current) => rankTriaged([...current, ...everything.filter((item) => item.message.id === message.id)])) },
+    restoreAll: async (messages) => { await wait(500); const ids = new Set(messages.map((message) => message.id)); setItems((current) => rankTriaged([...current, ...everything.filter((item) => ids.has(item.message.id) && !current.includes(item))])) },
   }
 
   return <BodySource value={readBody}><ThreadContext value={threads}><Shell view={view} views={['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings']} counts={{ rules: 1, inbox: groupInbox(items.filter((item) => !kept[item.message.id])).needsMe.length }} busy={params.has('busy')} status={params.has('busy') ? 'checking mail' : undefined} canRefresh links={[{ label: 'open my brain', onSelect: () => {} }]} onView={setView} onRefresh={() => setItems(seed)} onCompose={() => setComposing({ mode: 'new' })}>
-    {view === 'inbox' && <InboxView items={items} kept={kept} summary={{ inbox: items.length, needReply: items.filter((item) => item.triage?.needsReply).length, byRules: 14, autoArchived: 0, returned: 0, withoutModel: 0 }} busy={params.has('busy') ? 'checking mail' : undefined} connection="connected"
-      snoozes={[]} actions={actions} onConnect={async () => {}} />}
+    {view === 'inbox' && <InboxView items={items} kept={kept} summary={{ inbox: items.length, needReply: items.filter((item) => item.triage?.needsReply).length, byRules: 14, autoArchived: 0, returned: 0, withoutModel: 0 }} busy={params.has('busy') ? 'checking mail' : loading ? 'loading more' : undefined} connection="connected"
+      snoozes={[]} actions={actions} onConnect={async () => {}} more={!params.has('empty') && pages < olderPages}
+      onMore={async () => { setLoading(true); await wait(700); setItems((current) => [...current, ...older(pages)]); setPages(pages + 1); setLoading(false) }} />}
     {view === 'search' && <SearchView search={search} actions={actions} hasModel senders={seed.map((item) => item.message.from)} subjects={seed.map((item) => item.message.subject)} />}
     {view === 'receipts' && <ReceiptsView actions={{ load: async () => { await wait(300); return { messages: receipts, more: true } }, fromArchive: async () => { await wait(600); return 3 }, toInbox: () => wait(300), forward: (message) => setComposing({ mode: 'forward', message }) }} />}
     {view === 'cleanup' && <CleanupView state={{ scanned: scanned.length, total: scanned.length, groups: senders, old: { count: old.ids.length, unread: old.unread, flagged: 2 }, swept: params.has('swept') ? 1204 : undefined, working: params.has('sweeping') ? 'archived 640 of 1,204' : undefined, done: true }} actions={cleanupActions} onError={() => {}} />}

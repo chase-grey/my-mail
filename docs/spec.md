@@ -161,7 +161,8 @@ this for the sender, make a rule.
 
 Archiving many: `archive all` at the top of the list clears every row except mail kept in the inbox.
 A message's actions include `archive everything else`; everything from one sender goes with `archive + rule`. Each shows an undo that
-brings back everything it moved.
+brings back everything it moved. Both keep going: they load older mail and archive it until none is
+left, with `stop` beside the running count.
 
 Phone gestures: swipe right archives, swipe left snoozes. Both show a five-second undo. PC keys on a
 focused card: `e` archive, `r` reply, `t` to do, `s` snooze, `k` keep, `#` delete, `j`/`k` move,
