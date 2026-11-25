@@ -1,8 +1,32 @@
 /** A message as it was written, for reading: its html when it has any, and its whole text otherwise. */
 export type MailContent = { html?: string; text: string }
 
-/** What a message's own markup may load. No scripts, frames, forms, or stylesheets from elsewhere; pictures only over https. */
-export const framePolicy = "default-src 'none'; img-src https: data:; style-src 'unsafe-inline'; font-src https: data:"
+/**
+ * What a message's own markup may load. Never scripts, frames, forms, or stylesheets from elsewhere.
+ * Pictures and fonts come only from inside the message itself, so opening mail tells its sender nothing,
+ * unless `remote` is on: then they load over https too. That is for people I know, and for one message on a tap.
+ */
+export function framePolicy(remote = false): string {
+  return remote
+    ? "default-src 'none'; img-src https: data: cid:; style-src 'unsafe-inline'; font-src https: data:"
+    : "default-src 'none'; img-src data: cid:; style-src 'unsafe-inline'; font-src data:"
+}
+
+/** What the reading frame is allowed to do. It never runs scripts: there is no `allow-scripts` here and there must never be. */
+export const frameSandbox = 'allow-same-origin allow-popups allow-popups-to-escape-sandbox'
+
+/** True when the markup asks for a picture or font from somewhere else, which the frame holds back until it is allowed. */
+export function wantsRemote(html: string): boolean {
+  return /\b(?:src|srcset|background|poster)\s*=\s*["']?\s*(?:https?:)?\/\//i.test(html) || /url\(\s*(?:["']|&quot;|&#39;)?\s*(?:https?:)?\/\//i.test(html)
+}
+
+/**
+ * Whether a message's pictures load from elsewhere on opening: only for someone I know, and never for mail that came out of junk,
+ * where the name on it is only a claim. Everyone else's wait for `load images`.
+ */
+export function loadsRemote(message: { fromJunk?: boolean }, known: boolean, asked: boolean): boolean {
+  return asked || (known && !message.fromJunk)
+}
 
 /**
  * How an open message is drawn. `app`: the app is light and so is the mail. `dark`: the app is dark and the mail is darkened to match.
@@ -35,10 +59,10 @@ export function wearsAppColours(html: string): boolean {
 
 /**
  * The document the reading frame shows: the message's markup behind a policy that stops it loading anything but pictures,
- * with links opening in a new tab. The policy comes first so it governs everything the message brings;
- * the frame's sandbox is what stops scripts.
+ * and those from elsewhere only when `remote` says so, with links opening in a new tab.
+ * The policy comes first so it governs everything the message brings; the frame's sandbox is what stops scripts.
  */
-export function frameDocument(html: string, look: MailLook = 'app'): string {
+export function frameDocument(html: string, look: MailLook = 'app', remote = false): string {
   const plain = wearsAppColours(html)
   const style = [
     // A frame is only see-through when its scheme matches the app's, so dark mail says dark even though its colours are flipped after.
@@ -61,7 +85,7 @@ export function frameDocument(html: string, look: MailLook = 'app'): string {
     'pre { font: inherit; white-space: pre-wrap; }',
   ].filter(Boolean).join('\n')
   const root = look === 'dark' && !plain ? `<html class="${darkened}">` : ''
-  const head = `<!doctype html>${root}<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${framePolicy}"><base target="_blank"><style>${style}</style>`
+  const head = `<!doctype html>${root}<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${framePolicy(remote)}"><base target="_blank"><style>${style}</style>`
   return head + html.replace(/<meta[^>]+http-equiv\s*=\s*["']?\s*refresh[^>]*>/gi, '')
 }
 

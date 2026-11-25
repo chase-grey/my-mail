@@ -90,6 +90,11 @@ export const ruleCategories: Category[] = ['newsletter', 'promo', 'receipt']
 
 const engaged: Action[] = ['reply', 'task', 'keep', 'flag', 'snooze']
 
+/** The people I know: senders whose mail I have replied to, kept, flagged, snoozed, or made a task from. They never get an automatic rule, and their pictures load on opening. */
+export function knownSenders(decisions: Decision[]): Set<string> {
+  return new Set(decisions.filter((decision) => engaged.includes(decision.action) && decision.from).map((decision) => decision.from))
+}
+
 /**
  * Senders of mail that was just auto-archived who should get an archive rule, so Outlook clears the next one on arrival.
  * A sender is skipped when a rule already names them, when I deleted the rule made for them before,
@@ -100,7 +105,7 @@ export function autoRuleSenders(archived: { message: Message; triage: Triage }[]
   const address = (message: Message) => message.from.address.trim().toLowerCase()
   const blocked = new Set([
     ...(state.noRules ?? []),
-    ...state.decisions.filter((decision) => engaged.includes(decision.action)).map((decision) => decision.from),
+    ...knownSenders(state.decisions),
     ...staying.map(address),
   ])
   const senders = new Set<string>()

@@ -19,7 +19,7 @@ import { holdUpdates } from './appUpdate'
 import { groupBySender, keepSenderKinds, sendersToAsk, oldMail, type ScanMessage, type SenderGroup, type SenderKinds } from './domain/cleanup'
 import { historyTriage, noiseSenders, senderHistoryLine } from './domain/history'
 import { compileRule, planRuleSync } from './domain/outlookRules'
-import { applyRules, autoRuleSenders, clearsSender, newRule, recordHits, rememberDecision, retiredSenders, suggestRules, type RuleSuggestion } from './domain/rules'
+import { applyRules, autoRuleSenders, clearsSender, knownSenders, newRule, recordHits, rememberDecision, retiredSenders, suggestRules, type RuleSuggestion } from './domain/rules'
 import { dueSnoozes, snoozeRecord, snoozeUntil, withoutSnoozes, type SnoozeOption } from './domain/snooze'
 import { ageTriage, autoArchivable, codeTriage, oldAfterDays, outlookTriage, pruneTriage, rankTriaged, sharedOf, summarize, unsureBelow, withJunkMarks, worthSharing, writeShared, type RunSummary, type Triaged } from './domain/triage'
 import { emptyAutomation, type Action, type Automation, type Message, type OutlookRule, type Rule, type RuleAction, type Triage } from './domain/types'
@@ -31,7 +31,7 @@ import { Toast, type ToastState } from './ui'
 import { CleanupView, type CleanupActions, type CleanupState } from './views/CleanupView'
 import { Compose, type ComposeRequest } from './views/Compose'
 import { InboxView } from './views/InboxView'
-import { BodySource } from './views/MailBody'
+import { BodySource, KnownSender } from './views/MailBody'
 import { InstallBanner, InstallStep, hasInstallStep } from './views/InstallOffer'
 import { FoldersView, type FolderActions } from './views/FoldersView'
 import { ReceiptsView, type ReceiptActions } from './views/ReceiptsView'
@@ -1142,6 +1142,9 @@ export default function App() {
     if (next === 'cleanup' && !cleanup.done && !cleanup.scanned) void cleanupActions.scan()
   }
 
+  // People I know, by what I have done with their mail. Their pictures load on opening; everyone else's wait for a tap.
+  const known = useMemo(() => knownSenders(automation.decisions), [automation.decisions])
+  const isKnown = useCallback((message: Message) => known.has(message.from.address.trim().toLowerCase()), [known])
   const readBody = useMemo(() => services && ((message: Message) => services.mail.content(message.id)), [services])
 
   const links: ShellLink[] = [
@@ -1149,7 +1152,7 @@ export default function App() {
     ...(install.canPrompt ? [{ label: 'install app', onSelect: () => void install.install() }] : []),
   ]
 
-  return <BodySource value={connected ? readBody : undefined}><ThreadContext value={connected ? threadActions : undefined}><Shell view={view} views={connected ? ['inbox', 'search', 'folders', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe } : undefined} busy={Boolean(busy)} alert={Boolean(error)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })} onCompose={connected ? () => setComposing({ mode: 'new' }) : undefined}>
+  return <KnownSender value={isKnown}><BodySource value={connected ? readBody : undefined}><ThreadContext value={connected ? threadActions : undefined}><Shell view={view} views={connected ? ['inbox', 'search', 'folders', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe } : undefined} busy={Boolean(busy)} alert={Boolean(error)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })} onCompose={connected ? () => setComposing({ mode: 'new' }) : undefined}>
     {view === 'inbox' && installFirst && <InstallStep install={install} onSkip={() => setInstallSkipped(true)} />}
     {view === 'inbox' && connected && <InstallBanner install={install} />}
     {view === 'inbox' && !installFirst && <InboxView items={triaged} kept={kept} read={read} busy={busy} error={error} connection={connection} archiveAfterReply={settings.archiveAfterReply} snoozes={automation.snoozes} actions={actions} more={more} onMore={(sweeping) => services ? loadMore(services, { settings }, !sweeping) : undefined}
@@ -1164,5 +1167,5 @@ export default function App() {
       onDraft={settings.anthropicApiKey ? (strong, instruction, written) => actions.draft(composing.mode === 'forward' || composing.mode === 'draft' ? undefined : composing.message, strong, instruction, written) : undefined}
       onSent={() => sent(composing)} onClose={(note) => { setComposing(undefined); setComposed((count) => count + 1); if (note) setComposeNote({ key: Date.now(), text: note }) }} />}
     <Toast toast={composeNote} onDone={() => setComposeNote(undefined)} />
-  </Shell></ThreadContext></BodySource>
+  </Shell></ThreadContext></BodySource></KnownSender>
 }

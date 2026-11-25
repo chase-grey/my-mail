@@ -10,7 +10,7 @@ import type { ComposeActions, DraftAttachment } from '../data/compose'
 import { CleanupView, type CleanupActions } from '../views/CleanupView'
 import { Compose, type ComposeRequest } from '../views/Compose'
 import { InboxView } from '../views/InboxView'
-import { BodySource } from '../views/MailBody'
+import { BodySource, KnownSender } from '../views/MailBody'
 import { FoldersView } from '../views/FoldersView'
 import { ReceiptsView } from '../views/ReceiptsView'
 import { RulesView } from '../views/RulesView'
@@ -65,7 +65,7 @@ const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, 
 
 // What the mailbox would send for an open message: a plain note, a note written in Outlook, a designed mailing, and bare text.
 const picture = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="200"><rect width="600" height="200" fill="#2f5d50"/><text x="300" y="112" font-family="sans-serif" font-size="36" fill="#fff" text-anchor="middle">Harbor Outfitters</text></svg>')}`
-const mailing = `<html><body style="margin:0;background-color:#f2efe9"><table width="600" align="center" cellpadding="0" cellspacing="0" style="background-color:#ffffff;font-family:Georgia,serif"><tr><td><img src="${picture}" width="600" height="200" alt="Harbor Outfitters"></td></tr><tr><td style="padding:28px 36px;color:#222222"><h1 style="margin:0 0 12px;font-size:28px">Members: 20% off through Sunday</h1><p style="font-size:16px;line-height:24px">Members save 20% on one full-price item and an extra 20% on one outlet item. To start a <a href="https://example.com/return" style="color:#2f5d50">return</a>, bring your order number.</p><p><a href="https://example.com/shop" style="display:inline-block;padding:12px 28px;background-color:#2f5d50;color:#ffffff;text-decoration:none;border-radius:4px">shop the sale</a></p></td></tr><tr><td style="padding:16px 36px;background-color:#e7e2d8;color:#666666;font-size:12px">You are receiving this because you are a member. <a href="https://example.com/unsubscribe" style="color:#666666">Unsubscribe</a></td></tr></table></body></html>`
+const mailing = `<html><body style="margin:0;background-color:#f2efe9"><table width="600" align="center" cellpadding="0" cellspacing="0" style="background-color:#ffffff;font-family:Georgia,serif"><tr><td><img src="${picture}" width="600" height="200" alt="Harbor Outfitters"></td></tr><tr><td style="padding:28px 36px;color:#222222"><h1 style="margin:0 0 12px;font-size:28px">Members: 20% off through Sunday</h1><p style="font-size:16px;line-height:24px">Members save 20% on one full-price item and an extra 20% on one outlet item. To start a <a href="https://example.com/return" style="color:#2f5d50">return</a>, bring your order number.</p><p><a href="https://example.com/shop" style="display:inline-block;padding:12px 28px;background-color:#2f5d50;color:#ffffff;text-decoration:none;border-radius:4px">shop the sale</a></p></td></tr><tr><td style="padding:0 36px 20px"><img src="https://chase-grey.github.io/my-mail/icons/icon-192.png" width="96" height="96" alt="a picture from elsewhere"></td></tr><tr><td style="padding:16px 36px;background-color:#e7e2d8;color:#666666;font-size:12px">You are receiving this because you are a member. <a href="https://example.com/unsubscribe" style="color:#666666">Unsubscribe</a></td></tr></table></body></html>`
 const contents: Record<string, MailContent> = {
   // Sent dark already: darkening it would turn it light, so it is left as it is.
   m6: { html: '<html><body style="margin:0"><table width="100%" cellpadding="0" cellspacing="0" style="background-color:#14161c;font-family:Georgia,serif"><tr><td style="padding:28px 32px;color:#e8e6e0"><h1 style="margin:0 0 12px;font-size:26px;color:#f3c26b">Issue 214: slow mornings</h1><p style="font-size:16px;line-height:24px">This week: a case for doing less before nine, three recipes, and a reader letter. <a href="https://example.com/issue" style="color:#f3c26b">read the issue</a></p></td></tr></table></body></html>', text: '' },
@@ -74,6 +74,8 @@ const contents: Record<string, MailContent> = {
   m3: { html: '<html><body><div style="font-family:Calibri,sans-serif;font-size:11pt;color:rgb(0,0,0)">I can drive if someone else books the place. Are we still thinking the second weekend of February?</div><div style="font-family:Calibri,sans-serif;font-size:11pt;color:rgb(0,0,0)"><br>The listing is <a href="https://example.com/cabin">here</a>.</div></body></html>', text: '' },
   m5: { html: mailing, text: '' },
 }
+// The receipts are from senders I know, so their pictures load on opening; the inbox mailing waits for `load images`.
+const knowsSender = (message: Message) => message.id.startsWith('r')
 const readBody = async (message: Message): Promise<MailContent> => {
   await wait(250)
   return contents[message.id] ?? (message.id.startsWith('r') ? { html: mailing.replace('Members: 20% off through Sunday', message.subject), text: '' } : { html: `<html><body><p>${message.body}</p></body></html>`, text: '' })
@@ -176,7 +178,7 @@ function Preview() {
     restoreAll: async (messages) => { await wait(500); const ids = new Set(messages.map((message) => message.id)); setItems((current) => rankTriaged([...current, ...everything.filter((item) => ids.has(item.message.id) && !current.includes(item))])) },
   }
 
-  return <BodySource value={readBody}><ThreadContext value={threads}><Shell view={view} views={['inbox', 'search', 'folders', 'receipts', 'cleanup', 'rules', 'settings']} counts={{ inbox: groupInbox(items.filter((item) => !kept[item.message.id])).needsMe.length }} busy={params.has('busy')} alert={params.has('error')} canRefresh links={[{ label: 'open my brain', onSelect: () => {} }]} onView={setView} onRefresh={() => setItems(seed)} onCompose={() => setComposing({ mode: 'new' })}>
+  return <KnownSender value={knowsSender}><BodySource value={readBody}><ThreadContext value={threads}><Shell view={view} views={['inbox', 'search', 'folders', 'receipts', 'cleanup', 'rules', 'settings']} counts={{ inbox: groupInbox(items.filter((item) => !kept[item.message.id])).needsMe.length }} busy={params.has('busy')} alert={params.has('error')} canRefresh links={[{ label: 'open my brain', onSelect: () => {} }]} onView={setView} onRefresh={() => setItems(seed)} onCompose={() => setComposing({ mode: 'new' })}>
     {view === 'inbox' && <InboxView items={items} kept={kept} read busy={params.has('busy') ? 'checking mail' : loading ? 'loading more' : undefined} connection="connected"
       snoozes={params.has('snoozed') ? [{ messageId: 's1', until: new Date(Date.now() + 86_400_000).toISOString(), subject: 'Renew passport', from: 'Travel Office' }] : []} actions={actions} onConnect={async () => {}} more={!params.has('empty') && pages < olderPages}
       onMore={async () => { setLoading(true); await wait(700); setItems((current) => [...current, ...older(pages)]); setPages(pages + 1); setLoading(false) }} />}
@@ -190,7 +192,7 @@ function Preview() {
       onDraft={actions.draft.bind(undefined, composing.message)}
       onSent={() => composing.onSent?.()} onClose={(text) => { setComposing(undefined); if (text) setNote({ key: Date.now(), text }) }} />}
     <Toast toast={note} onDone={() => setNote(undefined)} />
-  </Shell></ThreadContext></BodySource>
+  </Shell></ThreadContext></BodySource></KnownSender>
 }
 
 createRoot(document.getElementById('root')!).render(<StrictMode><Preview /></StrictMode>)

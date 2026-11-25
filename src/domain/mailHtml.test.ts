@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { brightness, darkened, frameDocument, framePolicy, linkParts, mailLook, wearsAppColours } from './mailHtml'
+import { knownSenders } from './rules'
+import { brightness, darkened, frameDocument, framePolicy, linkParts, loadsRemote, mailLook, wantsRemote, wearsAppColours } from './mailHtml'
 
 const designed = '<html><body><table bgcolor="#ffffff"><tr><td style="color:#222222">sale</td></tr></table></body></html>'
 const plain = '<p>Does <b>five</b> work?</p>'
@@ -8,12 +9,60 @@ const on = `<html class="${darkened}">`
 describe('mail markup for reading', () => {
   it('puts the policy ahead of anything the message brings and opens links in a new tab', () => {
     const page = frameDocument('<html><head><base href="https://evil.example/"><meta http-equiv="refresh" content="0; url=https://evil.example/"></head><body><p>hi</p></body></html>')
-    expect(page.indexOf(framePolicy)).toBeGreaterThan(0)
-    expect(page.indexOf(framePolicy)).toBeLessThan(page.indexOf('<html>'))
+    expect(page.indexOf(framePolicy())).toBeGreaterThan(0)
+    expect(page.indexOf(framePolicy())).toBeLessThan(page.indexOf('<html>'))
     expect(page.indexOf('<base target="_blank">')).toBeLessThan(page.indexOf('evil.example'))
     expect(page).not.toMatch(/http-equiv="refresh"/i)
     expect(page).toContain('<p>hi</p>')
-    expect(framePolicy).not.toMatch(/script|frame|connect/)
+    for (const policy of [framePolicy(), framePolicy(true)]) expect(policy).not.toMatch(/script|frame|connect/)
+  })
+
+  it('loads nothing from elsewhere unless it is told to, and then only pictures and fonts over https', () => {
+    expect(framePolicy()).toBe("default-src 'none'; img-src data: cid:; style-src 'unsafe-inline'; font-src data:")
+    expect(framePolicy(true)).toBe("default-src 'none'; img-src https: data: cid:; style-src 'unsafe-inline'; font-src https: data:")
+    for (const policy of [framePolicy(), framePolicy(true)]) expect(policy).not.toMatch(/http:|\*|blob:/)
+    const tracked = '<p>hi</p><img src="https://track.example/pixel.gif?id=me" width="1" height="1">'
+    expect(frameDocument(tracked)).toContain(`content="${framePolicy()}"`)
+    expect(frameDocument(tracked, 'dark')).toContain(`content="${framePolicy()}"`)
+    expect(frameDocument(tracked, 'app', true)).toContain(`content="${framePolicy(true)}"`)
+    // One policy, and it is ours: the message cannot loosen it with a second.
+    expect(frameDocument(tracked).match(/Content-Security-Policy/g)).toHaveLength(1)
+  })
+
+  it('knows when a message asks for something from elsewhere, so the button shows only then', () => {
+    for (const html of [
+      '<img src="https://track.example/p.gif">',
+      "<IMG SRC = 'http://track.example/p.gif'>",
+      '<img src=//track.example/p.gif>',
+      '<img srcset="https://shop.example/a.png 2x">',
+      '<table background="https://shop.example/bg.png">',
+      '<div style="background-image:url(https://shop.example/bg.png)">',
+      '<div style="background:url(&quot;https://shop.example/bg.png&quot;)">',
+      "<style>@font-face { font-family: x; src: url('https://shop.example/x.woff2'); }</style>",
+    ]) expect(wantsRemote(html), html).toBe(true)
+    for (const html of [
+      '<p>See <a href="https://example.com/album">the album</a></p>',
+      '<img src="data:image/png;base64,AAAA">',
+      '<img src="cid:logo@shop.example">',
+      '<p>plain</p>',
+    ]) expect(wantsRemote(html), html).toBe(false)
+  })
+
+  it('loads pictures on opening only for people I know, never for mail from junk, and for anyone once asked', () => {
+    const known = knownSenders([
+      { messageId: '1', from: 'mom@example.com', action: 'reply', at: 't' },
+      { messageId: '2', from: 'owen@example.com', action: 'keep', at: 't' },
+      { messageId: '3', from: 'news@daily.example.com', action: 'archive', at: 't' },
+      { messageId: '4', from: 'deals@shop.example.com', action: 'delete', at: 't' },
+      { messageId: '5', from: 'list@club.example.com', action: 'unsubscribe', at: 't' },
+    ])
+    expect([...known].sort()).toEqual(['mom@example.com', 'owen@example.com'])
+    expect(loadsRemote({}, true, false)).toBe(true)
+    expect(loadsRemote({}, false, false)).toBe(false)
+    expect(loadsRemote({ fromJunk: true }, true, false)).toBe(false)
+    // `load images` was pressed on this message.
+    expect(loadsRemote({}, false, true)).toBe(true)
+    expect(loadsRemote({ fromJunk: true }, true, true)).toBe(true)
   })
 
   it('darkens every message in dark mode, with a way back to light for one', () => {

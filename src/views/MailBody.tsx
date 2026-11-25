@@ -1,11 +1,14 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
-import { brightness, darkened, frameDocument, linkParts, mailLook, type MailContent, type MailLook } from '../domain/mailHtml'
+import { brightness, darkened, frameDocument, frameSandbox, linkParts, loadsRemote, mailLook, wantsRemote, type MailContent, type MailLook } from '../domain/mailHtml'
 import type { Message } from '../domain/types'
 import { useMediaQuery } from '../ui'
 import './mailBody.css'
 
 /** Where a message's real content comes from. Without one, the reader shows the text the list already has. */
 export const BodySource = createContext<((message: Message) => Promise<MailContent>) | undefined>(undefined)
+
+/** Whether a message is from someone I know. Their pictures load on opening; everyone else's wait for `load images`. */
+export const KnownSender = createContext<(message: Message) => boolean>(() => false)
 
 /** How long the reader stays empty before it shows the list's text while the real message is still coming. */
 const patience = 500
@@ -20,6 +23,17 @@ function setLightened(id: string, on: boolean): void {
   for (const oldest of lightened) {
     if (lightened.size <= lightenedCap) break
     lightened.delete(oldest)
+  }
+}
+
+/** Messages whose pictures were asked for this visit, so one stays loaded when it is opened again. Nothing is kept past the visit. */
+const pictured = new Set<string>()
+function setPictured(id: string): void {
+  pictured.delete(id)
+  pictured.add(id)
+  for (const oldest of pictured) {
+    if (pictured.size <= lightenedCap) break
+    pictured.delete(oldest)
   }
 }
 
@@ -38,7 +52,7 @@ function sentDark(doc: Document): boolean {
  * A message's markup in a frame that cannot run scripts, sized to its content so the page scrolls, not the frame.
  * Mail wider than the space it has is shrunk to fit, the way a phone's mail app does.
  */
-function HtmlFrame({ html, look, title }: { html: string; look: MailLook; title: string }) {
+function HtmlFrame({ html, look, remote, title }: { html: string; look: MailLook; remote: boolean; title: string }) {
   const wrap = useRef<HTMLDivElement>(null)
   const frame = useRef<HTMLIFrameElement>(null)
 
@@ -87,16 +101,17 @@ function HtmlFrame({ html, look, title }: { html: string; look: MailLook; title:
     element.addEventListener('load', ready)
     ready()
     return () => { element.removeEventListener('load', ready); observer?.disconnect(); outer.disconnect() }
-  }, [html, look])
+  }, [html, look, remote])
 
   return <div className="mail-frame" ref={wrap}>
-    <iframe ref={frame} title={title} sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" referrerPolicy="no-referrer" srcDoc={frameDocument(html, look)} />
+    <iframe ref={frame} title={title} sandbox={frameSandbox} referrerPolicy="no-referrer" srcDoc={frameDocument(html, look, remote)} />
   </div>
 }
 
 /** The body of an open message: the real thing once it arrives, the list's text if it does not. */
 export function MailBody({ message }: { message: Message }) {
   const source = useContext(BodySource)
+  const known = useContext(KnownSender)
   const appDark = useMediaQuery('(prefers-color-scheme: dark)')
   const [loaded, setLoaded] = useState<{ id: string; content: MailContent }>()
   const [waited, setWaited] = useState(false)
@@ -113,10 +128,17 @@ export function MailBody({ message }: { message: Message }) {
     return () => { current = false; clearTimeout(timer) }
   }, [source, message.id])
 
-  if (content?.html) return <div className="mail-body is-html">
-    {toggle && <button className="link mail-look" type="button" onClick={() => { setLightened(message.id, look === 'dark'); redraw((count) => count + 1) }}>{toggle}</button>}
-    <HtmlFrame html={content.html} look={look} title={message.subject} />
-  </div>
+  if (content?.html) {
+    const remote = loadsRemote(message, known(message), pictured.has(message.id))
+    const held = !remote && wantsRemote(content.html)
+    return <div className="mail-body is-html">
+      {(held || toggle) && <div className="mail-switches">
+        {held && <button className="link mail-look" type="button" onClick={() => { setPictured(message.id); redraw((count) => count + 1) }}>load images</button>}
+        {toggle && <button className="link mail-look" type="button" onClick={() => { setLightened(message.id, look === 'dark'); redraw((count) => count + 1) }}>{toggle}</button>}
+      </div>}
+      <HtmlFrame html={content.html} look={look} remote={remote} title={message.subject} />
+    </div>
+  }
   if (content?.text) return <div className="mail-body">{linkParts(content.text).map((part, index) => typeof part === 'string' ? part : <a key={index} href={part.href} target="_blank" rel="noreferrer">{part.href}</a>)}</div>
   if (source && !content && !waited) return <div className="mail-body is-waiting" />
   return <div className="mail-body">{message.body || message.preview || '(empty)'}</div>

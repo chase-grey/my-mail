@@ -61,6 +61,8 @@ The inbox shows one row per conversation: its newest message, with a count when 
 
 An open message is shown as it was written: its own markup, links and pictures, in a frame that cannot run scripts (`MailBody`). The text kept on a message in the list is cut down for the model and is only what shows when the real message cannot be fetched. Do not put that text in front of the reader as the message.
 
+Opening mail tells its sender nothing. The frame loads pictures and fonts only from inside the message (`framePolicy`), so a tracking pixel is never fetched. Pictures from elsewhere load on opening only for people I know: senders whose mail I have replied to, kept, flagged, snoozed or made a task from (`knownSenders`), and never for mail that came out of junk (`loadsRemote`). For everyone else a message that asks for one has `load images` right above it, beside the `light mode` switch, which loads them for that message until the app is closed. Nothing else goes there and it has no caption. The frame never runs scripts: its sandbox (`frameSandbox`) has no `allow-scripts` and its policy no `script-src`, and `mailHtml.test.ts` fails if either changes. Do not loosen the policy for every sender, and do not add another way to mark a sender as known.
+
 In dark mode every message is darkened, whatever colours it was sent with. Each one has a `light mode` switch right above it for the message that cannot be read dark, and `dark mode` to switch back. In light mode mail is shown as sent and there is no switch (`mailLook`). Mail that was sent dark is left as it is. Do not show mail on a white card in dark mode unless that switch was used.
 
 ## compose
