@@ -95,6 +95,7 @@ const threads: ThreadActions = {
     return [elsewhere(seed[11], 700, 'Lake house deposit'), elsewhere(seed[1], 5000, 'Cabin rental agreement')]
   },
   chat: () => {},
+  summarize: async () => { await wait(600); return 'asks if 5pm sunday works, bring a salad and the folding chairs' },
 }
 
 const found = () => seed.slice(0, 4).map((item, index) => ({ message: { ...item.message, receivedAt: hoursAgo(index * 4000 + 30) }, inInbox: index === 0, folder: index === 0 ? undefined : 'Archive' }))
@@ -179,7 +180,7 @@ function Preview() {
     {view === 'rules' && <RulesView rules={[{ id: 'r1', from: '@harbor.example.com', action: 'archive', enabled: true, createdAt: 'now', hits: 12, outlookId: 'o1' }, { id: 'r2', subject: 'receipt', action: 'read', enabled: true, createdAt: 'now', hits: 3 }]} outlookRules={[]} snoozes={[{ messageId: 's1', until: new Date(Date.now() + 86_400_000).toISOString(), subject: 'Renew passport', from: 'Travel Office' }]} suggestions={[{ from: 'news@weeklyfold.example.com', action: 'archive', count: 4 }]} onRules={async () => {}} />}
     {view === 'settings' && <SettingsView settings={defaultSettings} connection="connected" accountName="someone@example.com" busy={false} error={params.has('error') ? 'microsoft graph returned 503' : undefined} onSettings={() => {}} onConnect={async () => {}} onDisconnect={async () => {}} />}
     {composing && <Compose key={`${composing.mode}:${composing.message?.id ?? ''}`} request={composing} actions={composeActions} contacts={seed.map((item) => item.message.from)}
-      onDraft={composing.message && composing.mode !== 'forward' ? actions.draft.bind(undefined, composing.message) : undefined}
+      onDraft={actions.draft.bind(undefined, composing.message)}
       onSent={() => composing.onSent?.()} onClose={(text) => { setComposing(undefined); if (text) setNote({ key: Date.now(), text }) }} />}
     <Toast toast={note} onDone={() => setNote(undefined)} />
   </Shell></ThreadContext></BodySource>

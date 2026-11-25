@@ -80,4 +80,16 @@ describe('ai triage', () => {
     const createMessage = vi.fn(async () => ({ id: 'r', stop_reason: 'end_turn', content: [{ type: 'text' as const, text: ' 7 works. See you Sunday! ' }] }))
     expect(await draftReply({ createMessage } as unknown as AnthropicClient, 'claude-haiku-5-5', message('m1', 'mom@example.com'), context)).toBe('7 works. See you Sunday!')
   })
+
+  it('improves what I wrote instead of writing something else, with or without a message to answer', () => {
+    const reply = buildDraftRequest('m', message('m1', 'mom@example.com', 'Dinner?', { body: 'Sunday at 6?' }), { ...context, written: 'ya 7 is better 4 me', instruction: 'warmer' })
+    expect(reply.system).toContain('improve an email')
+    const asked = reply.messages[0].content as string
+    expect(asked).toContain('Make what I wrote read better. warmer')
+    expect(asked).toContain('ya 7 is better 4 me')
+    expect(asked).toContain('Sunday at 6?')
+    const fresh = buildDraftRequest('m', undefined, { ...context, written: 'hey can u send the form' }).messages[0].content as string
+    expect(fresh).toContain('hey can u send the form')
+    expect(fresh).not.toContain('from:')
+  })
 })

@@ -150,35 +150,44 @@ export async function readMessages(client: AnthropicClient, model: string, items
 export const triageMessages = (client: AnthropicClient, model: string, messages: Message[], context: TriagePrompt, now?: () => string): Promise<Triage[]> =>
   readMessages(client, model, messages.map((message) => ({ message })), context, now)
 
-export type DraftPrompt = TriagePrompt & { instruction?: string }
+/** `written` is what I have typed so far; when there is any, the job is to make it read better, not to write something else. */
+export type DraftPrompt = TriagePrompt & { instruction?: string; written?: string }
 
 export function draftSystemPrompt(context: DraftPrompt): string {
   return [
-    'You write email replies for one person, in their voice. Reply with the message body only: no subject line, no greeting line like "Subject:", no signature, no commentary.',
+    context.written?.trim()
+      ? 'You improve an email one person has written, keeping their voice. Reply with the improved message body only: no subject line, no signature, no commentary. Keep what they mean and every fact, name, date and commitment in it; make it read better and change nothing else.'
+      : 'You write email replies for one person, in their voice. Reply with the message body only: no subject line, no greeting line like "Subject:", no signature, no commentary.',
     `Today is ${context.today}.`,
     context.aboutMe.trim() ? `About the person, in their words: ${context.aboutMe.trim()}` : '',
     'Short and warm. Answer what was asked. Never invent facts, dates, or commitments the message does not support; when something is unknown, leave a bracketed blank like [date].',
   ].filter(Boolean).join('\n')
 }
 
-export function buildDraftRequest(model: string, message: Message, context: DraftPrompt): MessagesRequest {
+export function buildDraftRequest(model: string, message: Message | undefined, context: DraftPrompt): MessagesRequest {
+  const written = context.written?.trim()
+  const instruction = context.instruction?.trim()
+  const ask = written
+    ? [instruction ? `Make what I wrote read better. ${instruction}` : 'Make what I wrote read better.', '', 'what I wrote:', written]
+    : [instruction ? `What I want to say: ${instruction}` : 'Write the reply I would send.']
+  const answering = message ? [
+    '',
+    ...(written ? ['the message I am answering:'] : []),
+    `from: ${message.from.name} <${message.from.address}>`,
+    `subject: ${message.subject}`,
+    '',
+    message.body || message.preview || '(empty)',
+  ] : []
   return {
     model,
     max_tokens: 1024,
     system: draftSystemPrompt(context),
-    messages: [{ role: 'user', content: [
-      context.instruction?.trim() ? `What I want to say: ${context.instruction.trim()}` : 'Write the reply I would send.',
-      '',
-      `from: ${message.from.name} <${message.from.address}>`,
-      `subject: ${message.subject}`,
-      '',
-      message.body || message.preview || '(empty)',
-    ].join('\n') }],
+    messages: [{ role: 'user', content: [...ask, ...answering].join('\n') }],
   }
 }
 
-/** A reply, written only when asked for. Output is the expensive half of a model call, so no draft is made speculatively. */
-export async function draftReply(client: AnthropicClient, model: string, message: Message, context: DraftPrompt): Promise<string> {
+/** A draft, or a better version of what is written, only when asked for. Output is the expensive half of a model call, so none is made speculatively. */
+export async function draftReply(client: AnthropicClient, model: string, message: Message | undefined, context: DraftPrompt): Promise<string> {
   const response = await client.createMessage(buildDraftRequest(model, message, context))
   return textOf(response.content)
 }

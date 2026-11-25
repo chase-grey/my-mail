@@ -29,7 +29,8 @@ export function Compose({ request, actions, contacts, onDraft, onSent, onClose }
   /** People to offer as the address is typed. */
   contacts: Recipient[]
   /** Writes the reply on request. Left out when there is no model or nothing to answer. */
-  onDraft?: (strong: boolean, instruction?: string) => Promise<string>
+  /** Writes a draft, or improves what is already written when `written` has any text. */
+  onDraft?: (strong: boolean, instruction?: string, written?: string) => Promise<string>
   onSent: () => Promise<void> | void
   onClose: (note?: string) => void
 }) {
@@ -171,10 +172,12 @@ export function Compose({ request, actions, contacts, onDraft, onSent, onClose }
     void (written ? save() : discard())
   }
 
+  // A new message with nothing written and nothing asked for gives a model nothing to write from.
+  const nothingToGoOn = !request.message && !text.trim() && !instruction.trim()
   const draftNow = (strong: boolean) => {
     if (!onDraft) return
     setDrafting(true); setFailure(undefined)
-    void onDraft(strong, instruction).then(edit(setText)).catch((error: unknown) => setFailure(failed(error))).finally(() => setDrafting(false))
+    void onDraft(strong, instruction, text).then(edit(setText)).catch((error: unknown) => setFailure(failed(error))).finally(() => setDrafting(false))
   }
 
   const onDrop = (event: DragEvent) => { event.preventDefault(); setOver(false); add([...event.dataTransfer.files]) }
@@ -216,8 +219,8 @@ export function Compose({ request, actions, contacts, onDraft, onSent, onClose }
 
       {onDraft && <div className="compose-model">
         <input aria-label="what to say" value={instruction} placeholder="yes, but push it to 6" onChange={(event) => setInstruction(event.target.value)} />
-        <button className="link" type="button" disabled={drafting} onClick={() => draftNow(false)}>{drafting ? 'drafting' : text ? 'redraft' : 'draft for me'}</button>
-        <button className="plain" type="button" disabled={drafting} onClick={() => draftNow(true)}>better draft</button>
+        <button className="link" type="button" disabled={drafting || nothingToGoOn} onClick={() => draftNow(false)}>{drafting ? 'drafting' : text.trim() ? 'improve' : 'draft for me'}</button>
+        <button className="plain" type="button" disabled={drafting || nothingToGoOn} onClick={() => draftNow(true)}>better draft</button>
       </div>}
 
       {failure && <p className="note is-error" role="alert">{failure}</p>}

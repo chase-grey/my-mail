@@ -34,7 +34,7 @@ export function SettingsView({ settings, connection, accountName, busy, error, o
         <Field label="anthropic api key"><input type="password" autoComplete="off" value={settings.anthropicApiKey} onChange={set('anthropicApiKey')} /></Field>
         <Field label="jev api key"><input type="password" autoComplete="off" value={settings.jevApiKey} onChange={set('jevApiKey')} /></Field>
         <div className="grid-2">
-          <Field label="reading"><select value={settings.anthropicModel} onChange={set('anthropicModel')}>{modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}</select></Field>
+          <Field label="summaries and drafts"><select value={settings.anthropicModel} onChange={set('anthropicModel')}>{modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}</select></Field>
           <Field label="better drafts"><select value={settings.strongModel} onChange={set('strongModel')}>{modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}</select></Field>
         </div>
         <Switch label="sort mail with ai" checked={settings.aiSorting === true} onChange={toggle('aiSorting')} />

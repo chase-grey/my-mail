@@ -67,7 +67,7 @@ accounts):
 
 Then in the app: `connect microsoft`, and in settings paste an Anthropic API key and write a
 few lines about yourself for the reply drafts. A TypeSafe Jev key is optional and makes sorting
-nearly free; without it Claude sorts too. Keys stay in this browser's local storage.
+nearly free; without it nothing sorts by itself. Claude only answers a tap. Keys stay in this browser's local storage.
 
 ## develop
 

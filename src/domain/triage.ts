@@ -62,24 +62,6 @@ export function ageTriage(message: Message, now: string): Triage | undefined {
   return { messageId: message.id, category: 'fyi', summary: '', needsReply: false, suggested: 'archive', confidence: 1, source: 'age', triagedAt: now }
 }
 
-/** Messages a language model should read: what needs me, plus anything the cheaper classifier was unsure about. Old mail is never read. */
-export function needsReading(message: Message, triage: Triage | undefined, now = new Date().toISOString()): boolean {
-  if (isOld(message, now)) return false
-  if (!triage) return true
-  if (triage.summary) return false
-  if (triage.source === 'history') return false
-  return needsMe({ message, triage }, now)
-}
-
-/**
- * What Claude reads on its own. When there is a Jev key, sorting is Jev's job: mail Jev gave no verdict because it
- * could not be reached is left unsorted, not handed to Claude in its place.
- */
-export function claudeReads(message: Message, triage: Triage | undefined, jevSilent: boolean, now = new Date().toISOString()): boolean {
-  if (!triage && jevSilent) return false
-  return needsReading(message, triage, now)
-}
-
 export type RunSummary = {
   inbox: number
   needReply: number

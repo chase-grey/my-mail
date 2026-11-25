@@ -4,14 +4,14 @@ export const modelOptions = ['claude-haiku-5-5', 'claude-sonnet-5-5', 'claude-op
 
 export type Settings = {
   anthropicApiKey: string
-  /** Reads and summarizes. Haiku; it is the model that runs on every message a rule or Jev did not settle. */
+  /** Summaries and drafts, when one is asked for. */
   anthropicModel: string
   /** Drafts on request and, later, search. Used only when a tap asks for it. */
   strongModel: string
-  /** TypeSafe Jev. When set, categories come from Jev and the language model reads only what needs me. */
+  /** TypeSafe Jev. When set and sorting is on, categories come from Jev. */
   jevApiKey: string
   /**
-   * Whether Jev and Claude sort mail on their own. Unset until I turn it on or the inbox is small enough to start by itself;
+   * Whether Jev sorts mail on its own. Unset until I turn it on or the inbox is small enough to start by itself;
    * until then a key only answers what I tap (drafts, search).
    */
   aiSorting?: boolean
@@ -43,14 +43,14 @@ const storageKey = 'my-mail.settings.v1'
 /** An inbox this size or smaller is one worth sorting; a bigger one is a backlog to clear first. */
 export const manageableInbox = 200
 
-/** Models run on their own only once sorting is on. */
+/** Jev sorts on its own only once sorting is on. Claude never runs on its own: it answers a tap. */
 export function aiSorts(settings: Settings): boolean {
-  return settings.aiSorting === true && Boolean(settings.anthropicApiKey || settings.jevApiKey)
+  return settings.aiSorting === true && Boolean(settings.jevApiKey)
 }
 
 /** Sorting starts by itself the first time the inbox is small enough, unless I have already said yes or no. */
 export function aiStartsItself(settings: Settings, inboxCount: number | undefined): boolean {
-  return settings.aiSorting === undefined && Boolean(settings.anthropicApiKey || settings.jevApiKey) && inboxCount !== undefined && inboxCount <= manageableInbox
+  return settings.aiSorting === undefined && Boolean(settings.jevApiKey) && inboxCount !== undefined && inboxCount <= manageableInbox
 }
 
 const text = (value: unknown, fallback: string) => typeof value === 'string' ? value : fallback

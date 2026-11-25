@@ -51,7 +51,7 @@ The 2026-11-02 build is phase 1 of this spec. Later phases are listed at the end
 | **Accounts** | **One: the personal Outlook account.** | Work mail stays in work Outlook; see My Brain's work boundary. There is no account switcher to build or secure. |
 | **Background work** | **No server in this phase.** Documented options if wanted later: a GitHub Actions cron holding a refresh token as a secret, or a scheduled job on the home PC. | Outlook-tier rules cover the common case. A server adds a token to protect for a benefit that is mostly "the summaries are already there when I open it". |
 | **Model** | **`claude-haiku-5-5` at low effort for reading, `claude-sonnet-5-5` for ask, search translation, and `better draft`.** Both settable. | Reading is frequent and simple; a stronger model for the handful of times a day I ask it a question or want a careful reply is worth it. Haiku 5.5 thinks by default, so effort is pinned low on the classification call. |
-| **Sorting before reading** | **TypeSafe Jev categorizes every message; Claude reads only what needs me.** *Resolved 2026-11-04.* | Jev is a yes/no model: a state and up to eight labeled questions in, calibrated probabilities out, at 1/2,400 of Haiku's input price with free output. Three quarters of a personal inbox is lists and notices that need a category and nothing else. Jev's probability is the auto-archive gate, which is what a gate should run on. Without a Jev key Claude sorts too, so the app degrades, not breaks. |
+| **Sorting before reading** | **TypeSafe Jev categorizes every message; Claude runs only on a tap (summarize, draft, improve, find related, search).** *Resolved 2026-11-04, changed 2026-11-25: no automatic Claude call, including summaries for mail that needs me.* | Jev is a yes/no model: a state and up to eight labeled questions in, calibrated probabilities out, at 1/2,400 of Haiku's input price with free output. Three quarters of a personal inbox is lists and notices that need a category and nothing else. Jev's probability is the auto-archive gate, which is what a gate should run on. Without a Jev key Claude sorts too, so the app degrades, not breaks. |
 | **Nothing speculative** | **No draft is written until a tap asks for it. No summary is written for mail in `probably fine`.** *Resolved 2026-11-04.* | Output tokens cost five times input, and most drafts were never opened. A summary of a newsletter nobody reads is waste twice over. |
 | **Unsubscribe** | **Honor `List-Unsubscribe` in the quietest form offered: a one-click POST (RFC 8058), else a mail through Graph, else the page.** Always offered beside a rule, never instead of one. *Resolved 2026-11-04.* | One tap that stops the mail beats a rule that hides it, but senders do not all honor it, so the rule is the guarantee. A browser-automation unsubscriber (Playwright) is not possible from a static site and not worth a server: the header covers the senders who will honor anything. |
 | **Backlog** | **A `clean up` screen that reads the inbox headers-only, groups by sender, and clears a sender in one tap with a rule attached.** *Resolved 2026-11-04.* | Inbox zero from thousands is a per-sender problem, not a per-message one. Twenty senders are most of the volume. Jev reads one sample per sender to tell lists from people for a fraction of a cent. |
@@ -471,7 +471,7 @@ nobody asked for.
 | Outlook category from another device | nothing | 0 |
 | sender history (three unread archives) | nothing | 0 |
 | Jev `kind`, `needs_reply`, `person` | ~450 input tokens, free output | ~2 thousandths of a cent |
-| Claude reads (needs me, or Jev unsure) | ~400 in, ~60 out on Haiku at low effort | ~1/20 cent |
+| Claude summarizes one message, on a tap | ~400 in, ~60 out on Haiku at low effort | ~1/20 cent |
 | Claude drafts (on request) | ~500 in, ~150 out | ~1/10 cent, Sonnet 20x that |
 
 What this buys on a fifty-message day with a typical mix: about forty messages never reach a
@@ -573,7 +573,7 @@ Defaults are set so nothing blocks; change any of these in a sentence.
   folder). The worker holds no key, answers only the site's origin, forwards only the one POST, and
   logs nothing. Epic's network blocks `workers.dev`, so on that network the call times out after six
   seconds, settings says `jev can't be reached`, and that mail stays unsorted until a device that can
-  reach Jev opens the inbox. Claude is not used in Jev's place.
+  reach Jev opens the inbox. Claude is not used in Jev's place, or anywhere else without a tap.
 - **Images** default to people only.
 - **Sent-mail voice samples** default off until tried once.
 - **Name** stays `my mail`.

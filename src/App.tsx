@@ -4,7 +4,7 @@ import { AnthropicClient } from './ai/anthropicClient'
 import { JevClient, classifyWithJev, kindOf } from './ai/jev'
 import { findRelated } from './ai/related'
 import { answerFromMail, translateQuery } from './ai/search'
-import { draftReply, readMessages, type ReadItem } from './ai/triage'
+import { draftReply, readMessages } from './ai/triage'
 import { AppFolder } from './data/appFolder'
 import { AutomationStore } from './data/automationStore'
 import { Composer } from './data/compose'
@@ -20,7 +20,7 @@ import { historyTriage, noiseSenders, senderHistoryLine } from './domain/history
 import { compileRule, planRuleSync } from './domain/outlookRules'
 import { applyRules, autoRuleSenders, clearsSender, newRule, recordHits, rememberDecision, retiredSenders, suggestRules, type RuleSuggestion } from './domain/rules'
 import { dueSnoozes, snoozeRecord, snoozeUntil, withoutSnoozes, type SnoozeOption } from './domain/snooze'
-import { ageTriage, autoArchivable, claudeReads, needsReading, oldAfterDays, outlookTriage, pruneTriage, rankTriaged, sharedOf, summarize, unsureBelow, worthSharing, writeShared, type RunSummary, type Triaged } from './domain/triage'
+import { ageTriage, autoArchivable, oldAfterDays, outlookTriage, pruneTriage, rankTriaged, sharedOf, summarize, unsureBelow, worthSharing, writeShared, type RunSummary, type Triaged } from './domain/triage'
 import { emptyAutomation, type Action, type Automation, type Message, type OutlookRule, type Rule, type RuleAction, type Triage } from './domain/types'
 import { inboxThreads } from './domain/threads'
 import { parseUnsubscribe, unsubscribeMethod } from './domain/unsubscribe'
@@ -116,7 +116,8 @@ export type MessageActions = {
   /** Opens compose: a new message, or a reply, reply all, or forward of one. */
   compose: (request: ComposeRequest) => void
   /** Write a reply on request. The strong model is for when the first one is not good enough. */
-  draft: (message: Message, strong: boolean, instruction?: string) => Promise<string>
+  /** Writes a draft, or improves `written` when there is any. `message` is the mail being answered, when there is one. */
+  draft: (message: Message | undefined, strong: boolean, instruction?: string, written?: string) => Promise<string>
   snooze: (message: Message, option: SnoozeOption) => Promise<void>
   /** Archiving this message sends it to the receipts folder. */
   isReceipt: (message: Message) => boolean
@@ -259,7 +260,6 @@ export default function App() {
     }
     const history = (message: Message) => senderHistoryLine(automationState.decisions, message.from.address)
     const unsorted = inbox.filter((message) => !cache[message.id] && spend(message))
-    let jevFailed = false
     if (settings.jevApiKey && unsorted.length && !jevUnreachable) {
       setBusy(`sorting ${unsorted.length} new ${unsorted.length === 1 ? 'message' : 'messages'}`)
       try {
@@ -267,7 +267,6 @@ export default function App() {
         for (const result of results) { cache[result.messageId] = result; touched.add(result.messageId) }
         withoutModel += results.length
       } catch (failure) {
-        jevFailed = true
         if (isNetworkFailure(failure)) { jevUnreachable = true; setJevDown(true) }
         else setError(errorText(failure))
       }
@@ -291,31 +290,6 @@ export default function App() {
     }
     const sharing = share(true)
 
-    // The language model reads only what needs me, or what nothing else could settle.
-    if (settings.anthropicApiKey) {
-      // With a Jev key, sorting is Jev's. Mail it could not be asked about stays unsorted; Claude is not used in its place.
-      const jevSilent = Boolean(settings.jevApiKey) && (jevUnreachable || jevFailed)
-      const toRead = inbox.filter((message) => spend(message) && claudeReads(message, cache[message.id], jevSilent, now))
-      if (toRead.length) {
-        setBusy(`reading ${toRead.length} ${toRead.length === 1 ? 'message' : 'messages'}`)
-        const items: ReadItem[] = toRead.map((message) => {
-          const prior = cache[message.id]
-          return { message, known: prior && prior.confidence >= unsureBelow ? { category: prior.category, needsReply: prior.needsReply } : undefined }
-        })
-        // A read that fails keeps what the cheaper sources and the earlier batches settled; throwing here would have Jev asked again next run.
-        try {
-          await readMessages(new AnthropicClient(settings.anthropicApiKey), settings.anthropicModel, items, { aboutMe: settings.aboutMe, today: new Date().toLocaleDateString('en-CA'), history }, undefined, (results) => {
-            for (const result of results) {
-              const prior = cache[result.messageId]
-              cache[result.messageId] = prior && prior.confidence >= unsureBelow ? { ...result, source: prior.source, confidence: prior.confidence } : result
-              touched.add(result.messageId)
-            }
-          })
-        } catch (failure) {
-          setError(errorText(failure))
-        }
-      }
-    }
     await sharing
     await share(false)
 
@@ -355,8 +329,8 @@ export default function App() {
       }
     }
 
-    const canSort = settings.jevApiKey ? !jevUnreachable : Boolean(settings.anthropicApiKey)
-    const wantsModel = (message: Message) => cache[message.id] ? Boolean(settings.anthropicApiKey) && needsReading(message, cache[message.id], now) : canSort
+    // Only Jev runs on its own. Claude answers a tap (a summary, a draft) and nothing else.
+    const wantsModel = (message: Message) => !cache[message.id] && Boolean(settings.jevApiKey) && !jevUnreachable
     const waiting = inbox.filter((message) => !spend(message) && wantsModel(message)).map((message) => message.id)
     return { inbox, cache, byRules: removed.size, autoArchived, filed, newRules, withoutModel, waiting }
   }, [persistAutomation, pushRules])
@@ -746,10 +720,10 @@ export default function App() {
       await services!.mail.archive(message.id)
     }),
     compose: (request) => setComposing(request),
-    draft: async (message, strong, instruction) => {
+    draft: async (message, strong, instruction, written) => {
       const current = settingsRef.current
-      const text = await draftReply(anthropic(), strong ? current.strongModel : current.anthropicModel, message, { aboutMe: current.aboutMe, today: new Date().toLocaleDateString('en-CA'), instruction })
-      setTriage((cache) => cache[message.id] ? { ...cache, [message.id]: { ...cache[message.id], draft: text } } : cache)
+      const text = await draftReply(anthropic(), strong ? current.strongModel : current.anthropicModel, message, { aboutMe: current.aboutMe, today: new Date().toLocaleDateString('en-CA'), instruction, written })
+      if (message) setTriage((cache) => cache[message.id] ? { ...cache, [message.id]: { ...cache[message.id], draft: text } } : cache)
       return text
     },
     snooze: (message, option) => decide(message, 'snooze', async () => {
@@ -1079,6 +1053,21 @@ export default function App() {
     thread: (message) => message.conversationId ? services!.mail.conversation(message.conversationId) : Promise.resolve([]),
     fromSender: async (message) => (await services!.search.search(`from:${message.from.address}`)).hits,
     chat: settings.brainUrl.trim() ? (message) => { window.open(brainChatUrl(settings.brainUrl, message.id), '_blank', 'noreferrer') } : undefined,
+    summarize: settings.anthropicApiKey ? async (message) => {
+      const current = settingsRef.current
+      const prior = triageRef.current[message.id]
+      const [read] = await readMessages(anthropic(), current.anthropicModel, [{ message, known: prior ? { category: prior.category, needsReply: prior.needsReply } : undefined }], { aboutMe: current.aboutMe, today: new Date().toLocaleDateString('en-CA') })
+      if (!read?.summary) throw new Error('no summary came back')
+      // Kept on the verdict, and on the message, so the row shows it and the other device does not pay for it again.
+      if (prior) {
+        const next = { ...prior, summary: read.summary }
+        setTriage((cache) => cache[message.id] ? { ...cache, [message.id]: { ...cache[message.id], summary: read.summary } } : cache)
+        if (current.writeCategories) try { await services!.mail.setVerdict(message.id, message.categories, sharedOf(next)) } catch { /* a missing scope only costs the shared verdict */ }
+        // Sorted mail shows its summary on the row and over the message, so nothing is handed back to show a second time.
+        return undefined
+      }
+      return read.summary
+    } : undefined,
     related: settings.anthropicApiKey ? (message, onStep) => findRelated(anthropic(), settingsRef.current.strongModel, message, (query, count) => services!.search.search(query, count), new Date().toLocaleDateString('en-CA'), onStep) : undefined,
   }
 
@@ -1118,7 +1107,7 @@ export default function App() {
     {view === 'cleanup' && <CleanupView state={{ ...cleanup, notNoise: automation.noRules }} actions={cleanupActions} onError={setError} />}
     {view === 'settings' && <SettingsView settings={settings} connection={connection} accountName={accountName} busy={Boolean(busy)} error={error ?? (jevDown && settings.jevApiKey ? "jev can't be reached" : undefined)} onSettings={setSettings} onConnect={connect} onDisconnect={disconnect} />}
     {composing && services && <Compose key={`${composing.mode}:${composing.message?.id ?? ''}`} request={composing} actions={services.compose} contacts={senders}
-      onDraft={settings.anthropicApiKey && composing.message && composing.mode !== 'forward' ? (strong, instruction) => actions.draft(composing.message!, strong, instruction) : undefined}
+      onDraft={settings.anthropicApiKey ? (strong, instruction, written) => actions.draft(composing.mode === 'forward' ? undefined : composing.message, strong, instruction, written) : undefined}
       onSent={() => sent(composing)} onClose={(note) => { setComposing(undefined); if (note) setComposeNote({ key: Date.now(), text: note }) }} />}
     <Toast toast={composeNote} onDone={() => setComposeNote(undefined)} />
   </Shell></ThreadContext></BodySource>

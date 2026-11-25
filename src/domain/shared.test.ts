@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { dueHeld, idleHoldMs } from './arrivals'
 import { message } from './fixtures'
-import { needsReading, outlookTriage, readShared, sharedOf, worthSharing, writeShared } from './triage'
+import { outlookTriage, readShared, sharedOf, worthSharing, writeShared } from './triage'
 import type { Triage } from './types'
 
 const triage = (overrides: Partial<Triage>): Triage => ({ messageId: 'm1', category: 'reply', summary: 'mom asks about sunday dinner', needsReply: true, suggested: 'reply', confidence: 0.92, source: 'model', triagedAt: 'then', ...overrides })
@@ -15,7 +15,6 @@ describe('a verdict shared on the message', () => {
     const there = message('m1', 'mom@example.com', 'Dinner?', { verdict })
     const read = outlookTriage(there, 'now')
     expect(read).toMatchObject({ category: 'reply', summary: 'mom asks about sunday dinner', needsReply: true, source: 'outlook' })
-    expect(needsReading(there, read, '2026-11-10T00:00:00Z')).toBe(false)
     expect(worthSharing(there, read!)).toBe(false)
   })
 

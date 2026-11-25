@@ -11,6 +11,9 @@ export type ThreadActions = {
   thread: (message: Message) => Promise<Message[]>
   /** Other mail from the same sender, in any folder. */
   fromSender: (message: Message) => Promise<SearchHit[]>
+  /** One line on what the message is and what it wants, written by a model when asked. Missing when there is no model. */
+  /** Nothing comes back when the message already shows its summary. */
+  summarize?: (message: Message) => Promise<string | undefined>
   /** Mail about the same matter, found by a model. Missing when there is no model. */
   related?: (message: Message, onStep: (step: string) => void) => Promise<SearchHit[]>
   /** Opens My Brain's chat about this conversation. Missing when no My Brain is set. */
@@ -101,6 +104,8 @@ function Related({ message, actions }: { message: Message; actions: ThreadAction
   const [busy, setBusy] = useState<{ kind: Kind; step: string }>()
   const [error, setError] = useState<string>()
   const [openKey, setOpenKey] = useState<string>()
+  const [summary, setSummary] = useState<string>()
+  const [summarizing, setSummarizing] = useState(false)
   const run = useRef(0)
   const picked = busy?.kind ?? shown?.kind
 
@@ -118,12 +123,20 @@ function Related({ message, actions }: { message: Message; actions: ThreadAction
       .finally(() => { if (id === run.current) setBusy(undefined) })
   }
 
+  function summarize(): void {
+    setError(undefined)
+    setSummarizing(true)
+    actions.summarize!(message).then(setSummary).catch((failure: unknown) => setError(failed(failure))).finally(() => setSummarizing(false))
+  }
+
   return <div className="related">
     <div className="related-actions">
+      {actions.summarize && <button className="link" type="button" disabled={summarizing} onClick={summarize}>{summarizing ? 'summarizing' : 'summarize'}</button>}
       <button className="link" type="button" aria-pressed={picked === 'sender'} onClick={() => look('sender')}>more from {message.from.name}</button>
       {actions.related && <button className="link" type="button" aria-pressed={picked === 'related'} onClick={() => look('related')}>find related</button>}
       {actions.chat && <button className="link" type="button" onClick={() => actions.chat!(message)}>chat</button>}
     </div>
+    {summary && <p className="note">{summary}</p>}
     {busy && <p className="status is-busy" aria-live="polite">{busy.step}</p>}
     {error && <p className="note is-error" role="alert">{error}</p>}
     {shown && !shown.threads.length && <p className="note">nothing found</p>}

@@ -77,7 +77,7 @@ Mail should show up about as fast as it does in Outlook. While the app is on scr
 
 Mail older than thirty days is never sent to Jev or Claude (`isOld`). It gets a free verdict and waits below needs me with the rest of the inbox; whatever it once asked for, the moment has passed. A verdict a model was paid for is kept: a failed call later in the same run does not throw it away, and what cleanup learns about a sender is remembered. Do not add a model call that runs on every message, on every scan, or on every device without a cheaper source in front of it.
 
-A key on its own starts nothing. Jev and Claude sort mail by themselves only once `sort mail with ai` is on (`aiSorts`): I turn it on, or it turns itself on the first time the inbox is down to 200 or fewer, and a no from me is never overridden. Until then a key answers only what is tapped (a draft, a search). A backlog is cleared first, with rules and clean up, which need no model. Anything new that runs a model without a tap goes behind the same check.
+A key on its own starts nothing. Jev sorts mail by itself only once `sort mail with ai` is on (`aiSorts`), and an anthropic key never sorts: I turn it on, or it turns itself on the first time the inbox is down to 200 or fewer, and a no from me is never overridden. Until then a key answers only what is tapped (a draft, a search). A backlog is cleared first, with rules and clean up, which need no model. Anything new that runs a model without a tap goes behind the same check.
 
 One device pays for a message, not each of them. The whole verdict, summary included, is written onto the message (`setVerdict`) and read back with the mail, so another device shows it without asking a model. A device nobody is using (`document.hasFocus()` is false) shows new mail at once but leaves it unsorted for twenty seconds, then reads it again and sorts only what still has no verdict; picking the device up sorts it straight away. Do not keep part of a verdict on one device only, and do not let an idle device race the one in use.
 
@@ -85,9 +85,9 @@ One device pays for a message, not each of them. The whole verdict, summary incl
 
 An error is written in settings and nowhere else in the app, at the top of the settings screen; settings wears the dot while there is one. The inbox, rules and clean up never show a background failure. What stays where it happened is the answer to something just tapped on that screen: a send that failed in compose, a search that failed, the connect button before there is a mailbox. Jev being out of reach is a standing fact of some networks (Epic's blocks the relay), so settings says it and there is no dot.
 
-## jev out of reach
+## claude only on a tap
 
-With a Jev key, sorting is Jev's. When Jev cannot be reached, mail it would have sorted stays unsorted until a device that can reach it opens the inbox; Claude is not used in its place (`claudeReads`). Claude still reads what already has a verdict and needs me.
+Claude never runs on its own. It answers a tap and nothing else: `summarize` on an open message, `draft for me`, `improve` and `better draft` in compose, `find related`, and search. No summary is written for mail that needs me unless I ask for one. Only Jev sorts by itself, and only with `sort mail with ai` on. When Jev cannot be reached, mail it would have sorted stays unsorted until a device that can reach it opens the inbox; Claude is not used in its place. Do not add a Claude call that a check, a timer, or new mail can start.
 
 ## committing and deploying
 
