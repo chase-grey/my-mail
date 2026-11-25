@@ -29,6 +29,8 @@ export class MicrosoftAuth {
         redirectUri,
       },
       cache: { cacheLocation: BrowserCacheLocation.LocalStorage },
+      // msal's own minute runs out while a password and a code are still being typed.
+      system: { popupBridgeTimeout: 10 * 60_000 },
     })
     await client.initialize()
     keepSignIn()
