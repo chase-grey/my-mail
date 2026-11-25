@@ -20,7 +20,7 @@ import { historyTriage, noiseSenders, senderHistoryLine } from './domain/history
 import { compileRule, planRuleSync } from './domain/outlookRules'
 import { applyRules, autoRuleSenders, clearsSender, newRule, recordHits, rememberDecision, retiredSenders, suggestRules, type RuleSuggestion } from './domain/rules'
 import { dueSnoozes, snoozeRecord, snoozeUntil, withoutSnoozes, type SnoozeOption } from './domain/snooze'
-import { ageTriage, autoArchivable, codeTriage, oldAfterDays, outlookTriage, pruneTriage, rankTriaged, sharedOf, summarize, unsureBelow, worthSharing, writeShared, type RunSummary, type Triaged } from './domain/triage'
+import { ageTriage, autoArchivable, codeTriage, oldAfterDays, outlookTriage, pruneTriage, rankTriaged, sharedOf, summarize, unsureBelow, withJunkMarks, worthSharing, writeShared, type RunSummary, type Triaged } from './domain/triage'
 import { emptyAutomation, type Action, type Automation, type Message, type OutlookRule, type Rule, type RuleAction, type Triage } from './domain/types'
 import { inboxThreads } from './domain/threads'
 import { parseUnsubscribe, unsubscribeMail, unsubscribeMethod } from './domain/unsubscribe'
@@ -192,6 +192,8 @@ export default function App() {
   const heldRef = useRef(new Map<string, number>())
   /** Mail on screen that a check is sorting right now. With the held mail, it is what waits below needs me for a verdict. */
   const sortingRef = useRef(new Set<string>())
+  /** Mail this visit moved out of junk. A read of the inbox can come back before the mark on the message does. */
+  const junkRef = useRef(new Set<string>())
   const [pending, setPending] = useState<ReadonlySet<string>>(() => new Set())
   const syncPending = useCallback(() => {
     const next = new Set([...heldRef.current.keys(), ...sortingRef.current])
@@ -232,7 +234,8 @@ export default function App() {
    * `spend` says which messages may go to Jev or Claude; the rest get only what costs nothing.
    */
   const sortBatch = useCallback(async (current: Services, batch: Message[], startCache: Record<string, Triage>, startAutomation: Automation, settings: Settings, now: string, spend: (message: Message) => boolean, onShow?: (inbox: Message[]) => void): Promise<Sorted> => {
-    let inbox = batch
+    // Mail that came out of junk keeps its mark through every read, so it is never auto-filed and never earns a rule.
+    let inbox = withJunkMarks(batch, new Set([...junkRef.current, ...messagesRef.current.filter((message) => message.fromJunk).map((message) => message.id)]))
     let automationState = startAutomation
     const hits = applyRules(inbox, automationState.rules, now)
     // Mail goes on screen as soon as it is known to be staying past the rules, which cost nothing to work out. Sorting follows.
@@ -293,7 +296,7 @@ export default function App() {
         const text = writeShared(sharedOf(verdict))
         if (shared.get(message.id) === text) continue
         shared.set(message.id, text)
-        try { await current.mail.setVerdict(message.id, message.categories, sharedOf(verdict)) } catch { /* a missing scope only costs the shared verdict */ }
+        try { await current.mail.setVerdict(message.id, message.categories, sharedOf(verdict), message.fromJunk) } catch { /* a missing scope only costs the shared verdict */ }
       }
     }
     const sharing = share(true)
@@ -372,6 +375,7 @@ export default function App() {
       let rescued: Message[] = []
       try {
         rescued = await current.mail.rescueJunk()
+        for (const message of rescued) junkRef.current.add(message.id)
       } catch (failure) {
         setError(errorText(failure))
       }
@@ -463,7 +467,10 @@ export default function App() {
         const glance = await current.mail.glance(since)
         const news = glance.ids.some((id) => !onScreen.has(id) && !leftRef.current.has(id))
         if (!glance.junk && !news && !due.size) return
-        if (glance.junk) rescued = await current.mail.rescueJunk()
+        if (glance.junk) {
+          rescued = await current.mail.rescueJunk()
+          for (const message of rescued) junkRef.current.add(message.id)
+        }
         if (due.size) {
           const oldestDue = oldestOf(messagesRef.current.filter((message) => due.has(message.id)))
           const from = since && oldestDue ? (oldestDue < since ? oldestDue : since) : undefined
@@ -1083,7 +1090,7 @@ export default function App() {
       if (prior) {
         const next = { ...prior, summary: read.summary }
         setTriage((cache) => cache[message.id] ? { ...cache, [message.id]: { ...cache[message.id], summary: read.summary } } : cache)
-        if (current.writeCategories) try { await services!.mail.setVerdict(message.id, message.categories, sharedOf(next)) } catch { /* a missing scope only costs the shared verdict */ }
+        if (current.writeCategories) try { await services!.mail.setVerdict(message.id, message.categories, sharedOf(next), message.fromJunk) } catch { /* a missing scope only costs the shared verdict */ }
         // Sorted mail shows its summary on the row and over the message, so nothing is handed back to show a second time.
         return undefined
       }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { GraphClient, GraphError } from './graphClient'
-import { MailProvider, contentKept, fromGraph, mailDefaultHeaders, tidyBody } from './mailProvider'
+import { MailProvider, contentKept, fromGraph, mailDefaultHeaders, tidyBody, verdictProperty } from './mailProvider'
 
 describe('mail provider', () => {
   it('maps a graph message, lowercasing the address and trimming the body', () => {
@@ -93,15 +93,26 @@ describe('mail provider', () => {
     const request = vi.fn(async (path: string, init?: RequestInit) => {
       if (path.startsWith('/me/mailFolders/junkemail/messages?')) return { value: [graphMessage('j1'), graphMessage('j2'), graphMessage('j3')] }
       if (path === '/$batch') {
-        const { requests } = JSON.parse(init!.body as string) as { requests: { id: string; url: string; body: { destinationId: string } }[] }
+        const { requests } = JSON.parse(init!.body as string) as { requests: { id: string; method: string; url: string; body: { destinationId?: string; singleValueExtendedProperties?: { id: string; value: string }[] } }[] }
+        batches.push(requests.map((item) => item.method))
+        // Each is marked as mail from junk before it moves, so no device ever reads it in the inbox unmarked.
+        if (requests[0].method === 'PATCH') {
+          expect(requests.map((item) => item.body.singleValueExtendedProperties)).toEqual(requests.map(() => [{ id: verdictProperty, value: '{"j":true}' }]))
+          // The mark that fails does not keep the mail in junk.
+          return { responses: requests.map((item) => ({ id: item.id, status: item.url.includes('j3') ? 403 : 200 })) }
+        }
         expect(requests.every((item) => item.body.destinationId === 'inbox')).toBe(true)
         // j2 is refused outright, so it stays in junk and is not reported as rescued.
         return { responses: requests.map((item) => ({ id: item.id, status: item.url.includes('j2') ? 403 : 201 })) }
       }
       return undefined
     })
+    const batches: string[][] = []
     const provider = new MailProvider({ request } as unknown as GraphClient, async () => {})
-    expect((await provider.rescueJunk()).map((message) => message.id)).toEqual(['j1', 'j3'])
+    const rescued = await provider.rescueJunk()
+    expect(rescued.map((message) => message.id)).toEqual(['j1', 'j3'])
+    expect(rescued.every((message) => message.fromJunk)).toBe(true)
+    expect(batches).toEqual([['PATCH', 'PATCH', 'PATCH'], ['POST', 'POST', 'POST']])
 
     const empty = vi.fn(async () => ({ value: [] }))
     expect(await new MailProvider({ request: empty } as unknown as GraphClient).rescueJunk()).toEqual([])

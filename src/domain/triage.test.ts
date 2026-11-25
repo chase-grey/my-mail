@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { message } from './fixtures'
-import { ageTriage, autoArchivable, groupInbox, outlookTriage, pruneTriage, rankTriaged, summarize } from './triage'
+import { ageTriage, autoArchivable, groupInbox, outlookTriage, pruneTriage, rankTriaged, readJunk, readShared, summarize, withJunkMarks, writeShared } from './triage'
 import type { Triage } from './types'
 
 const triage = (messageId: string, overrides: Partial<Triage>): Triage => ({
@@ -75,6 +75,29 @@ describe('triage', () => {
     expect(autoArchivable(promo, triage('m1', { category: 'newsletter', suggested: 'keep', confidence: 0.99 }))).toBe(false)
     expect(autoArchivable({ ...promo, flagged: true }, triage('m1', { category: 'promo', suggested: 'archive', confidence: 0.99 }))).toBe(false)
     expect(autoArchivable({ ...promo, importance: 'high' }, triage('m1', { category: 'promo', suggested: 'archive', confidence: 0.99 }))).toBe(false)
+  })
+
+  it('never auto-archives or files mail that came out of junk, however sure the verdict', () => {
+    const spoofed = message('m1', 'orders@shop.example.com', 'Your receipt', { fromJunk: true })
+    for (const category of ['receipt', 'promo', 'newsletter', 'notification', 'spam'] as const) {
+      expect(autoArchivable(spoofed, triage('m1', { category, suggested: 'archive', confidence: 1 })), category).toBe(false)
+      expect(autoArchivable({ ...spoofed, fromJunk: undefined }, triage('m1', { category, suggested: 'archive', confidence: 1 })), category).toBe(true)
+    }
+  })
+
+  it('carries the mark of mail from junk on the message, with a verdict or without one', () => {
+    const verdict = { category: 'receipt' as const, summary: 'a receipt', needsReply: false, suggested: 'archive' as const, confidence: 0.95 }
+    expect(readJunk(writeShared(undefined, true))).toBe(true)
+    expect(readShared(writeShared(undefined, true))).toBeUndefined()
+    expect(readJunk(writeShared(verdict, true))).toBe(true)
+    expect(readShared(writeShared(verdict, true))).toEqual({ ...verdict, task: undefined })
+    expect(readJunk(writeShared(verdict))).toBe(false)
+    for (const other of [undefined, '', 'not json', 'null', '{"j":"yes"}', '{"c":"receipt"}']) expect(readJunk(other)).toBe(false)
+  })
+
+  it('puts the mark back on mail known to be from junk when a read comes back without it', () => {
+    const batch = [message('m1', 'a@example.com'), message('m2', 'b@example.com'), message('m3', 'c@example.com', 'x', { fromJunk: true })]
+    expect(withJunkMarks(batch, new Set(['m2'])).map((item) => Boolean(item.fromJunk))).toEqual([false, true, true])
   })
 
   it('reads a verdict another device already wrote as an outlook category', () => {

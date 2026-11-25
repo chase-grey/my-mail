@@ -19,6 +19,8 @@ export type Message = {
   categories: string[]
   /** The whole verdict, when a device has written one onto the message. Every device reads it with the mail, so none pays to sort or read it again. */
   verdict?: SharedVerdict
+  /** Outlook's junk filter took this mail and the app moved it into the inbox. It is never put away without a tap and never earns its sender a rule. */
+  fromJunk?: boolean
   webLink: string
 }
 

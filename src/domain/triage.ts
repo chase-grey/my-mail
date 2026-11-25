@@ -43,8 +43,12 @@ export function groupInbox(items: Triaged[], now = new Date().toISOString()): { 
   return { needsMe: ranked.filter((item) => needsMe(item, now)), probablyFine: ranked.filter((item) => !needsMe(item, now)) }
 }
 
-/** Only sure verdicts clear mail on their own. Replies, actions, and anything flagged stay. */
+/**
+ * Only sure verdicts clear mail on their own. Replies, actions, and anything flagged stay.
+ * So does mail that came out of junk: who it says it is from cannot be trusted, so nothing files it without a tap.
+ */
 export function autoArchivable(message: Message, triage: Triage, minimumConfidence = 0.85): boolean {
+  if (message.fromJunk) return false
   if (message.flagged || message.importance === 'high' || codeOf(message)) return false
   if (triage.needsReply || triage.suggested !== 'archive') return false
   if (!quietCategories.includes(triage.category)) return false
@@ -123,9 +127,29 @@ export function sharedOf(triage: Triage): SharedVerdict {
   return { category: triage.category, summary: triage.summary, needsReply: triage.needsReply, suggested: triage.suggested, task: triage.task, confidence: triage.confidence }
 }
 
-/** The text written onto the message. Short keys: it rides along with every read of the mail. */
-export function writeShared(verdict: SharedVerdict): string {
-  return JSON.stringify({ c: verdict.category, s: verdict.summary || undefined, r: verdict.needsReply || undefined, a: verdict.suggested, t: verdict.task || undefined, p: Math.round(verdict.confidence * 100) / 100 })
+/**
+ * The text written onto the message. Short keys: it rides along with every read of the mail.
+ * `fromJunk` adds the mark that the mail came out of junk, with or without a verdict beside it, so every device knows.
+ */
+export function writeShared(verdict: SharedVerdict | undefined, fromJunk = false): string {
+  const mark = fromJunk ? { j: true } : {}
+  if (!verdict) return JSON.stringify(mark)
+  return JSON.stringify({ c: verdict.category, s: verdict.summary || undefined, r: verdict.needsReply || undefined, a: verdict.suggested, t: verdict.task || undefined, p: Math.round(verdict.confidence * 100) / 100, ...mark })
+}
+
+/** Whether the text on a message carries the mark that it came out of junk. */
+export function readJunk(text: unknown): boolean {
+  if (typeof text !== 'string' || !text) return false
+  try {
+    return (JSON.parse(text) as { j?: unknown } | null)?.j === true
+  } catch {
+    return false
+  }
+}
+
+/** The batch with the mark put back on mail known to have come out of junk, when a read of the mailbox came back without it. */
+export function withJunkMarks(batch: Message[], junk: ReadonlySet<string>): Message[] {
+  return batch.map((message) => !message.fromJunk && junk.has(message.id) ? { ...message, fromJunk: true } : message)
 }
 
 /** A verdict read back off a message. Anything that is not one of ours is ignored. */

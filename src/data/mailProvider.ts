@@ -3,7 +3,7 @@ import { describeOutlookRule, type OutlookRuleBody } from '../domain/outlookRule
 import { readable, trimForModel } from '../domain/text'
 import type { MailContent } from '../domain/mailHtml'
 import type { Header } from '../domain/unsubscribe'
-import { readShared, writeShared } from '../domain/triage'
+import { readJunk, readShared, writeShared } from '../domain/triage'
 import { categories, type Message, type OutlookRule, type SharedVerdict } from '../domain/types'
 import { GraphError, type GraphClient } from './graphClient'
 
@@ -89,6 +89,7 @@ export function fromGraph(message: GraphMessage): Message {
     recipients: (message.toRecipients?.length ?? 0) + (message.ccRecipients?.length ?? 0),
     categories: message.categories ?? [],
     verdict: readShared(message.singleValueExtendedProperties?.[0]?.value),
+    fromJunk: readJunk(message.singleValueExtendedProperties?.[0]?.value) || undefined,
     webLink: message.webLink,
   }
 }
@@ -218,12 +219,22 @@ export class MailProvider {
    * Moves what Outlook's junk filter took into the inbox and returns what moved. A personal account cannot
    * turn that filter off, and Outlook's rules never see junked mail, so this is the only way it reaches the inbox.
    * More than the cap waits for the next run.
+   * Each is marked as having come out of junk before it moves, on the message itself so every device reads the mark with the mail.
+   * Mail that will not take the mark still moves, and is still marked in what is returned.
    */
   async rescueJunk(cap = junkSweepCap): Promise<Message[]> {
     const { messages } = await this.page('junkemail', cap)
     if (!messages.length) return []
+    if (this.verdictsOnMessages) {
+      const verdicts = new Map(messages.map((message) => [message.id, message.verdict]))
+      try {
+        await this.each(messages.filter((message) => !message.fromJunk).map((message) => message.id), (id) => ({ method: 'PATCH', url: `/me/messages/${encodeURIComponent(id)}`, body: { singleValueExtendedProperties: [{ id: verdictProperty, value: writeShared(verdicts.get(id), true) }] } }))
+      } catch (error) {
+        console.warn('my-mail: mail from junk was not marked', error)
+      }
+    }
     const stuck = new Set(await this.moveMany(messages.map((message) => message.id), 'inbox'))
-    return messages.filter((message) => !stuck.has(message.id))
+    return messages.filter((message) => !stuck.has(message.id)).map((message) => ({ ...message, fromJunk: true }))
   }
 
   /**
@@ -367,15 +378,16 @@ export class MailProvider {
   /**
    * Write the verdict onto the message: the category, which Outlook shows and its rules can use, and the whole verdict
    * beside it for this app on other devices. Other categories on the message are kept; an older verdict is replaced.
+   * The mark that the mail came out of junk lives in the same place, so it is written again with the verdict.
    */
-  async setVerdict(id: string, existing: string[], verdict: SharedVerdict): Promise<void> {
+  async setVerdict(id: string, existing: string[], verdict: SharedVerdict, fromJunk = false): Promise<void> {
     await this.ensureMasterCategories()
     const kept = existing.filter((item) => !(categories as readonly string[]).includes(item))
     const path = `/me/messages/${encodeURIComponent(id)}`
     const body = { categories: [...kept, verdict.category] }
     if (this.verdictsOnMessages) {
       try {
-        await this.graph.request(path, { method: 'PATCH', body: JSON.stringify({ ...body, singleValueExtendedProperties: [{ id: verdictProperty, value: writeShared(verdict) }] }) })
+        await this.graph.request(path, { method: 'PATCH', body: JSON.stringify({ ...body, singleValueExtendedProperties: [{ id: verdictProperty, value: writeShared(verdict, fromJunk) }] }) })
         return
       } catch (error) {
         if (!(error instanceof GraphError && (error.status === 400 || error.status === 501))) throw error

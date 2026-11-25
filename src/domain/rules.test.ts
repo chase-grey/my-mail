@@ -81,6 +81,12 @@ describe('rules the sorter makes', () => {
     expect(autoRuleSenders(archived, state, [message('m9', 'D@four.example.com')])).toEqual(['e@five.example.com'])
   })
 
+  it('makes no rule from mail that came out of junk, where the sender is only who the mail claims', () => {
+    const spoofed = { ...sure('m1', 'orders@shop.example.com', 'receipt'), message: message('m1', 'orders@shop.example.com', 'Your receipt', { fromJunk: true }) }
+    expect(autoRuleSenders([spoofed], { rules: [], decisions: [] }, [])).toEqual([])
+    expect(autoRuleSenders([spoofed, sure('m2', 'news@daily.example.com', 'newsletter')], { rules: [], decisions: [] }, [])).toEqual(['news@daily.example.com'])
+  })
+
   it('remembers a sender whose auto rule was deleted, and only an auto rule', () => {
     const before = [rule({ id: 'a', from: 'News@daily.example.com', auto: true }), rule({ id: 'b', from: 'deals@shop.example.com' }), rule({ id: 'c', from: 'x@y.example.com', auto: true })]
     expect(retiredSenders(before, [before[2]], ['old@example.com'])).toEqual(['old@example.com', 'news@daily.example.com'])

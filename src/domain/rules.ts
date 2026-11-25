@@ -94,6 +94,7 @@ const engaged: Action[] = ['reply', 'task', 'keep', 'flag', 'snooze']
  * Senders of mail that was just auto-archived who should get an archive rule, so Outlook clears the next one on arrival.
  * A sender is skipped when a rule already names them, when I deleted the rule made for them before,
  * when I have ever replied to, kept, flagged, snoozed, or made a task from their mail, or when other mail of theirs stayed in the inbox.
+ * Mail that came out of junk never earns a rule: the address on it is only what the sender claimed.
  */
 export function autoRuleSenders(archived: { message: Message; triage: Triage }[], state: { rules: Rule[]; decisions: Decision[]; noRules?: string[] }, staying: Message[]): string[] {
   const address = (message: Message) => message.from.address.trim().toLowerCase()
@@ -105,7 +106,7 @@ export function autoRuleSenders(archived: { message: Message; triage: Triage }[]
   const senders = new Set<string>()
   for (const { message, triage } of archived) {
     const from = address(message)
-    if (!from.includes('@') || !ruleCategories.includes(triage.category) || blocked.has(from)) continue
+    if (message.fromJunk || !from.includes('@') || !ruleCategories.includes(triage.category) || blocked.has(from)) continue
     if (state.rules.some((rule) => rule.from && !rule.subject && from.includes(normalize(rule.from)))) continue
     senders.add(from)
   }

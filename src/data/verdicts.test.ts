@@ -24,6 +24,16 @@ describe('verdicts on messages', () => {
     expect(JSON.parse(init!.body as string)).toEqual({ categories: ['family', 'reply'], singleValueExtendedProperties: [{ id: verdictProperty, value: stored }] })
   })
 
+  it('reads the mark of mail from junk with the mail, and keeps it when a verdict is written over it', async () => {
+    expect(fromGraph(graphMessage('a', { singleValueExtendedProperties: [{ id: verdictProperty, value: '{"j":true}' }] }))).toMatchObject({ fromJunk: true, verdict: undefined })
+    expect(fromGraph(graphMessage('a', { singleValueExtendedProperties: [{ id: verdictProperty, value: stored }] })).fromJunk).toBeUndefined()
+    const request = vi.fn(async (_path: string, _init?: RequestInit) => ({ value: [] }))
+    await new MailProvider({ request } as unknown as GraphClient).setVerdict('a', [], verdict, true)
+    const [, init] = request.mock.calls.find(([, sent]) => sent?.method === 'PATCH')!
+    const written = (JSON.parse(init!.body as string) as { singleValueExtendedProperties: { value: string }[] }).singleValueExtendedProperties[0].value
+    expect(fromGraph(graphMessage('a', { singleValueExtendedProperties: [{ id: verdictProperty, value: written }] }))).toMatchObject({ fromJunk: true, verdict: { category: 'reply' } })
+  })
+
   it('still loads mail and shares the category when the mailbox refuses the property', async () => {
     const request = vi.fn(async (path: string, init?: RequestInit) => {
       if (path.includes('expand') || String(init?.body ?? '').includes('singleValueExtendedProperties')) throw new GraphError(400, '{}')
