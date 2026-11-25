@@ -20,6 +20,7 @@ const viewIcon: Record<View, IconName> = { inbox: 'inbox', search: 'search', rec
 export const shortcuts: [string, string][] = [
   ['j', 'next'],
   ['k', 'previous'],
+  ['x', 'select'],
   ['e', 'archive'],
   ['c', 'new message'],
   ['r', 'reply'],

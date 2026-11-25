@@ -68,14 +68,15 @@ export function Fold({ open, children }: { open: boolean; children: ReactNode })
   return <div className={`fold${open ? ' is-open' : ''}`}><div className="fold-clip">{(open || mounted) && children}</div></div>
 }
 
-export type ToastState = { key: number; text: string; undo?: () => void }
+/** `ms` is how long it stays; a few seconds unless what it can undo is big. */
+export type ToastState = { key: number; text: string; undo?: () => void; ms?: number }
 
 export function Toast({ toast, onDone }: { toast?: ToastState; onDone: () => void }) {
   const done = useRef(onDone)
   done.current = onDone
   useEffect(() => {
     if (!toast) return
-    const timer = setTimeout(() => done.current(), 5000)
+    const timer = setTimeout(() => done.current(), toast.ms ?? 5000)
     return () => clearTimeout(timer)
   }, [toast])
   if (!toast) return null

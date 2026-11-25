@@ -28,7 +28,10 @@ it('shows triaged mail with the suggested action highlighted and kept mail folde
   expect(html).not.toContain('in inbox ·')
   expect(html).toContain('mom asks about sunday dinner')
   expect(html).not.toContain('is-loud')
-  expect(html).toMatch(/class="quick is-suggested"[^>]*>reply</)
+  // Every row has the same two buttons in the same order; the verdict only marks one of them.
+  expect(html.match(/class="quick[^"]*"[^>]*>[^<]+/g)?.map((button) => button.replace(/.*>/, ''))).toEqual(['archive', 'to do', 'archive', 'to do', 'archive', 'to do'])
+  expect(html).toMatch(/class="quick is-suggested"[^>]*>archive</)
+  expect(html).not.toMatch(/class="quick[^"]*"[^>]*>reply</)
   // Nothing sits above the list but needs me: rule suggestions live on the rules screen.
   expect(html).not.toContain('to add')
   expect(html).toContain('1 kept in inbox')

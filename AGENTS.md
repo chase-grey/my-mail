@@ -29,6 +29,10 @@ The inbox is one list with one extra thing on top: a `needs me` section, its cou
 
 Clearing mail never brings other mail in to take its place. A full check reads the inbox back to the oldest mail already on the list and no further (`depthOf`); it does not read by count. Older mail comes only from the end of the list (`load more`). Mail a model is about to sort waits below needs me until its verdict lands, and joins needs me only if the verdict says so (`pending`). Mail no model will sort (sorting off, a failed call) counts as needs me. A flag or high importance never waits.
 
+## buttons on mail
+
+A button never changes what it is. On a phone every inbox row has `archive` and `to do`, in that order, in the same spot; the verdict only marks one of them, and the open message under a row adds the rest without repeating those two. From 60rem up the rows and the reading pane have no buttons: one bar across the top of the inbox has `archive`, `to do`, `reply`, `snooze` and more, and it acts on the ticked rows, or on the open message when none is ticked. `archive all` lives at the end of that bar; with rows ticked it reads `archive all but these` and leaves them. Do not put a button on a row whose label depends on the message, and do not repeat the bar's buttons over the message.
+
 ## threads
 
 The inbox shows one row per conversation: its newest message, with a count when more of it is in the inbox. The row sits with the mail that needs me when any message in it does, not only the newest. What clears the row (archive, delete, snooze, keep, to do, a sent reply that archives) clears every inbox message in the conversation, and undo brings them all back. A message opened anywhere (inbox, search, receipts) shows its whole conversation from every folder, sent mail included, newest first. Do not go back to one row per message, and do not add a place that opens a message without its conversation.
@@ -49,7 +53,7 @@ An open message has a `chat` link beside `find related`, wherever it is opened. 
 
 ## archiving many
 
-The inbox has three ways to archive in bulk, and all three go through `sweep` in `src/views/InboxView.tsx`: `archive all` at the top of the list, and `archive everything else` and `archive all from sender` in a message's menu. Each clears whole conversations, leaves mail kept in the inbox alone, covers only what is loaded in the list, and offers undo for everything it moved. A new bulk action goes through `sweep` too; do not add one that skips undo or touches kept mail.
+The inbox has three ways to archive in bulk, and all three go through `sweep` in `src/views/InboxView.tsx`: `archive all` (at the end of the bar from 60rem up, where ticked rows turn it into `archive all but these`; at the top of the list on a phone), and `archive everything else` and `archive all from sender` in a message's menu. Each clears whole conversations, leaves mail kept in the inbox alone, covers only what is loaded in the list, and offers undo for everything it moved. A new bulk action goes through `sweep` too; do not add one that skips undo or touches kept mail.
 
 ## new mail
 
