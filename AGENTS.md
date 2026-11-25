@@ -25,7 +25,7 @@ An open message in the inbox or search has `archive + rule` (`block`): it archiv
 
 ## inbox layout
 
-The inbox is one list with one extra thing on top: a `needs me` section, its count beside the heading. All other mail follows below it with no heading and no category name. There is no `probably fine` group, no side by side columns, and no summary line of counts above the list; the line under search only says a check is running. That line takes no room when it has nothing to say: on a wide screen the check's status sits beside the `inbox` title, and on a phone the line is gone unless a check is running or it holds `archive all`. Do not leave an empty row between the title and the mail. Nothing else may appear above the list or change its height while mail is being cleared: rules to add are offered on the rules screen, with their count beside `rules` in the navigation, never in the inbox.
+The inbox is one list with one extra thing on top: a `needs me` section, its count beside the heading. All other mail follows below it with no heading and no category name. There is no `probably fine` group, no side by side columns, and no summary line of counts above the list; the line under search only says a check is running. That line takes no room when it has nothing to say: on a wide screen the check's status sits beside the `inbox` title, and on a phone the line is gone unless a check is running or it holds `archive all`. Do not leave an empty row between the title and the mail. Nothing else may appear above the list or change its height while mail is being cleared: rules to add are offered on the rules screen, never in the inbox. `rules` in the navigation carries no count; only `inbox` does.
 
 ## needs me gets shorter as I work
 
