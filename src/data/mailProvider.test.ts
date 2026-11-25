@@ -121,6 +121,10 @@ describe('mail provider', () => {
     await provider.snooze('m4')
     const moves = request.mock.calls.filter(([path]) => path.endsWith('/move')).map(([, init]) => JSON.parse(init!.body as string).destinationId)
     expect(moves).toEqual(['archive', 'deleteditems', 'snoozed-id', 'snoozed-id'])
+    // Archived mail is marked read before it moves; deleted and snoozed mail is left as it was.
+    const calls = request.mock.calls.map(([path, init]) => `${init?.method} ${path}`)
+    expect(calls.indexOf('PATCH /me/messages/m1')).toBe(calls.indexOf('POST /me/messages/m1/move') - 1)
+    expect(calls.filter((call) => call.startsWith('PATCH'))).toEqual(['PATCH /me/messages/m1'])
     expect(request.mock.calls.filter(([path]) => path === '/me/mailFolders')).toHaveLength(1)
   })
 
@@ -138,6 +142,7 @@ describe('mail provider', () => {
     await provider.fileReceipt('m2')
     const moves = request.mock.calls.filter(([path]) => path.endsWith('/move')).map(([, init]) => JSON.parse(init!.body as string).destinationId)
     expect(moves).toEqual(['receipts-id', 'receipts-id'])
+    expect(request.mock.calls.filter(([, init]) => init?.method === 'PATCH').map(([path]) => path)).toEqual(['/me/messages/m1', '/me/messages/m2'])
     expect(request.mock.calls.filter(([path]) => path === '/me/mailFolders')).toHaveLength(1)
 
     expect(await provider.archivedReceipts()).toEqual(['old1', 'old2'])
@@ -149,11 +154,14 @@ describe('mail provider', () => {
   })
 
   it('sends throttled moves in a batch again, and reports the ones that never move', async () => {
-    type Sent = { requests: { id: string; url: string }[] }
+    type Sent = { requests: { id: string; url: string; method: string }[] }
     const seen = new Map<string, number>()
+    const marked: string[] = []
     const request = vi.fn(async (_path: string, init?: RequestInit) => ({
-      responses: (JSON.parse(init!.body as string) as Sent).requests.map(({ id, url }) => {
+      responses: (JSON.parse(init!.body as string) as Sent).requests.map(({ id, url, method }) => {
         const message = url.split('/')[3]
+        // Each is marked read before it moves; only the moves are counted here.
+        if (method === 'PATCH') { marked.push(message); return { id, status: 200 } }
         const tries = (seen.get(message) ?? 0) + 1
         seen.set(message, tries)
         if (message === 'gone') return { id, status: 404 }
@@ -166,6 +174,7 @@ describe('mail provider', () => {
     const progress: number[] = []
     const left = await new MailProvider({ request } as unknown as GraphClient, sleep).archiveMany(['ok', 'slow', 'gone', 'denied', 'busy'], (done) => progress.push(done))
     expect(left).toEqual(['denied', 'busy'])
+    expect(marked).toEqual(['ok', 'slow', 'gone', 'denied', 'busy'])
     expect(seen.get('ok')).toBe(1)
     expect(seen.get('slow')).toBe(3)
     expect(seen.get('denied')).toBe(1)

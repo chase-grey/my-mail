@@ -63,6 +63,10 @@ The inbox has two ways to archive in bulk, and both go through `sweep` in `src/v
 
 `archive all`, `archive all but these` and `archive everything else` keep going (`sweepOn`, with `sweepStep` in `src/domain/threads.ts`): once the list is clear they load older mail and archive that too, page after page, until the mailbox has no more. That is how years of mail get cleared in one press. What was highlighted or named stays through every page, and so does mail that arrived after the press. The toast counts what has gone and has `stop`; when the run ends, by itself or by `stop`, one `undo` brings back everything it moved. Pages loaded this way are never sent to a model. Do not make these stop at the loaded list again, and do not let a run go on without `stop` on screen.
 
+## archived mail is read
+
+Nothing sits unread in the archive or the receipts folder. Every way mail is put away marks it read first: a tap, a bulk archive, clean up, a rule run by the app, auto-archive, a sent reply, a task (`file` and `fileMany` in `src/data/mailProvider.ts`), and the rules written to Outlook carry `markAsRead` (`compileRule`). An undo brings back as unread what was unread. Snoozed and deleted mail is left as it was. A new way to archive goes through `archive`, `archiveMany` or the receipts calls, never a bare `move`.
+
 ## new mail
 
 Mail should show up about as fast as it does in Outlook. While the app is on screen it asks for new mail every few seconds (`peek`), and again the moment it comes back to the screen. What arrives is shown as soon as the rules have had their say, before any model sorts it; sorting then relabels it or takes it away. Do not hold fetched mail off screen until sorting finishes, and do not put a wait in front of the look for new mail. The quiet look changes nothing on screen when nothing came, and it stays one small request (`glance`: ids and the junk count, no bodies); full messages are fetched only once it finds something.

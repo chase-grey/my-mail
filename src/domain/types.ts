@@ -76,6 +76,8 @@ export type OutlookRule = {
   displayName: string
   isEnabled: boolean
   sequence: number
+  /** The rule marks what it catches as read. */
+  marksRead: boolean
   description: string
 }
 

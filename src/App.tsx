@@ -156,7 +156,7 @@ export default function App() {
   const [cleanup, setCleanup] = useState<CleanupState>(emptyCleanup)
   const scanRef = useRef<ScanMessage[]>([])
   /** What each sender's clear took away this visit, by address, so undo can put it back. */
-  const clearedRef = useRef(new Map<string, { scan: ScanMessage[]; inbox: Message[]; ruleId?: string }>())
+  const clearedRef = useRef(new Map<string, { scan: ScanMessage[]; inbox: Message[]; ruleId?: string; action: 'archive' | 'delete' }>())
   /** What the old mail sweep took away this visit, so undo can put it back. */
   const sweptRef = useRef<{ scan: ScanMessage[]; inbox: Message[] }>({ scan: [], inbox: [] })
   const messagesRef = useRef(messages)
@@ -791,6 +791,8 @@ export default function App() {
       setError(undefined)
       try {
         await services.mail.move(message.id, 'inbox')
+        // Archiving marked it read; mail that was unread comes back unread.
+        if (!message.isRead) await services.mail.markRead(message.id, false)
         leftRef.current.delete(message.id)
         backRef.current.set(message.id, message)
         setMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message])
@@ -904,6 +906,7 @@ export default function App() {
       try {
         const stuck = await services.mail.moveMany(group.ids, 'inbox', (done) => setCleanup((current) => ({ ...current, working: `${done} of ${group.count} from ${group.name}` })))
         if (stuck.length) throw new Error(notMoved(stuck.length))
+        if (taken?.action === 'archive') await services.mail.readMany(taken.scan.filter((message) => !message.isRead).map((message) => message.id), false)
         clearedRef.current.delete(group.address)
         const back = new Set(scanRef.current.map((message) => message.id))
         scanRef.current = [...scanRef.current, ...(taken?.scan ?? []).filter((message) => !back.has(message.id))]
@@ -961,6 +964,7 @@ export default function App() {
         release()
       }
       const kept = new Set(stuck)
+      await services.mail.readMany(taken.scan.filter((message) => !message.isRead && !kept.has(message.id)).map((message) => message.id), false).catch((failure: unknown) => setError(errorText(failure)))
       const have = new Set(scanRef.current.map((message) => message.id))
       scanRef.current = [...scanRef.current, ...taken.scan.filter((message) => !kept.has(message.id) && !have.has(message.id))]
       sweptRef.current = { scan: taken.scan.filter((message) => kept.has(message.id)), inbox: taken.inbox.filter((message) => kept.has(message.id)) }
@@ -1021,7 +1025,7 @@ export default function App() {
         throw new Error(notMoved(stuck.length))
       }
       const gone = new Set(group.ids)
-      clearedRef.current.set(group.address, { scan: scanRef.current.filter((message) => gone.has(message.id)), inbox: messagesRef.current.filter((message) => gone.has(message.id)), ruleId })
+      clearedRef.current.set(group.address, { scan: scanRef.current.filter((message) => gone.has(message.id)), inbox: messagesRef.current.filter((message) => gone.has(message.id)), ruleId, action })
       scanRef.current = scanRef.current.filter((message) => !gone.has(message.id))
       setCleanup((current) => ({ ...current, working: undefined, total: (current.total ?? current.scanned) - group.count, groups: current.groups.map((item) => item.address === group.address ? { ...item, cleared: action, ruled: Boolean(ruleId) } : item), old: oldCount() }))
       drop(messages.filter((message) => gone.has(message.id)))

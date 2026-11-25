@@ -102,7 +102,7 @@ export function scanFromGraph(message: GraphMessage): ScanMessage {
 }
 
 export function ruleFromGraph(rule: GraphRule): OutlookRule {
-  return { id: rule.id, displayName: rule.displayName, isEnabled: rule.isEnabled, sequence: rule.sequence, description: describeOutlookRule(rule) }
+  return { id: rule.id, displayName: rule.displayName, isEnabled: rule.isEnabled, sequence: rule.sequence, marksRead: rule.actions?.markAsRead === true, description: describeOutlookRule(rule) }
 }
 
 export class MailProvider {
@@ -250,8 +250,14 @@ export class MailProvider {
     await this.graph.request(`/me/messages/${encodeURIComponent(id)}/move`, { method: 'POST', body: JSON.stringify({ destinationId }) })
   }
 
+  /** Mail that is put away is done with, so it is marked read first: nothing sits unread in the archive or receipts. */
+  private async file(id: string, destinationId: string): Promise<void> {
+    await this.markRead(id)
+    await this.move(id, destinationId)
+  }
+
   archive(id: string): Promise<void> {
-    return this.move(id, 'archive')
+    return this.file(id, 'archive')
   }
 
   delete(id: string): Promise<void> {
@@ -262,14 +268,36 @@ export class MailProvider {
    * Many moves in one round trip each twenty. Graph throttles part of a batch when the mailbox is busy,
    * so those are sent again after the wait it asks for. Returns the ids that still did not move.
    */
-  async moveMany(ids: string[], destinationId: string, onProgress?: (done: number) => void): Promise<string[]> {
+  moveMany(ids: string[], destinationId: string, onProgress?: (done: number) => void): Promise<string[]> {
+    return this.each(ids, (id) => ({ method: 'POST', url: `/me/messages/${encodeURIComponent(id)}/move`, body: { destinationId } }), onProgress)
+  }
+
+  /** Marks many read or unread, batched and retried like the moves. Returns the ids that were not changed. */
+  readMany(ids: string[], isRead = true): Promise<string[]> {
+    return this.each(ids, (id) => ({ method: 'PATCH', url: `/me/messages/${encodeURIComponent(id)}`, body: { isRead } }))
+  }
+
+  /** Many put away at once, each group marked read and then moved. What will not mark still moves. Returns the ids that did not move. */
+  private async fileMany(ids: string[], destinationId: string, onProgress?: (done: number) => void): Promise<string[]> {
+    let done = 0
+    const left: string[] = []
+    for (const group of chunk(ids, batchLimit)) {
+      await this.readMany(group)
+      const stuck = await this.moveMany(group, destinationId, (moved) => onProgress?.(done + moved))
+      done += group.length - stuck.length
+      left.push(...stuck)
+    }
+    return left
+  }
+
+  private async each(ids: string[], build: (id: string) => { method: string; url: string; body: object }, onProgress?: (done: number) => void): Promise<string[]> {
     let done = 0
     const left: string[] = []
     for (const group of chunk(ids, batchLimit)) {
       let pending = group
       for (let attempt = 0; pending.length && attempt < moveAttempts; attempt++) {
         // Headers on the batch itself do not reach the requests inside it, and these ids are only valid with this one.
-        const requests = pending.map((id, index) => ({ id: String(index), method: 'POST', url: `/me/messages/${encodeURIComponent(id)}/move`, headers: { 'Content-Type': 'application/json', ...mailDefaultHeaders }, body: { destinationId } }))
+        const requests = pending.map((id, index) => ({ id: String(index), ...build(id), headers: { 'Content-Type': 'application/json', ...mailDefaultHeaders } }))
         const again: string[] = []
         let wait = 2 ** attempt
         try {
@@ -297,7 +325,7 @@ export class MailProvider {
   }
 
   archiveMany(ids: string[], onProgress?: (done: number) => void): Promise<string[]> {
-    return this.moveMany(ids, 'archive', onProgress)
+    return this.fileMany(ids, 'archive', onProgress)
   }
 
   deleteMany(ids: string[], onProgress?: (done: number) => void): Promise<string[]> {
@@ -418,12 +446,12 @@ export class MailProvider {
   }
 
   async fileReceipt(id: string): Promise<void> {
-    await this.move(id, await this.receiptsFolder())
+    await this.file(id, await this.receiptsFolder())
   }
 
   /** Returns the ids that did not move. */
   async fileReceipts(ids: string[], onProgress?: (done: number) => void): Promise<string[]> {
-    return ids.length ? this.moveMany(ids, await this.receiptsFolder(), onProgress) : []
+    return ids.length ? this.fileMany(ids, await this.receiptsFolder(), onProgress) : []
   }
 
   /** Ids of archived mail that carries the receipt category: receipts sorted before the folder existed. */

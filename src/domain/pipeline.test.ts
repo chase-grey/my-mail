@@ -9,7 +9,7 @@ import type { Decision, OutlookRule, Rule } from './types'
 import { parseUnsubscribe, unsubscribeMethod } from './unsubscribe'
 
 const rule = (id: string, extra: Partial<Rule>): Rule => ({ id, action: 'archive', enabled: true, createdAt: 'then', hits: 0, ...extra })
-const outlook = (id: string, displayName: string, isEnabled = true): OutlookRule => ({ id, displayName, isEnabled, sequence: 1, description: '' })
+const outlook = (id: string, displayName: string, isEnabled = true, marksRead = true): OutlookRule => ({ id, displayName, isEnabled, sequence: 1, marksRead, description: '' })
 
 describe('text for the model', () => {
   it('drops quoted history, mailing footers, and raw links, then caps', () => {
@@ -59,9 +59,9 @@ describe('outlook rules', () => {
     expect(compilable(rule('d', { from: 'x', action: 'task' }))).toBe(false)
     expect(compilable(rule('e', {}))).toBe(false)
     const body = compileRule(rule('a', { from: '@shop.example.com', subject: 'sale' }), 'archive-id', 3)
-    expect(body).toEqual({ displayName: 'my mail: archive anyone @shop.example.com and subject has “sale”', sequence: 3, isEnabled: true, conditions: { senderContains: ['@shop.example.com'], subjectContains: ['sale'] }, actions: { moveToFolder: 'archive-id', stopProcessingRules: true } })
+    expect(body).toEqual({ displayName: 'my mail: archive anyone @shop.example.com and subject has “sale”', sequence: 3, isEnabled: true, conditions: { senderContains: ['@shop.example.com'], subjectContains: ['sale'] }, actions: { moveToFolder: 'archive-id', markAsRead: true, stopProcessingRules: true } })
     expect(compilable(rule('f', { from: 'x', action: 'receipts' }))).toBe(true)
-    expect(compileRule(rule('f', { from: 'orders@shop.example.com', action: 'receipts' }), 'receipts-id', 2)).toMatchObject({ displayName: 'my mail: move to receipts from orders@shop.example.com', actions: { moveToFolder: 'receipts-id', stopProcessingRules: true } })
+    expect(compileRule(rule('f', { from: 'orders@shop.example.com', action: 'receipts' }), 'receipts-id', 2)).toMatchObject({ displayName: 'my mail: move to receipts from orders@shop.example.com', actions: { moveToFolder: 'receipts-id', markAsRead: true, stopProcessingRules: true } })
     expect(compileRule(rule('b', { from: 'x', action: 'delete' }), 'archive-id', 1).actions).toEqual({ delete: true, stopProcessingRules: true })
     expect(compileRule(rule('c', { from: 'x', action: 'read' }), 'archive-id', 1).actions).toEqual({ markAsRead: true, stopProcessingRules: true })
   })
@@ -72,17 +72,20 @@ describe('outlook rules', () => {
       rule('same', { from: '@b.example.com', outlookId: 'o-same' }),
       rule('renamed', { from: '@c.example.com', outlookId: 'o-renamed', enabled: false }),
       rule('gone', { from: '@d.example.com', outlookId: 'o-gone' }),
+      rule('unread', { from: '@f.example.com', outlookId: 'o-unread' }),
       rule('flag', { from: '@e.example.com', action: 'flag', outlookId: 'o-flag' }),
     ]
     const plan = planRuleSync(rules, [
       outlook('o-same', outlookRuleName(rules[1])),
       outlook('o-renamed', outlookRuleName(rules[2]), true),
+      // Written before archiving marked mail read: rewritten so it does.
+      outlook('o-unread', 'my mail: archive from @f.example.com', true, false),
       outlook('o-orphan', 'my mail: archive from nobody'),
       outlook('o-flag', 'my mail: flag from @e.example.com'),
       outlook('o-theirs', 'Bank alerts'),
     ])
     expect(plan.create.map((item) => item.id)).toEqual(['new'])
-    expect(plan.update.map((item) => item.id)).toEqual(['renamed'])
+    expect(plan.update.map((item) => item.id)).toEqual(['renamed', 'unread'])
     expect(plan.remove.sort()).toEqual(['o-flag', 'o-orphan'])
     expect(plan.dropped).toEqual(['gone'])
     expect(plan.foreign.map((item) => item.displayName)).toEqual(['Bank alerts'])

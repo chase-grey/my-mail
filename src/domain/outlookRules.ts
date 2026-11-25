@@ -22,6 +22,9 @@ export function outlookRuleName(rule: Rule): string {
   return `${outlookRulePrefix}${ruleActionLabel[rule.action]} ${describeRule(rule)}`.slice(0, 256)
 }
 
+/** A rule that puts mail away marks it read on the way, the same as archiving by hand. */
+const marksRead = (rule: Rule): boolean => rule.action === 'archive' || rule.action === 'receipts' || rule.action === 'read'
+
 /** `folderId` is where a rule that moves mail sends it: the archive, or the receipts folder for a receipts rule. */
 export function compileRule(rule: Rule, folderId: string, sequence: number): OutlookRuleBody {
   return {
@@ -35,7 +38,7 @@ export function compileRule(rule: Rule, folderId: string, sequence: number): Out
     actions: {
       ...(rule.action === 'archive' || rule.action === 'receipts' ? { moveToFolder: folderId } : {}),
       ...(rule.action === 'delete' ? { delete: true } : {}),
-      ...(rule.action === 'read' ? { markAsRead: true } : {}),
+      ...(marksRead(rule) ? { markAsRead: true } : {}),
       stopProcessingRules: true,
     },
   }
@@ -74,7 +77,7 @@ export function planRuleSync(rules: Rule[], outlook: OutlookRule[]): RuleSyncPla
     const existing = byId.get(rule.outlookId)
     if (!existing) { plan.dropped.push(rule.id); continue }
     claimed.add(rule.outlookId)
-    if (existing.displayName !== outlookRuleName(rule) || existing.isEnabled !== rule.enabled) plan.update.push(rule)
+    if (existing.displayName !== outlookRuleName(rule) || existing.isEnabled !== rule.enabled || existing.marksRead !== marksRead(rule)) plan.update.push(rule)
   }
   for (const rule of ours) if (!claimed.has(rule.id) && !plan.remove.includes(rule.id)) plan.remove.push(rule.id)
   return plan
