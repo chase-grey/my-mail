@@ -812,6 +812,8 @@ export default function App() {
       try {
         const stuck = new Set(await services.mail.moveMany(list.map((message) => message.id), 'inbox'))
         const back = list.filter((message) => !stuck.has(message.id))
+        // Archiving marked them read; mail that was unread comes back unread.
+        await services.mail.readMany(back.filter((message) => !message.isRead).map((message) => message.id), false)
         const ids = new Set(back.map((message) => message.id))
         for (const message of back) { leftRef.current.delete(message.id); backRef.current.set(message.id, message) }
         const have = new Set(messagesRef.current.map((message) => message.id))
