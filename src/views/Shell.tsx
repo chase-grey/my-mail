@@ -34,13 +34,15 @@ export const shortcuts: [string, string][] = [
 ]
 
 /** The frame around every screen: a side rail on wide screens, a top bar with a menu on a phone. */
-export function Shell({ view, views, counts = {}, busy, status, canRefresh, links, onView, onRefresh, onCompose, children }: {
+export function Shell({ view, views, counts = {}, busy, alert, status, canRefresh, links, onView, onRefresh, onCompose, children }: {
   view: View
   views: View[]
   counts?: { inbox?: number }
   busy: boolean
   /** What the inbox check is doing. A wide screen shows it beside the title, so the list gives it no line. */
   status?: string
+  /** Something failed. Errors are only written in settings, so settings wears the dot. */
+  alert?: boolean
   canRefresh: boolean
   links: ShellLink[]
   onView: (view: View) => void
@@ -75,7 +77,7 @@ export function Shell({ view, views, counts = {}, busy, status, canRefresh, link
   return <div className="shell">
     <nav className="rail" aria-label="screens">
       {onCompose && <button className="rail-compose" type="button" onClick={onCompose}><Icon name="compose" size={18} />new message</button>}
-      {views.map((item) => <button key={item} type="button" className={item === view ? 'is-current' : ''} aria-current={item === view ? 'page' : undefined} onClick={() => onView(item)}><Icon name={viewIcon[item]} size={18} />{viewLabel[item]}{item === 'inbox' && counts.inbox ? <span className="count">{counts.inbox}</span> : null}{item === 'settings' && updateReady && <i className="update-dot" aria-hidden="true" />}</button>)}
+      {views.map((item) => <button key={item} type="button" className={item === view ? 'is-current' : ''} aria-current={item === view ? 'page' : undefined} onClick={() => onView(item)}><Icon name={viewIcon[item]} size={18} />{viewLabel[item]}{item === 'inbox' && counts.inbox ? <span className="count">{counts.inbox}</span> : null}{item === 'settings' && (updateReady || alert) && <i className="update-dot" aria-hidden="true" />}</button>)}
       <div className="rail-links">
         <button type="button" onClick={() => setKeys(true)}><Icon name="keys" size={18} />shortcuts</button>
         {links.map((link) => <button key={link.label} type="button" onClick={link.onSelect}><Icon name="out" size={18} />{link.label}</button>)}
@@ -93,7 +95,7 @@ export function Shell({ view, views, counts = {}, busy, status, canRefresh, link
           ...(updateReady ? [{ label: 'update ready · restart', onSelect: () => void checkForUpdate() }] : []),
           ...views.filter((item) => item !== view && item !== 'inbox' && item !== 'search').map((item) => ({ label: viewLabel[item], onSelect: () => onView(item) })),
           ...links,
-        ]}><Icon name="more" />{updateReady && <i className="update-dot" aria-hidden="true" />}</Menu>
+        ]}><Icon name="more" />{(updateReady || alert) && <i className="update-dot" aria-hidden="true" />}</Menu>
       </header>
       <div className={`content is-${view}`} key={view}>{children}</div>
     </div>

@@ -486,7 +486,6 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
         <p className={`status${busy ? ' is-busy' : ''}`} aria-live="polite">{busy ?? ''}</p>
         {order.length > 1 && <button className="link" type="button" onClick={() => sweepOn([])}>archive all</button>}
       </div>}
-      {shownError && <p className="note is-error" role="alert">{shownError}</p>}
 
       {(needsRows.length > 0 || fineRows.length > 0) && <div className="lanes">
         {needsRows.length > 0 && <section className="lane">

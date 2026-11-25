@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { message } from './fixtures'
-import { ageTriage, autoArchivable, groupInbox, needsReading, outlookTriage, pruneTriage, rankTriaged, summarize } from './triage'
+import { ageTriage, autoArchivable, claudeReads, groupInbox, needsReading, outlookTriage, pruneTriage, rankTriaged, summarize } from './triage'
 import type { Triage } from './types'
 
 const triage = (messageId: string, overrides: Partial<Triage>): Triage => ({
@@ -46,6 +46,10 @@ describe('triage', () => {
     const plain = message('m1', 'a@example.com')
     const now = '2026-11-10T00:00:00Z'
     expect(needsReading(plain, undefined, now)).toBe(true)
+    // Jev could not be reached: Claude does not sort in its place, but still reads what already has a verdict and needs me.
+    expect(claudeReads(plain, undefined, true, now)).toBe(false)
+    expect(claudeReads(plain, undefined, false, now)).toBe(true)
+    expect(claudeReads(plain, triage('m1', { category: 'reply', source: 'jev' }), true, now)).toBe(true)
     expect(needsReading(plain, triage('m1', { category: 'reply', source: 'jev' }), now)).toBe(true)
     expect(needsReading(plain, triage('m1', { category: 'reply', source: 'jev', summary: 'already read' }), now)).toBe(false)
     expect(needsReading(plain, triage('m1', { category: 'promo', source: 'jev', confidence: 0.9 }), now)).toBe(false)

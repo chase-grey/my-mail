@@ -71,6 +71,15 @@ export function needsReading(message: Message, triage: Triage | undefined, now =
   return needsMe({ message, triage }, now)
 }
 
+/**
+ * What Claude reads on its own. When there is a Jev key, sorting is Jev's job: mail Jev gave no verdict because it
+ * could not be reached is left unsorted, not handed to Claude in its place.
+ */
+export function claudeReads(message: Message, triage: Triage | undefined, jevSilent: boolean, now = new Date().toISOString()): boolean {
+  if (!triage && jevSilent) return false
+  return needsReading(message, triage, now)
+}
+
 export type RunSummary = {
   inbox: number
   needReply: number

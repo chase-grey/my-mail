@@ -63,7 +63,7 @@ function SenderRow({ group, noise, marked, onMark, onError, actions }: { group: 
   </li>
 }
 
-export function CleanupView({ state, error, actions, onError }: { state: CleanupState; error?: string; actions: CleanupActions; onError: (text?: string) => void }) {
+export function CleanupView({ state, actions, onError }: { state: CleanupState; actions: CleanupActions; onError: (text?: string) => void }) {
   const [showAll, setShowAll] = useState(false)
   // A sender marked this visit keeps its row where it was; the next scan lists it with everyone else.
   const [marked, setMarked] = useState<string[]>([])
@@ -78,13 +78,11 @@ export function CleanupView({ state, error, actions, onError }: { state: Cleanup
   if (!state.done) {
     return <Card title="clean up">
       <p className="status is-busy" aria-live="polite">{state.working ?? (state.scanned ? `read ${state.scanned} messages` : 'reading the inbox')}</p>
-      {error && <p className="note is-error" role="alert">{error}</p>}
     </Card>
   }
 
   return <>
     <p className="status" aria-live="polite">{state.working ?? `${state.total ?? state.scanned} in inbox · ${left(state.groups).length} senders`}</p>
-    {error && <p className="note is-error" role="alert">{error}</p>}
 
     {(state.old.count > 0 || Boolean(state.swept)) && <Card title="old mail" className="is-wide">
       {state.old.count > 0 && <div className="suggest">

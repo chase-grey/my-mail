@@ -22,11 +22,11 @@ export function SettingsView({ settings, connection, accountName, busy, error, o
   const update = useAppUpdate()
 
   return <>
+    {error && <p className="note is-error" role="alert">{error}</p>}
     <Card title="microsoft account">
       {connection === 'connected'
         ? <><p className="note">{accountName}</p><div className="actions"><button className="plain" disabled={busy} type="button" onClick={() => void onDisconnect()}>disconnect</button></div></>
         : <div className="actions"><button className="primary" disabled={busy || connection === 'unconfigured'} type="button" onClick={() => void onConnect()}>{connection === 'unconfigured' ? 'no microsoft app id' : busy ? 'connecting' : 'connect microsoft'}</button></div>}
-      {error && <p className="note is-error" role="alert">{error}</p>}
     </Card>
 
     <Card title="ai">

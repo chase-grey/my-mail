@@ -20,7 +20,7 @@ import { historyTriage, noiseSenders, senderHistoryLine } from './domain/history
 import { compileRule, planRuleSync } from './domain/outlookRules'
 import { applyRules, autoRuleSenders, clearsSender, newRule, recordHits, rememberDecision, retiredSenders, suggestRules, type RuleSuggestion } from './domain/rules'
 import { dueSnoozes, snoozeRecord, snoozeUntil, withoutSnoozes, type SnoozeOption } from './domain/snooze'
-import { ageTriage, autoArchivable, needsReading, oldAfterDays, outlookTriage, pruneTriage, rankTriaged, sharedOf, summarize, unsureBelow, worthSharing, writeShared, type RunSummary, type Triaged } from './domain/triage'
+import { ageTriage, autoArchivable, claudeReads, needsReading, oldAfterDays, outlookTriage, pruneTriage, rankTriaged, sharedOf, summarize, unsureBelow, worthSharing, writeShared, type RunSummary, type Triaged } from './domain/triage'
 import { emptyAutomation, type Action, type Automation, type Message, type OutlookRule, type Rule, type RuleAction, type Triage } from './domain/types'
 import { inboxThreads } from './domain/threads'
 import { parseUnsubscribe, unsubscribeMethod } from './domain/unsubscribe'
@@ -67,7 +67,7 @@ function writeJson(key: string, value: unknown): void {
   }
 }
 
-/** Jev is reached through a relay that some networks block. Once a call fails to connect, Jev is not asked again until the page reloads; Claude sorts instead. */
+/** Jev is reached through a relay that some networks block. Once a call fails to connect, Jev is not asked again until the page reloads, and that mail stays unsorted. */
 let jevUnreachable = false
 const isNetworkFailure = (failure: unknown) => failure instanceof TypeError || (failure instanceof DOMException && (failure.name === 'TimeoutError' || failure.name === 'AbortError'))
 
@@ -150,6 +150,8 @@ export default function App() {
   const [summary, setSummary] = useState<RunSummary>()
   const [busy, setBusy] = useState<string>()
   const [error, setError] = useState<string>()
+  /** Jev could not be reached from this network. A standing fact, said in settings, not something to flag. */
+  const [jevDown, setJevDown] = useState(false)
   const [dismissed, setDismissed] = useState<string[]>([])
   const [composing, setComposing] = useState<ComposeRequest>()
   const [composeNote, setComposeNote] = useState<ToastState>()
@@ -257,6 +259,7 @@ export default function App() {
     }
     const history = (message: Message) => senderHistoryLine(automationState.decisions, message.from.address)
     const unsorted = inbox.filter((message) => !cache[message.id] && spend(message))
+    let jevFailed = false
     if (settings.jevApiKey && unsorted.length && !jevUnreachable) {
       setBusy(`sorting ${unsorted.length} new ${unsorted.length === 1 ? 'message' : 'messages'}`)
       try {
@@ -264,8 +267,9 @@ export default function App() {
         for (const result of results) { cache[result.messageId] = result; touched.add(result.messageId) }
         withoutModel += results.length
       } catch (failure) {
-        if (isNetworkFailure(failure)) jevUnreachable = true
-        setError(isNetworkFailure(failure) ? "jev can't be reached" : errorText(failure))
+        jevFailed = true
+        if (isNetworkFailure(failure)) { jevUnreachable = true; setJevDown(true) }
+        else setError(errorText(failure))
       }
     }
 
@@ -289,7 +293,9 @@ export default function App() {
 
     // The language model reads only what needs me, or what nothing else could settle.
     if (settings.anthropicApiKey) {
-      const toRead = inbox.filter((message) => spend(message) && needsReading(message, cache[message.id], now))
+      // With a Jev key, sorting is Jev's. Mail it could not be asked about stays unsorted; Claude is not used in its place.
+      const jevSilent = Boolean(settings.jevApiKey) && (jevUnreachable || jevFailed)
+      const toRead = inbox.filter((message) => spend(message) && claudeReads(message, cache[message.id], jevSilent, now))
       if (toRead.length) {
         setBusy(`reading ${toRead.length} ${toRead.length === 1 ? 'message' : 'messages'}`)
         const items: ReadItem[] = toRead.map((message) => {
@@ -349,7 +355,7 @@ export default function App() {
       }
     }
 
-    const canSort = Boolean(settings.anthropicApiKey) || (Boolean(settings.jevApiKey) && !jevUnreachable)
+    const canSort = settings.jevApiKey ? !jevUnreachable : Boolean(settings.anthropicApiKey)
     const wantsModel = (message: Message) => cache[message.id] ? Boolean(settings.anthropicApiKey) && needsReading(message, cache[message.id], now) : canSort
     const waiting = inbox.filter((message) => !spend(message) && wantsModel(message)).map((message) => message.id)
     return { inbox, cache, byRules: removed.size, autoArchived, filed, newRules, withoutModel, waiting }
@@ -1101,16 +1107,16 @@ export default function App() {
     ...(install.canPrompt ? [{ label: 'install app', onSelect: () => void install.install() }] : []),
   ]
 
-  return <BodySource value={connected ? readBody : undefined}><ThreadContext value={connected ? threadActions : undefined}><Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe } : undefined} busy={Boolean(busy)} status={connected ? busy : undefined} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })} onCompose={connected ? () => setComposing({ mode: 'new' }) : undefined}>
+  return <BodySource value={connected ? readBody : undefined}><ThreadContext value={connected ? threadActions : undefined}><Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe } : undefined} busy={Boolean(busy)} alert={Boolean(error)} status={connected ? busy : undefined} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })} onCompose={connected ? () => setComposing({ mode: 'new' }) : undefined}>
     {view === 'inbox' && installFirst && <InstallStep install={install} onSkip={() => setInstallSkipped(true)} />}
     {view === 'inbox' && connected && <InstallBanner install={install} />}
     {view === 'inbox' && !installFirst && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} archiveAfterReply={settings.archiveAfterReply} snoozes={automation.snoozes} actions={actions} more={more} onMore={(sweeping) => services ? loadMore(services, { settings }, !sweeping) : undefined}
       onConnect={connect} />}
     {view === 'search' && connected && <SearchView search={searchActions} actions={actions} hasModel={Boolean(settings.anthropicApiKey)} senders={senders} subjects={subjects} />}
     {view === 'receipts' && connected && <ReceiptsView actions={receiptActions} />}
-    {view === 'rules' && <RulesView rules={automation.rules} outlookRules={outlookRules} snoozes={automation.snoozes} suggestions={suggestions} error={error} onRules={updateRules} onDismissSuggestion={(item) => setDismissed((current) => [...current, `${item.from}|${item.action}`])} />}
-    {view === 'cleanup' && <CleanupView state={{ ...cleanup, notNoise: automation.noRules }} error={error} actions={cleanupActions} onError={setError} />}
-    {view === 'settings' && <SettingsView settings={settings} connection={connection} accountName={accountName} busy={Boolean(busy)} error={error} onSettings={setSettings} onConnect={connect} onDisconnect={disconnect} />}
+    {view === 'rules' && <RulesView rules={automation.rules} outlookRules={outlookRules} snoozes={automation.snoozes} suggestions={suggestions} onRules={updateRules} onDismissSuggestion={(item) => setDismissed((current) => [...current, `${item.from}|${item.action}`])} />}
+    {view === 'cleanup' && <CleanupView state={{ ...cleanup, notNoise: automation.noRules }} actions={cleanupActions} onError={setError} />}
+    {view === 'settings' && <SettingsView settings={settings} connection={connection} accountName={accountName} busy={Boolean(busy)} error={error ?? (jevDown && settings.jevApiKey ? "jev can't be reached" : undefined)} onSettings={setSettings} onConnect={connect} onDisconnect={disconnect} />}
     {composing && services && <Compose key={`${composing.mode}:${composing.message?.id ?? ''}`} request={composing} actions={services.compose} contacts={senders}
       onDraft={settings.anthropicApiKey && composing.message && composing.mode !== 'forward' ? (strong, instruction) => actions.draft(composing.message!, strong, instruction) : undefined}
       onSent={() => sent(composing)} onClose={(note) => { setComposing(undefined); if (note) setComposeNote({ key: Date.now(), text: note }) }} />}

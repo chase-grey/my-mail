@@ -7,13 +7,12 @@ import { Card, Empty, Field, Menu, Segmented } from '../ui'
 
 const actionOptions = (Object.keys(ruleActionLabel) as RuleAction[]).map((value) => ({ value, label: ruleActionLabel[value] }))
 
-export function RulesView({ rules, outlookRules, snoozes, suggestions = [], error, onRules, onDismissSuggestion }: {
+export function RulesView({ rules, outlookRules, snoozes, suggestions = [], onRules, onDismissSuggestion }: {
   rules: Rule[]
   outlookRules: OutlookRule[]
   snoozes: Snooze[]
   /** Senders handled the same way three times. Offered here and nowhere else: nothing may land above the inbox while it is being cleared. */
   suggestions?: RuleSuggestion[]
-  error?: string
   onRules: (rules: Rule[]) => Promise<void>
   onDismissSuggestion?: (item: RuleSuggestion) => void
 }) {
@@ -54,7 +53,6 @@ export function RulesView({ rules, outlookRules, snoozes, suggestions = [], erro
           { label: 'delete', onSelect: () => void onRules(rules.filter((item) => item.id !== rule.id)) },
         ]} />
       </li>)}</ul>}
-      {error && <p className="note is-error" role="alert">{error}</p>}
       <form className="stack" onSubmit={add}>
         <Segmented label="what to do" options={actionOptions} value={action} onChange={setAction} />
         <div className="grid-2">

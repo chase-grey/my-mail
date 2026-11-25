@@ -572,7 +572,8 @@ Defaults are set so nothing blocks; change any of these in a sentence.
   page asks through a Cloudflare Worker (`relay/`, deployed with `npx wrangler deploy` from that
   folder). The worker holds no key, answers only the site's origin, forwards only the one POST, and
   logs nothing. Epic's network blocks `workers.dev`, so on that network the call times out after six
-  seconds, the app says so once, and Claude sorts until the page reloads.
+  seconds, settings says `jev can't be reached`, and that mail stays unsorted until a device that can
+  reach Jev opens the inbox. Claude is not used in Jev's place.
 - **Images** default to people only.
 - **Sent-mail voice samples** default off until tried once.
 - **Name** stays `my mail`.

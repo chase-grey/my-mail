@@ -81,6 +81,14 @@ A key on its own starts nothing. Jev and Claude sort mail by themselves only onc
 
 One device pays for a message, not each of them. The whole verdict, summary included, is written onto the message (`setVerdict`) and read back with the mail, so another device shows it without asking a model. A device nobody is using (`document.hasFocus()` is false) shows new mail at once but leaves it unsorted for twenty seconds, then reads it again and sorts only what still has no verdict; picking the device up sorts it straight away. Do not keep part of a verdict on one device only, and do not let an idle device race the one in use.
 
+## errors
+
+An error is written in settings and nowhere else in the app, at the top of the settings screen; settings wears the dot while there is one. The inbox, rules and clean up never show a background failure. What stays where it happened is the answer to something just tapped on that screen: a send that failed in compose, a search that failed, the connect button before there is a mailbox. Jev being out of reach is a standing fact of some networks (Epic's blocks the relay), so settings says it and there is no dot.
+
+## jev out of reach
+
+With a Jev key, sorting is Jev's. When Jev cannot be reached, mail it would have sorted stays unsorted until a device that can reach it opens the inbox; Claude is not used in its place (`claudeReads`). Claude still reads what already has a verdict and needs me.
+
 ## committing and deploying
 
 When a task is finished, commit the files you edited by name and push to main without asking. The push deploys the site.
