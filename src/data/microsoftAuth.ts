@@ -4,6 +4,7 @@ import {
   PublicClientApplication,
   type AccountInfo,
 } from '@azure/msal-browser'
+import { signInReturnUrl } from '../site'
 
 /** Same Entra registration as My Brain; this app asks for the mail scopes My Brain never requests. */
 export const mailScopes = [
@@ -19,7 +20,7 @@ export class MicrosoftAuth {
 
   static async create(
     clientId: string,
-    redirectUri = `${window.location.origin}${import.meta.env.BASE_URL}`,
+    redirectUri = signInReturnUrl(),
   ): Promise<MicrosoftAuth> {
     const client = new PublicClientApplication({
       auth: {

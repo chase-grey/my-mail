@@ -37,6 +37,7 @@ import { ReceiptsView, type ReceiptActions } from './views/ReceiptsView'
 import { RulesView } from './views/RulesView'
 import { SearchView, type SearchActions } from './views/SearchView'
 import { Shell, resumeView, type ShellLink, type View } from './views/Shell'
+import { besideThisApp } from './site'
 import { SettingsView, type ConnectionStatus } from './views/SettingsView'
 import { ThreadContext, type ThreadActions } from './views/Thread'
 import { brainChatUrl } from './domain/brain'
@@ -1112,7 +1113,7 @@ export default function App() {
   const readBody = useMemo(() => services && ((message: Message) => services.mail.content(message.id)), [services])
 
   const links: ShellLink[] = [
-    ...(settings.brainUrl ? [{ label: 'open my brain', onSelect: () => window.open(settings.brainUrl, '_blank', 'noreferrer') }] : []),
+    ...(settings.brainUrl ? [{ label: 'open my brain', onSelect: () => window.open(besideThisApp(settings.brainUrl), '_blank', 'noreferrer') }] : []),
     ...(install.canPrompt ? [{ label: 'install app', onSelect: () => void install.install() }] : []),
   ]
 
