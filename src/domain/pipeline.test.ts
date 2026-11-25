@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { describeGroup, groupBySender, keepSenderKinds, likelyNoise, oldMail, sendersToAsk, type ScanMessage } from './cleanup'
+import { codeWords } from './codes'
 import { message } from './fixtures'
 import { historyTriage, noiseSenders, senderHistoryLine } from './history'
 import { compilable, compileRule, describeOutlookRule, outlookRuleName, planRuleSync } from './outlookRules'
@@ -9,7 +10,7 @@ import type { Decision, OutlookRule, Rule } from './types'
 import { parseUnsubscribe, unsubscribeMethod } from './unsubscribe'
 
 const rule = (id: string, extra: Partial<Rule>): Rule => ({ id, action: 'archive', enabled: true, createdAt: 'then', hits: 0, ...extra })
-const outlook = (id: string, displayName: string, isEnabled = true, marksRead = true): OutlookRule => ({ id, displayName, isEnabled, sequence: 1, marksRead, description: '' })
+const outlook = (id: string, displayName: string, isEnabled = true, marksRead = true): OutlookRule => ({ id, displayName, isEnabled, sequence: 1, marksRead, sparesCodes: true, description: '' })
 
 describe('text for the model', () => {
   it('drops quoted history, mailing footers, and raw links, then caps', () => {
@@ -59,7 +60,7 @@ describe('outlook rules', () => {
     expect(compilable(rule('d', { from: 'x', action: 'task' }))).toBe(false)
     expect(compilable(rule('e', {}))).toBe(false)
     const body = compileRule(rule('a', { from: '@shop.example.com', subject: 'sale' }), 'archive-id', 3)
-    expect(body).toEqual({ displayName: 'my mail: archive anyone @shop.example.com and subject has “sale”', sequence: 3, isEnabled: true, conditions: { senderContains: ['@shop.example.com'], subjectContains: ['sale'] }, actions: { moveToFolder: 'archive-id', markAsRead: true, stopProcessingRules: true } })
+    expect(body).toEqual({ displayName: 'my mail: archive anyone @shop.example.com and subject has “sale”', sequence: 3, isEnabled: true, conditions: { senderContains: ['@shop.example.com'], subjectContains: ['sale'] }, actions: { moveToFolder: 'archive-id', markAsRead: true, stopProcessingRules: true }, exceptions: { bodyOrSubjectContains: codeWords } })
     expect(compilable(rule('f', { from: 'x', action: 'receipts' }))).toBe(true)
     expect(compileRule(rule('f', { from: 'orders@shop.example.com', action: 'receipts' }), 'receipts-id', 2)).toMatchObject({ displayName: 'my mail: move to receipts from orders@shop.example.com', actions: { moveToFolder: 'receipts-id', markAsRead: true, stopProcessingRules: true } })
     expect(compileRule(rule('b', { from: 'x', action: 'delete' }), 'archive-id', 1).actions).toEqual({ delete: true, stopProcessingRules: true })

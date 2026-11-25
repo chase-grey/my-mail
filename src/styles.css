@@ -141,7 +141,14 @@ a { color: var(--accent); }
 .item.is-open .mail { background: var(--accent-soft); }
 .item.is-kept .mail-row { opacity: 0.65; }
 .mail-row { display: flex; align-items: center; gap: 0.25rem; padding-right: 0.5rem; }
+.mail-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .mail-open { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; padding: 0.7rem 0.5rem 0.7rem 1rem; text-align: left; line-height: 1.35; }
+/* A sign-in code, copied from the row. It takes the place of the preview line. */
+.mail-main:has(.code) .mail-open { padding-bottom: 0.3rem; }
+.code { align-self: flex-start; display: inline-flex; align-items: baseline; gap: 0.6rem; min-height: 2.1rem; margin: 0 0 0.6rem 1rem; padding: 0 0.8rem; border: 1px solid var(--border); border-radius: 999px; color: var(--accent); font-size: 0.85rem; font-weight: 600; transition: background var(--quick), scale var(--quick); }
+.code b { color: var(--text); font-size: 1rem; font-variant-numeric: tabular-nums; letter-spacing: 0.08em; }
+.code:hover { background: var(--surface-2); }
+.code:active { scale: 0.96; }
 .mail-top { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
 .mail-top small { flex: none; font-variant-numeric: tabular-nums; }
 .mail-from { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -269,7 +276,9 @@ kbd { display: inline-grid; place-items: center; min-width: 1.75rem; height: 1.7
   }
   .main:has(.reader) .item.is-open .item-clip { border-color: var(--accent); box-shadow: 0 0.5rem 1.4rem rgb(0 0 0 / 0.28); }
   .main:has(.reader) .item.is-open .mail { background: var(--accent); color: var(--on-accent); }
-  .main:has(.reader) .item.is-open :is(small, .mail-summary, .quick) { color: inherit; }
+  .main:has(.reader) .item.is-open :is(small, .mail-summary, .quick, .code, .code b) { color: inherit; }
+  .main:has(.reader) .item.is-open .code { border-color: currentColor; }
+  .main:has(.reader) .item.is-open .code:hover { background: color-mix(in srgb, var(--on-accent) 18%, transparent); }
   .main:has(.reader) .item.is-open :is(small, .mail-summary) { opacity: 0.85; }
   .main:has(.reader) .item.is-open .mail-row { opacity: 1; }
   .main:has(.reader) .item.is-open .mail-from.is-unread::before { background: currentColor; }

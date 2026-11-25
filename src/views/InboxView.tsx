@@ -1,9 +1,10 @@
 import { useEffect, useReducer, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import type { MessageActions } from '../App'
 import { holdUpdates } from '../appUpdate'
+import { codeOf } from '../domain/codes'
 import { snoozeOptions, type SnoozeOption } from '../domain/snooze'
 import { inboxThreads, sweepStep, type InboxThread } from '../domain/threads'
-import { categoryLabel, isOld, type RunSummary, type Triaged } from '../domain/triage'
+import { categoryLabel, holdsCode, isOld, type RunSummary, type Triaged } from '../domain/triage'
 import type { Message, Snooze } from '../domain/types'
 import { Card, Field, Fold, Icon, Menu, Sheet, Toast, useMediaQuery, usePresence, type IconName, type MenuItem, type ToastState } from '../ui'
 import type { ConnectionStatus } from './SettingsView'
@@ -41,6 +42,8 @@ type Handlers = {
   forward: (item: InboxThread) => void
   snooze: (item: InboxThread) => void
   archiveOthers: (item: InboxThread) => void
+  /** Puts a sign-in code on the clipboard, straight from the row. */
+  copy: (code: string) => void
 }
 
 const swipeAt = 88
@@ -145,6 +148,10 @@ function Row({ item, index, kept, quiet, open, lit, pane, leave, on }: { item: I
   const loud = isLoud(item)
   const line = triage?.summary || message.preview
   const suggested = triage?.suggested
+  // A sign-in code is the one thing a row offers that depends on the message: the code itself, to copy without opening the mail.
+  const now = new Date().toISOString()
+  const coded = item.all.find((member) => holdsCode(member, now))
+  const code = coded && codeOf(coded)
   // The colour of the summary already says a reply is owed; only the quieter verdicts are named.
   const kind = triage && !loud && (quiet || triage.confidence < 0.6) ? categoryLabel[triage.category] : undefined
 
@@ -193,14 +200,17 @@ function Row({ item, index, kept, quiet, open, lit, pane, leave, on }: { item: I
       <article className="mail" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd} onPointerCancel={onPointerEnd}
         onClickCapture={(event) => { if (dragged.current) { dragged.current = false; event.stopPropagation(); event.preventDefault() } }}>
         <div className="mail-row">
-          <button className="mail-open" type="button" aria-expanded={open} onMouseDown={(event) => { if (event.shiftKey) event.preventDefault() }} onClick={(event) => { if (pane && !kept && (event.shiftKey || event.ctrlKey || event.metaKey)) on.pick(item); else on.open(item) }}>
-            <span className="mail-top">
-              <span className={`mail-from${message.isRead ? '' : ' is-unread'}`} title={message.from.address}>{message.from.name}{item.all.length > 1 && <span className="mail-count">{item.all.length}</span>}</span>
-              <small>{kind ? `${kind} · ` : ''}{when(message.receivedAt)}</small>
-            </span>
-            <span className="mail-subject">{message.subject}</span>
-            {line && <span className="mail-summary">{line}</span>}
-          </button>
+          <div className="mail-main">
+            <button className="mail-open" type="button" aria-expanded={open} onMouseDown={(event) => { if (event.shiftKey) event.preventDefault() }} onClick={(event) => { if (pane && !kept && (event.shiftKey || event.ctrlKey || event.metaKey)) on.pick(item); else on.open(item) }}>
+              <span className="mail-top">
+                <span className={`mail-from${message.isRead ? '' : ' is-unread'}`} title={message.from.address}>{message.from.name}{item.all.length > 1 && <span className="mail-count">{item.all.length}</span>}</span>
+                <small>{kind ? `${kind} · ` : ''}{when(message.receivedAt)}</small>
+              </span>
+              <span className="mail-subject">{message.subject}</span>
+              {line && !code && <span className="mail-summary">{line}</span>}
+            </button>
+            {code && <button className="code" type="button" onClick={() => on.copy(code)}><b>{code}</b>copy</button>}
+          </div>
           {/* The same two buttons on every row, in the same place. On a wide screen the bar has them and the row has none. */}
           {!pane && <>
               <button className={`quick${suggested === 'archive' ? ' is-suggested' : ''}`} type="button" onClick={() => on.archive(item)}>archive</button>
@@ -426,6 +436,7 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
     forward: (item) => actions.compose({ mode: 'forward', message: item.message }),
     snooze: (item) => setSheet({ kind: 'snooze', threads: [item] }),
     archiveOthers: (item) => sweepOn([item.key]),
+    copy: (code) => { void navigator.clipboard.writeText(code).then(() => say('copied')).catch(() => undefined) },
   }
 
   /** The actions that take several conversations at once, on whatever the bar acts on. */

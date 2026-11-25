@@ -1,3 +1,4 @@
+import { codeOf } from './codes'
 import type { Decision, Message, Triage } from './types'
 
 /** Senders whose mail I keep clearing without opening. Their next message needs no model. */
@@ -13,9 +14,9 @@ export function noiseSenders(decisions: Decision[], minimum = 3): Set<string> {
   return new Set([...tally.entries()].filter(([, ids]) => ids.size >= minimum).map(([from]) => from))
 }
 
-/** A verdict from history alone: unread mail from a sender I always clear unread is noise until I say otherwise. */
+/** A verdict from history alone: unread mail from a sender I always clear unread is noise until I say otherwise. Never mail with a code in it. */
 export function historyTriage(message: Message, noise: Set<string>, triagedAt: string): Triage | undefined {
-  if (message.isRead || message.flagged || message.importance === 'high') return undefined
+  if (message.isRead || message.flagged || message.importance === 'high' || codeOf(message)) return undefined
   if (!noise.has(message.from.address.toLowerCase())) return undefined
   return { messageId: message.id, category: 'newsletter', summary: '', needsReply: false, suggested: 'archive', confidence: 0.9, source: 'history', triagedAt }
 }

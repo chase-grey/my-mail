@@ -1,3 +1,4 @@
+import { codeOf } from './codes'
 import { actions, categories, type Action, type Category, type Message, type SharedVerdict, type Triage } from './types'
 
 const order: Record<Category, number> = Object.fromEntries(categories.map((category, index) => [category, index])) as Record<Category, number>
@@ -5,10 +6,10 @@ const order: Record<Category, number> = Object.fromEntries(categories.map((categ
 /** `pending` is mail with no verdict yet that a model is about to sort. */
 export type Triaged = { message: Message; triage?: Triage; pending?: boolean }
 
-/** Things that need me first, then things to know, then things to skim; newest first within a group. */
-export function rankTriaged(items: Triaged[]): Triaged[] {
+/** A code I am waiting on first, then things that need me, then things to know, then things to skim; newest first within a group. */
+export function rankTriaged(items: Triaged[], now = new Date().toISOString()): Triaged[] {
   return [...items].sort((a, b) => {
-    const rank = (item: Triaged) => item.triage ? order[item.triage.category] : order.fyi
+    const rank = (item: Triaged) => holdsCode(item.message, now) ? -1 : item.triage ? order[item.triage.category] : order.fyi
     const byRank = rank(a) - rank(b)
     if (byRank) return byRank
     return b.message.receivedAt.localeCompare(a.message.receivedAt)
@@ -25,11 +26,12 @@ export const unsureBelow = 0.6
  * Mail that still needs eyes: replies, actions, flagged, important, unread verdicts, and anything the classifier was unsure about.
  * Old mail never does, whatever flag, importance or category it still carries.
  * Mail whose verdict is on its way waits for it; mail no model will sort needs me.
+ * Mail with a code in it always does, whatever it was sorted as.
  */
 export function needsMe(item: Triaged, now = new Date().toISOString()): boolean {
   const { message, triage } = item
   if (isOld(message, now)) return false
-  if (message.flagged || message.importance === 'high') return true
+  if (message.flagged || message.importance === 'high' || codeOf(message)) return true
   if (!triage) return !item.pending
   if (needsMeCategories.includes(triage.category) || triage.needsReply) return true
   return triage.confidence < unsureBelow
@@ -37,13 +39,13 @@ export function needsMe(item: Triaged, now = new Date().toISOString()): boolean 
 
 /** Split the inbox into what needs me and what is probably fine, each ranked. */
 export function groupInbox(items: Triaged[], now = new Date().toISOString()): { needsMe: Triaged[]; probablyFine: Triaged[] } {
-  const ranked = rankTriaged(items)
+  const ranked = rankTriaged(items, now)
   return { needsMe: ranked.filter((item) => needsMe(item, now)), probablyFine: ranked.filter((item) => !needsMe(item, now)) }
 }
 
 /** Only sure verdicts clear mail on their own. Replies, actions, and anything flagged stay. */
 export function autoArchivable(message: Message, triage: Triage, minimumConfidence = 0.85): boolean {
-  if (message.flagged || message.importance === 'high') return false
+  if (message.flagged || message.importance === 'high' || codeOf(message)) return false
   if (triage.needsReply || triage.suggested !== 'archive') return false
   if (!quietCategories.includes(triage.category)) return false
   return triage.confidence >= minimumConfidence
@@ -54,6 +56,20 @@ export const oldAfterDays = 30
 
 export function isOld(message: Message, now: string, days = oldAfterDays): boolean {
   return message.receivedAt < new Date(new Date(now).getTime() - days * 86_400_000).toISOString()
+}
+
+/**
+ * Mail carrying a sign-in or verification code I may be waiting on. Nothing puts it away for me: no rule, no sender history, no sorter.
+ * Once the mail is old the code is long dead and it is mail like any other.
+ */
+export function holdsCode(message: Message, now: string): boolean {
+  return !isOld(message, now) && Boolean(codeOf(message))
+}
+
+/** A verdict from the code alone, so no model is paid to sort mail that is staying anyway. */
+export function codeTriage(message: Message, now: string): Triage | undefined {
+  if (!holdsCode(message, now)) return undefined
+  return { messageId: message.id, category: 'notification', summary: '', needsReply: false, suggested: 'keep', confidence: 1, source: 'code', triagedAt: now }
 }
 
 /** A verdict from age alone: old mail sits under probably fine without a model. It is never auto-archived and never written to Outlook. */

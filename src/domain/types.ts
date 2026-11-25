@@ -36,8 +36,8 @@ export type Category = typeof categories[number]
 export const actions = ['archive', 'delete', 'task', 'reply', 'keep', 'snooze', 'read', 'flag', 'unsubscribe'] as const
 export type Action = typeof actions[number]
 
-/** Who decided the category: Claude read it, Jev scored it, Outlook already had it, the sender's history settled it, or it was too old to spend a model on. */
-export type TriageSource = 'model' | 'jev' | 'outlook' | 'history' | 'age'
+/** Who decided the category: Claude read it, Jev scored it, Outlook already had it, the sender's history settled it, it carries a code and stays, or it was too old to spend a model on. */
+export type TriageSource = 'model' | 'jev' | 'outlook' | 'history' | 'code' | 'age'
 
 export type Triage = {
   messageId: string
@@ -78,6 +78,8 @@ export type OutlookRule = {
   sequence: number
   /** The rule marks what it catches as read. */
   marksRead: boolean
+  /** The rule has the exception that leaves mail with a sign-in code in the inbox. */
+  sparesCodes: boolean
   description: string
 }
 

@@ -23,7 +23,7 @@ export type InboxThread = Triaged & {
  */
 export function inboxThreads(items: Triaged[], now = new Date().toISOString()): InboxThread[] {
   const byKey = new Map<string, Triaged[]>()
-  for (const item of rankTriaged(items)) {
+  for (const item of rankTriaged(items, now)) {
     const key = threadKey(item.message)
     const members = byKey.get(key)
     if (members) members.push(item)

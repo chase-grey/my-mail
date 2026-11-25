@@ -29,7 +29,7 @@ type GraphMessage = {
   parentFolderId?: string
 }
 type GraphFolder = { id: string; displayName: string }
-type GraphRule = { id: string; displayName: string; isEnabled: boolean; sequence: number; conditions?: Record<string, unknown>; actions?: Record<string, unknown> }
+type GraphRule = { id: string; displayName: string; isEnabled: boolean; sequence: number; conditions?: Record<string, unknown>; actions?: Record<string, unknown>; exceptions?: { bodyOrSubjectContains?: string[] | null } | null }
 type BatchResponse = { responses: { id: string; status: number; headers?: Record<string, string>; body?: unknown }[] }
 
 export const messageSelect = 'id,conversationId,subject,from,receivedDateTime,bodyPreview,body,isRead,flag,importance,hasAttachments,categories,webLink,toRecipients,ccRecipients'
@@ -102,7 +102,7 @@ export function scanFromGraph(message: GraphMessage): ScanMessage {
 }
 
 export function ruleFromGraph(rule: GraphRule): OutlookRule {
-  return { id: rule.id, displayName: rule.displayName, isEnabled: rule.isEnabled, sequence: rule.sequence, marksRead: rule.actions?.markAsRead === true, description: describeOutlookRule(rule) }
+  return { id: rule.id, displayName: rule.displayName, isEnabled: rule.isEnabled, sequence: rule.sequence, marksRead: rule.actions?.markAsRead === true, sparesCodes: Boolean(rule.exceptions?.bodyOrSubjectContains?.length), description: describeOutlookRule(rule) }
 }
 
 export class MailProvider {

@@ -37,6 +37,7 @@ function mail(id: number, name: string, subject: string, body: string, category:
 const long = 'Hi,\n\nDoes five work on Sunday? Dad is doing the roast again and wants to know how many to plan for. Bring a salad if you can, and the folding chairs from the garage.\n\nAlso, the photos from the lake finally came back. I put the good ones in the shared album. There is one of the dog mid-jump that you have to see.\n\nLove,\nMom'
 
 const seed: Triaged[] = [
+  mail(0, 'Notion', 'Your Notion login code', 'Copy and paste this temporary login code:\n\n482913\n\nIf you did not try to log in, you can ignore this email.', 'notification', 'keep', '', {}, 1),
   mail(1, 'Ruth Calder', 'Dinner Sunday?', long, 'reply', 'reply', 'asks if 5pm sunday works, bring a salad and the folding chairs'),
   mail(2, 'Linden County Treasurer', 'Property tax statement', 'Your second installment is due January 31. Amount due: $2,140.00. Pay online or by mail.', 'action', 'task', 'second installment due jan 31, $2,140', { hasAttachments: true }),
   mail(3, 'Owen Marsh', 'Re: cabin weekend', 'I can drive if someone else books the place. Are we still thinking the second weekend of February?', 'reply', 'reply', 'will drive if someone books; wants the february weekend confirmed', { flagged: true, conversationId: 'cabin', recipients: 3 }),

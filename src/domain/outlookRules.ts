@@ -1,3 +1,4 @@
+import { codeWords } from './codes'
 import { describeRule, ruleActionLabel } from './rules'
 import type { OutlookRule, Rule } from './types'
 
@@ -11,6 +12,7 @@ export type OutlookRuleBody = {
   isEnabled: boolean
   conditions: { senderContains?: string[]; subjectContains?: string[] }
   actions: { moveToFolder?: string; delete?: boolean; markAsRead?: boolean; stopProcessingRules: boolean }
+  exceptions?: { bodyOrSubjectContains: string[] }
 }
 
 export function compilable(rule: Rule): boolean {
@@ -24,6 +26,9 @@ export function outlookRuleName(rule: Rule): string {
 
 /** A rule that puts mail away marks it read on the way, the same as archiving by hand. */
 const marksRead = (rule: Rule): boolean => rule.action === 'archive' || rule.action === 'receipts' || rule.action === 'read'
+
+/** A rule that takes mail out of the inbox leaves mail with a sign-in code where it is. Outlook runs these while the app is closed, so the exception has to be in the rule. */
+const sparesCodes = (rule: Rule): boolean => rule.action === 'archive' || rule.action === 'receipts' || rule.action === 'delete'
 
 /** `folderId` is where a rule that moves mail sends it: the archive, or the receipts folder for a receipts rule. */
 export function compileRule(rule: Rule, folderId: string, sequence: number): OutlookRuleBody {
@@ -41,6 +46,7 @@ export function compileRule(rule: Rule, folderId: string, sequence: number): Out
       ...(marksRead(rule) ? { markAsRead: true } : {}),
       stopProcessingRules: true,
     },
+    ...(sparesCodes(rule) ? { exceptions: { bodyOrSubjectContains: codeWords } } : {}),
   }
 }
 
@@ -77,7 +83,7 @@ export function planRuleSync(rules: Rule[], outlook: OutlookRule[]): RuleSyncPla
     const existing = byId.get(rule.outlookId)
     if (!existing) { plan.dropped.push(rule.id); continue }
     claimed.add(rule.outlookId)
-    if (existing.displayName !== outlookRuleName(rule) || existing.isEnabled !== rule.enabled || existing.marksRead !== marksRead(rule)) plan.update.push(rule)
+    if (existing.displayName !== outlookRuleName(rule) || existing.isEnabled !== rule.enabled || existing.marksRead !== marksRead(rule) || (sparesCodes(rule) && !existing.sparesCodes)) plan.update.push(rule)
   }
   for (const rule of ours) if (!claimed.has(rule.id) && !plan.remove.includes(rule.id)) plan.remove.push(rule.id)
   return plan

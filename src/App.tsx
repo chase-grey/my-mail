@@ -20,7 +20,7 @@ import { historyTriage, noiseSenders, senderHistoryLine } from './domain/history
 import { compileRule, planRuleSync } from './domain/outlookRules'
 import { applyRules, autoRuleSenders, clearsSender, newRule, recordHits, rememberDecision, retiredSenders, suggestRules, type RuleSuggestion } from './domain/rules'
 import { dueSnoozes, snoozeRecord, snoozeUntil, withoutSnoozes, type SnoozeOption } from './domain/snooze'
-import { ageTriage, autoArchivable, oldAfterDays, outlookTriage, pruneTriage, rankTriaged, sharedOf, summarize, unsureBelow, worthSharing, writeShared, type RunSummary, type Triaged } from './domain/triage'
+import { ageTriage, autoArchivable, codeTriage, oldAfterDays, outlookTriage, pruneTriage, rankTriaged, sharedOf, summarize, unsureBelow, worthSharing, writeShared, type RunSummary, type Triaged } from './domain/triage'
 import { emptyAutomation, type Action, type Automation, type Message, type OutlookRule, type Rule, type RuleAction, type Triage } from './domain/types'
 import { inboxThreads } from './domain/threads'
 import { parseUnsubscribe, unsubscribeMethod } from './domain/unsubscribe'
@@ -246,7 +246,7 @@ export default function App() {
     if (hits.length) automationState = { ...automationState, rules: recordHits(automationState.rules, hits) }
     if (automationState !== automationRef.current) await persistAutomation(automationState, current)
 
-    // Verdicts, cheapest source first: this device's cache, the category Outlook already carries, the sender's history,
+    // Verdicts, cheapest source first: this device's cache, the category Outlook already carries, a code in the mail, the sender's history,
     // the message's age, then Jev. Mail too old to need anything never reaches a model.
     let cache = { ...startCache }
     /** Verdicts this batch made or changed; only those are written back to the mailbox. */
@@ -255,7 +255,7 @@ export default function App() {
     const noise = noiseSenders(automationState.decisions)
     for (const message of inbox) {
       if (cache[message.id]) continue
-      const verdict = outlookTriage(message, now) ?? historyTriage(message, noise, now) ?? ageTriage(message, now)
+      const verdict = outlookTriage(message, now) ?? codeTriage(message, now) ?? historyTriage(message, noise, now) ?? ageTriage(message, now)
       if (verdict) { cache[message.id] = verdict; touched.add(message.id); withoutModel++ }
     }
     const history = (message: Message) => senderHistoryLine(automationState.decisions, message.from.address)
