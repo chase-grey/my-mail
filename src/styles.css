@@ -117,6 +117,9 @@ a { color: var(--accent); }
 
 /* inbox */
 .inbox, .search, .receipts, .list, .lane { display: flex; flex-direction: column; gap: 0.75rem; }
+.list-head { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.list-head .status { flex: 1; min-width: 0; }
+.list-head .link { min-height: 1.5rem; flex: none; }
 .lanes { display: flex; flex-direction: column; gap: 1.1rem; margin-top: 0.35rem; }
 .lane > .group-title { display: flex; align-items: center; gap: 0.4rem; min-height: 1.5rem; }
 .group-count { font-weight: 400; font-variant-numeric: tabular-nums; }

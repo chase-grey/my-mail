@@ -47,6 +47,10 @@ All mail is written in one screen (`Compose`): new message, reply, reply all, fo
 
 An open message has a `chat` link beside `find related`, wherever it is opened. It opens My Brain's personal chat about that conversation (`brainChatUrl`), passing the message id and nothing else. There is no chat in this app: do not build one here, and do not put any of a message's text in the link.
 
+## archiving many
+
+The inbox has three ways to archive in bulk, and all three go through `sweep` in `src/views/InboxView.tsx`: `archive all` at the top of the list, and `archive everything else` and `archive all from sender` in a message's menu. Each clears whole conversations, leaves mail kept in the inbox alone, covers only what is loaded in the list, and offers undo for everything it moved. A new bulk action goes through `sweep` too; do not add one that skips undo or touches kept mail.
+
 ## new mail
 
 Mail should show up about as fast as it does in Outlook. While the app is on screen it asks for new mail every few seconds (`peek`), and again the moment it comes back to the screen. What arrives is shown as soon as the rules have had their say, before any model sorts it; sorting then relabels it or takes it away. Do not hold fetched mail off screen until sorting finishes, and do not put a wait in front of the look for new mail. The quiet look changes nothing on screen when nothing came, and it stays one small request (`glance`: ids and the junk count, no bodies); full messages are fetched only once it finds something.

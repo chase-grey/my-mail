@@ -159,6 +159,10 @@ row with the suggested action first and visually heavier. Tapping the body opens
 menu holds the rest: flag, delete, unsubscribe when the header exists, always do
 this for the sender, make a rule.
 
+Archiving many: `archive all` at the top of the list clears every row except mail kept in the inbox.
+A message's menu has `archive everything else` and `archive all from sender`. Each shows an undo that
+brings back everything it moved.
+
 Phone gestures: swipe right archives, swipe left snoozes. Both show a five-second undo. PC keys on a
 focused card: `e` archive, `r` reply, `t` to do, `s` snooze, `k` keep, `#` delete, `j`/`k` move,
 `enter` open, `/` search, `u` undo.

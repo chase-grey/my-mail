@@ -36,10 +36,13 @@ type Handlers = {
   snooze: (item: InboxThread) => void
   rule: (item: InboxThread) => void
   unsubscribe: (item: InboxThread) => void
+  archiveOthers: (item: InboxThread) => void
+  archiveSender: (item: InboxThread) => void
 }
 
 const swipeAt = 88
 const keyOf = (item: InboxThread) => item.key
+const sameSender = (a: InboxThread, b: InboxThread) => a.message.from.address.toLowerCase() === b.message.from.address.toLowerCase()
 
 async function each(list: Message[], work: (message: Message) => Promise<void>): Promise<void> {
   for (const message of list) await work(message)
@@ -96,6 +99,8 @@ function Detail({ item, kept, quiet, pane, on }: { item: InboxThread; kept: bool
         { label: message.flagged ? 'unflag' : 'flag', onSelect: () => on.flag(item) },
         { label: 'unsubscribe', onSelect: () => on.unsubscribe(item) },
         { label: 'always do this for the sender', onSelect: () => on.rule(item) },
+        { label: 'archive everything else', onSelect: () => on.archiveOthers(item) },
+        { label: 'archive all from sender', onSelect: () => on.archiveSender(item) },
         { label: 'delete', onSelect: () => on.remove(item) },
       ]} />
     </div>
@@ -286,6 +291,24 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
     void each(rest, actions.archive).catch(() => undefined).finally(() => stay([item.key]))
   }
 
+  /** Many rows leave in one go. Kept mail is never in the list handed over. Undo brings back whatever did move. */
+  function sweep(list: InboxThread[]): void {
+    if (!list.length) return
+    setLocalError(undefined)
+    const keys = new Set(list.map(keyOf))
+    if (selectedId && keys.has(selectedId)) setOpenId(pane ? order.find((entry) => !keys.has(entry.key))?.key : undefined)
+    setLeaving((current) => ({ ...current, ...Object.fromEntries(list.map((item, index) => [item.key, { to: 'right', delay: Math.min(index, 14) } satisfies Leave])) }))
+    const messages = list.flatMap((item) => item.all)
+    void actions.archiveAll(messages)
+      .then((moved) => {
+        const gone = new Set(moved.map((message) => message.id))
+        const count = list.filter((item) => item.all.every((message) => gone.has(message.id))).length
+        if (count) say(`archived ${count}`, () => { setToast(undefined); void each(moved, actions.restore).catch(() => undefined) })
+      })
+      .catch(() => undefined)
+      .finally(() => stay([...keys]))
+  }
+
   /** A sent reply archives the message it answers when the setting says so; the rest of the conversation goes with it. */
   function answer(item: InboxThread, mode: 'reply' | 'replyAll'): void {
     actions.compose({ mode, message: item.message, text: item.triage?.draft ?? '', onCard: true, onSent: () => { if (archiveAfterReply) clearRest(item) } })
@@ -305,6 +328,8 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
     snooze: (item) => setSheet({ kind: 'snooze', thread: item }),
     rule: (item) => setSheet({ kind: 'rule', message: item.message }),
     unsubscribe: (item) => void actions.unsubscribe(item.message).then((text) => say(text)).catch(() => undefined),
+    archiveOthers: (item) => sweep(order.filter((entry) => entry.key !== item.key)),
+    archiveSender: (item) => sweep(order.filter((entry) => sameSender(entry, item))),
   }
 
   // Keys on the open message: j and k move, e archive, r reply, a reply all, f forward, t to do, s snooze, # delete, u undo.
@@ -345,7 +370,10 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
 
   return <div className="inbox">
     <div className="list">
-      <p className={`status${busy ? ' is-busy' : ''}`} aria-live="polite">{busy ?? ''}</p>
+      <div className="list-head">
+        <p className={`status${busy ? ' is-busy' : ''}`} aria-live="polite">{busy ?? ''}</p>
+        {order.length > 1 && <button className="link" type="button" onClick={() => sweep(order)}>archive all</button>}
+      </div>
       {shownError && <p className="note is-error" role="alert">{shownError}</p>}
 
       {(needsRows.length > 0 || fineRows.length > 0) && <div className="lanes">

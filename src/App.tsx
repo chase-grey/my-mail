@@ -109,7 +109,8 @@ async function syncOutlookRules(mail: MailProvider, rules: Rule[]): Promise<{ ru
 
 export type MessageActions = {
   archive: (message: Message) => Promise<void>
-  archiveAll: (messages: Message[]) => Promise<void>
+  /** Archives many at once and answers with the ones that moved. */
+  archiveAll: (messages: Message[]) => Promise<Message[]>
   remove: (message: Message) => Promise<void>
   task: (message: Message, title: string) => Promise<void>
   /** Opens compose: a new message, or a reply, reply all, or forward of one. */
@@ -712,7 +713,7 @@ export default function App() {
     archive: (message) => decide(message, 'archive', () => isReceipt(message) ? services!.mail.fileReceipt(message.id) : services!.mail.archive(message.id)),
     isReceipt,
     archiveAll: async (list) => {
-      if (!services || !list.length) return
+      if (!services || !list.length) return []
       setError(undefined)
       try {
         const stuck = new Set([
@@ -723,9 +724,11 @@ export default function App() {
         drop(moved)
         if (stuck.size) setError(notMoved(stuck.size))
         const at = new Date().toISOString()
-        await persistAutomation({ ...automationRef.current, decisions: moved.reduce((decisions, message) => rememberDecision(decisions, message, 'archive', at, undefined, isReceipt(message)), automationRef.current.decisions) })
+        await persistAutomation({ ...automationRef.current, decisions: moved.reduce((decisions, message) => rememberDecision(decisions, message, 'archive', at, undefined, isReceipt(message)), automationRef.current.decisions) }).catch((failure: unknown) => setError(errorText(failure)))
+        return moved
       } catch (failure) {
         setError(errorText(failure))
+        return []
       }
     },
     remove: (message) => decide(message, 'delete', () => services!.mail.delete(message.id)),
