@@ -9,6 +9,7 @@ import { AppFolder } from './data/appFolder'
 import { AutomationStore } from './data/automationStore'
 import { Composer } from './data/compose'
 import { GraphClient, GraphError } from './data/graphClient'
+import { forgetMail } from './data/localMail'
 import { MailProvider, inboxPageSize, mailDefaultHeaders } from './data/mailProvider'
 import { MailSearch } from './data/mailSearch'
 import { MicrosoftAuth, configuredClientId } from './data/microsoftAuth'
@@ -146,6 +147,8 @@ export default function App() {
   const [services, setServices] = useState<Services>()
   const [connection, setConnection] = useState<ConnectionStatus>(configuredClientId() ? 'starting' : 'unconfigured')
   const [accountName, setAccountName] = useState<string>()
+  /** The mailbox was disconnected, or the app opened with no sign-in. Not set by a sign-in that merely failed to load. */
+  const [signedOut, setSignedOut] = useState(false)
   const [messages, setMessages] = useState<Message[]>(() => readJson(inboxKey, []))
   const [more, setMore] = useState(false)
   const [read, setRead] = useState<boolean>(() => readJson(readKey, false))
@@ -205,11 +208,14 @@ export default function App() {
   useEffect(() => writeJson(keptKey, kept), [kept])
   useEffect(() => writeJson(inboxKey, messages.slice(0, savedInboxSize)), [messages])
   useEffect(() => writeJson(readKey, read), [read])
+  // A device signed out of its mailbox keeps nothing it learned from one. This runs after the saves above, so it has the last word.
+  useEffect(() => { if (signedOut) forgetMail() }, [signedOut, messages, triage, kept, read])
 
   const persistAutomation = useCallback(async (next: Automation, current = services) => {
     automationRef.current = next
     setAutomation(next)
-    if (!current) return
+    // Nothing is saved without a mailbox: a copy written while signed out would look newer than the real one at the next sign-in.
+    if (!current || !current.auth.account()) return
     try {
       await current.store.save(next)
     } catch (failure) {
@@ -589,7 +595,7 @@ export default function App() {
     void createServices(clientId).then(async (created) => {
       setServices(created)
       const account = created.auth.account()
-      if (!account) { setMessages([]); setRead(false); setConnection('disconnected'); return }
+      if (!account) { setMessages([]); setRead(false); setTriage({}); setKept({}); setSignedOut(true); setConnection('disconnected'); return }
       setAccountName(account.username)
       setConnection('connected')
       await run(created, { settings: loadSettings() })
@@ -635,6 +641,7 @@ export default function App() {
       const current = services ?? await createServices(clientId)
       setServices(current)
       const account = await current.auth.signIn()
+      setSignedOut(false)
       setAccountName(account.username)
       setConnection('connected')
       await run(current, { settings })
@@ -648,12 +655,30 @@ export default function App() {
     if (!services) return
     try {
       await services.auth.signOut()
+      setSignedOut(true)
       setConnection('disconnected')
       setAccountName(undefined)
       setMessages([])
       setMore(false)
       setRead(false)
       setSummary(undefined)
+      // Everything else the mailbox taught this device goes with it, in memory and on the device (`forgetMail`).
+      setTriage({})
+      setKept({})
+      automationRef.current = emptyAutomation
+      setAutomation(emptyAutomation)
+      setOutlookRules([])
+      setDismissed([])
+      setCleanup(emptyCleanup)
+      scanRef.current = []
+      clearedRef.current.clear()
+      sweptRef.current = { scan: [], inbox: [] }
+      heldRef.current.clear()
+      junkRef.current.clear()
+      oldestRef.current = undefined
+      newestSeenRef.current = undefined
+      lastRunRef.current = 0
+      syncPending()
     } catch (failure) {
       setError(errorText(failure))
     }
