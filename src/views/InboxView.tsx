@@ -7,6 +7,7 @@ import { categoryLabel, isOld, type RunSummary, type Triaged } from '../domain/t
 import type { Message, Snooze } from '../domain/types'
 import { Card, Field, Fold, Icon, Menu, Sheet, Toast, useMediaQuery, usePresence, type IconName, type MenuItem, type ToastState } from '../ui'
 import type { ConnectionStatus } from './SettingsView'
+import { NearEnd } from './NearEnd'
 import { Conversation } from './Thread'
 
 type SheetState =
@@ -247,9 +248,6 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
   const fineRows = usePresence(groups.probablyFine, keyOf)
   const keptRows = usePresence(keptItems, keyOf)
   const shownError = error ?? localError
-  const moreRef = useRef<HTMLButtonElement>(null)
-  const onMoreRef = useRef(onMore)
-  onMoreRef.current = onMore
   const follow = useRef(false)
   const run = useRef<Run>(undefined)
   const [, again] = useReducer((count: number) => count + 1, 0)
@@ -275,15 +273,6 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
   const one = targets.length === 1 ? targets[0] : undefined
   // Archive all takes every row in the list but the highlighted ones.
   const unpicked = several ? order.filter((item) => !pickedKeys.includes(item.key)) : order
-
-  // Older mail loads as the end of the list scrolls into view. A failed load waits for a tap instead of retrying.
-  useEffect(() => {
-    const target = moreRef.current
-    if (!target || busy || error || typeof IntersectionObserver === 'undefined') return
-    const observer = new IntersectionObserver((entries) => { if (entries.some((entry) => entry.isIntersecting) && !run.current) void onMoreRef.current?.() }, { rootMargin: '600px' })
-    observer.observe(target)
-    return () => observer.disconnect()
-  }, [more, busy, error, items.length])
 
   useEffect(() => {
     if (!follow.current || !selectedId) return
@@ -509,7 +498,7 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
         </section>}
       </div>}
 
-      {more && <div className="actions"><button ref={moreRef} className="secondary" type="button" disabled={Boolean(busy)} onClick={() => void onMore?.()}>load more</button></div>}
+      {more && onMore && <NearEnd busy={Boolean(busy)} failed={Boolean(error)} onNear={() => { if (!run.current) void onMore() }} />}
 
       {!busy && items.length === 0 && !more && summary && <p className="zero">inbox zero{snoozes.length ? ` · ${snoozes.length} snoozed` : ''}</p>}
 

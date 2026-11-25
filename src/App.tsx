@@ -389,7 +389,7 @@ export default function App() {
       }
 
       // A refresh reads back to the oldest mail already loaded, so older pages and their verdicts are not thrown away,
-      // and no further: mail cleared from the list is not replaced with older mail. That comes from load more.
+      // and no further: mail cleared from the list is not replaced with older mail. That comes from the end of the list.
       const since = depthOf(oldestRef.current, messagesRef.current)
       const count = Math.max(inboxPageSize, messagesRef.current.length)
       const [page, total] = await Promise.all([

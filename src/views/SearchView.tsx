@@ -3,6 +3,7 @@ import type { MessageActions } from '../App'
 import { answerParts, fromSender, rememberSearch, searchMode, senderWord, subjectSearch, subjectText, suggestSenders, suggestSubjects, type SearchHit, type SearchMode, type SearchPage, type Sender } from '../domain/search'
 import type { Message } from '../domain/types'
 import { Card, Field, Fold, Menu, Segmented, Toast, useMediaQuery, type ToastState } from '../ui'
+import { NearEnd } from './NearEnd'
 import { Conversation } from './Thread'
 import './search.css'
 
@@ -308,7 +309,7 @@ export function SearchView({ search, actions, hasModel, senders = noSenders, sub
       {hits.length > 0 && <ul className="items">
         {hits.map((hit, index) => <Row key={hit.message.id} hit={hit} index={index} open={selectedId === hit.message.id} pane={pane} on={on} />)}
       </ul>}
-      {result?.next && <div className="actions"><button className="secondary" type="button" disabled={Boolean(busy)} onClick={() => void loadMore()}>load more</button></div>}
+      {result?.next && <NearEnd busy={Boolean(busy)} failed={Boolean(error)} onNear={() => void loadMore()} />}
     </div>
 
     {pane && <section className="reader" aria-label="message">

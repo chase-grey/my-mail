@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Message } from '../domain/types'
 import { Empty, Fold, useMediaQuery } from '../ui'
+import { NearEnd } from './NearEnd'
 import { Conversation } from './Thread'
 
 export type ReceiptActions = {
@@ -118,8 +119,8 @@ export function ReceiptsView({ actions }: { actions: ReceiptActions }) {
       </ul>}
       {!busy && !messages.length && !error && <Empty>no receipts</Empty>}
 
+      {more && <NearEnd busy={Boolean(busy)} failed={Boolean(error)} onNear={() => void read(messages)} />}
       <div className="actions">
-        {more && <button className="secondary" type="button" disabled={Boolean(busy)} onClick={() => void read(messages)}>load more</button>}
         <button className="link" type="button" disabled={Boolean(busy)} onClick={() => void fromArchive()}>move receipts from archive</button>
       </div>
     </div>

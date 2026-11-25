@@ -27,7 +27,11 @@ The inbox is one list with one extra thing on top: a `needs me` section, its cou
 
 ## needs me gets shorter as I work
 
-Clearing mail never brings other mail in to take its place. A full check reads the inbox back to the oldest mail already on the list and no further (`depthOf`); it does not read by count. Older mail comes only from the end of the list (`load more`). Mail a model is about to sort waits below needs me until its verdict lands, and joins needs me only if the verdict says so (`pending`). Mail no model will sort (sorting off, a failed call) counts as needs me. A flag or high importance never waits.
+A check never brings other mail in to take the place of what was cleared. A full check reads the inbox back to the oldest mail already on the list and no further (`depthOf`); it does not read by count. Older mail comes only from the end of the list, which loads the next page by itself (see `loading more`). Mail a model is about to sort waits below needs me until its verdict lands, and joins needs me only if the verdict says so (`pending`). Mail no model will sort (sorting off, a failed call) counts as needs me. A flag or high importance never waits.
+
+## loading more
+
+No list has a `load more` button. Inbox, search and receipts ask for the next page on their own when the scroll gets near the end of the list, or straight away when few rows are left (`NearEnd` in `src/views/NearEnd.tsx`). It measures against whatever scrolls: the page on a phone, the list's own column from 60rem up. Only a failed load leaves a button (`try again`), so a failure is not retried in a loop. A new list that pages uses `NearEnd`; do not add a button that loads the next page.
 
 ## buttons on mail
 
