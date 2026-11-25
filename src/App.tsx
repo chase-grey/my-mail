@@ -1065,14 +1065,14 @@ export default function App() {
     ...(install.canPrompt ? [{ label: 'install app', onSelect: () => void install.install() }] : []),
   ]
 
-  return <BodySource value={connected ? readBody : undefined}><ThreadContext value={connected ? threadActions : undefined}><Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe } : undefined} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })} onCompose={connected ? () => setComposing({ mode: 'new' }) : undefined}>
+  return <BodySource value={connected ? readBody : undefined}><ThreadContext value={connected ? threadActions : undefined}><Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe, rules: suggestions.length } : undefined} busy={Boolean(busy)} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })} onCompose={connected ? () => setComposing({ mode: 'new' }) : undefined}>
     {view === 'inbox' && installFirst && <InstallStep install={install} onSkip={() => setInstallSkipped(true)} />}
     {view === 'inbox' && connected && <InstallBanner install={install} />}
-    {view === 'inbox' && !installFirst && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} archiveAfterReply={settings.archiveAfterReply} suggestions={suggestions} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
-      onConnect={connect} onDismissSuggestion={(item) => setDismissed((current) => [...current, `${item.from}|${item.action}`])} />}
+    {view === 'inbox' && !installFirst && <InboxView items={triaged} kept={kept} summary={summary} busy={busy} error={error} connection={connection} archiveAfterReply={settings.archiveAfterReply} snoozes={automation.snoozes} actions={actions} more={more} onMore={() => services && void loadMore(services, { settings })}
+      onConnect={connect} />}
     {view === 'search' && connected && <SearchView search={searchActions} actions={actions} hasModel={Boolean(settings.anthropicApiKey)} senders={senders} subjects={subjects} />}
     {view === 'receipts' && connected && <ReceiptsView actions={receiptActions} />}
-    {view === 'rules' && <RulesView rules={automation.rules} outlookRules={outlookRules} snoozes={automation.snoozes} error={error} onRules={updateRules} />}
+    {view === 'rules' && <RulesView rules={automation.rules} outlookRules={outlookRules} snoozes={automation.snoozes} suggestions={suggestions} error={error} onRules={updateRules} onDismissSuggestion={(item) => setDismissed((current) => [...current, `${item.from}|${item.action}`])} />}
     {view === 'cleanup' && <CleanupView state={{ ...cleanup, notNoise: automation.noRules }} error={error} actions={cleanupActions} onError={setError} />}
     {view === 'settings' && <SettingsView settings={settings} connection={connection} accountName={accountName} busy={Boolean(busy)} error={error} onSettings={setSettings} onConnect={connect} onDisconnect={disconnect} />}
     {composing && services && <Compose key={`${composing.mode}:${composing.message?.id ?? ''}`} request={composing} actions={services.compose} contacts={senders}

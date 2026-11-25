@@ -24,12 +24,13 @@ it('shows triaged mail with the suggested action highlighted and kept mail folde
     { message: message('m2', 'news@daily.example.com', 'Daily digest'), triage: { messageId: 'm2', category: 'newsletter' as const, summary: 'daily digest', needsReply: false, suggested: 'archive' as const, confidence: 0.9, source: 'jev' as const, triagedAt: 'now' } },
     { message: message('m3', 'kept@example.com', 'Keep me') },
   ]
-  const html = renderToStaticMarkup(<InboxView items={items} kept={{ m3: 'now' }} summary={{ inbox: 3, needReply: 1, byRules: 2, autoArchived: 0, returned: 0, withoutModel: 1 }} connection="connected" suggestions={[{ from: 'news@daily.example.com', action: 'archive', count: 3 }]} snoozes={[]} actions={actions} onConnect={noop} onDismissSuggestion={() => {}} />)
+  const html = renderToStaticMarkup(<InboxView items={items} kept={{ m3: 'now' }} summary={{ inbox: 3, needReply: 1, byRules: 2, autoArchived: 0, returned: 0, withoutModel: 1 }} connection="connected" snoozes={[]} actions={actions} onConnect={noop} />)
   expect(html).not.toContain('in inbox ·')
   expect(html).toContain('mom asks about sunday dinner')
   expect(html).not.toContain('is-loud')
   expect(html).toMatch(/class="quick is-suggested"[^>]*>reply</)
-  expect(html).toContain('archive everything from news@daily.example.com')
+  // Nothing sits above the list but needs me: rule suggestions live on the rules screen.
+  expect(html).not.toContain('to add')
   expect(html).toContain('1 kept in inbox')
   expect(html.indexOf('Dinner Sunday?')).toBeLessThan(html.indexOf('Daily digest'))
   expect(html).toContain('needs me <span class="group-count">1</span>')

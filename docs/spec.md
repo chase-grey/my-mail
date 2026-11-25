@@ -259,7 +259,7 @@ Who sends me mail and what I do with it. Behind `…`.
 
 One row per sender, ranked by volume, with how many I opened. Senders I archived or deleted without
 reading get the one-tap rule and, when the header exists, unsubscribe. This is where the rule
-suggestions come from; the inbox shows at most one suggestion at a time, this shows them all.
+suggestions come from; the inbox shows none of them; they are offered on the rules screen.
 
 ### clean up
 

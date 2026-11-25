@@ -1,18 +1,21 @@
 import { useState } from 'react'
 import { ruleTier } from '../domain/outlookRules'
-import { describeRule, newRule, ruleActionLabel } from '../domain/rules'
+import { describeRule, newRule, ruleActionLabel, type RuleSuggestion } from '../domain/rules'
 import { describeSnooze } from '../domain/snooze'
 import type { OutlookRule, Rule, RuleAction, Snooze } from '../domain/types'
 import { Card, Empty, Field, Menu, Segmented } from '../ui'
 
 const actionOptions = (Object.keys(ruleActionLabel) as RuleAction[]).map((value) => ({ value, label: ruleActionLabel[value] }))
 
-export function RulesView({ rules, outlookRules, snoozes, error, onRules }: {
+export function RulesView({ rules, outlookRules, snoozes, suggestions = [], error, onRules, onDismissSuggestion }: {
   rules: Rule[]
   outlookRules: OutlookRule[]
   snoozes: Snooze[]
+  /** Senders handled the same way three times. Offered here and nowhere else: nothing may land above the inbox while it is being cleared. */
+  suggestions?: RuleSuggestion[]
   error?: string
   onRules: (rules: Rule[]) => Promise<void>
+  onDismissSuggestion?: (item: RuleSuggestion) => void
 }) {
   const [from, setFrom] = useState('')
   const [subject, setSubject] = useState('')
@@ -33,6 +36,14 @@ export function RulesView({ rules, outlookRules, snoozes, error, onRules }: {
   ].filter(Boolean).join(' · ')
 
   return <>
+    {suggestions.length > 0 && <Card title="to add" aside={<span className="count">{suggestions.length}</span>}>
+      {suggestions.map((item) => <div className="suggest" key={`${item.from}|${item.action}`}>
+        <span>{ruleActionLabel[item.action]} everything from {item.from} <small>{item.count} so far</small></span>
+        <button className="secondary" type="button" onClick={() => { void onRules([...rules, newRule({ from: item.from, action: item.action }, crypto.randomUUID(), new Date().toISOString())]); onDismissSuggestion?.(item) }}>add rule</button>
+        <button className="plain" type="button" onClick={() => onDismissSuggestion?.(item)}>not now</button>
+      </div>)}
+    </Card>}
+
     <Card title="rules" aside={rules.length > 0 && <span className="count">{rules.length}</span>}>
       {rules.length > 0 && <ul className="rows">{rules.map((rule) => <li className="row" key={rule.id}>
         <div className="row-main"><span className="row-title">{ruleActionLabel[rule.action]} {describeRule(rule)}</span><small>{meta(rule)}</small></div>

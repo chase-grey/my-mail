@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 import type { MessageActions } from '../App'
-import { ruleActionLabel, senderDomain, type RuleSuggestion } from '../domain/rules'
+import { ruleActionLabel, senderDomain } from '../domain/rules'
 import { snoozeOptions, type SnoozeOption } from '../domain/snooze'
 import { inboxThreads, type InboxThread } from '../domain/threads'
 import { categoryLabel, type RunSummary, type Triaged } from '../domain/triage'
@@ -178,7 +178,7 @@ function Row({ item, index, kept, quiet, open, pane, leave, on }: { item: InboxT
   </li>
 }
 
-export function InboxView({ items, kept, summary, busy, error, connection, archiveAfterReply, suggestions, snoozes, actions, more, onMore, onConnect, onDismissSuggestion }: {
+export function InboxView({ items, kept, summary, busy, error, connection, archiveAfterReply, snoozes, actions, more, onMore, onConnect }: {
   items: Triaged[]
   kept: Record<string, string>
   summary?: RunSummary
@@ -187,13 +187,11 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
   connection: ConnectionStatus
   /** A sent reply archives its message, so the rest of the conversation goes with it. */
   archiveAfterReply?: boolean
-  suggestions: RuleSuggestion[]
   snoozes: Snooze[]
   actions: MessageActions
   more?: boolean
   onMore?: () => void
   onConnect: () => Promise<void>
-  onDismissSuggestion: (item: RuleSuggestion) => void
 }) {
   const [sheet, setSheet] = useState<SheetState>()
   const [localError, setLocalError] = useState<string>()
@@ -349,15 +347,6 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
     <div className="list">
       <p className={`status${busy ? ' is-busy' : ''}`} aria-live="polite">{busy ?? ''}</p>
       {shownError && <p className="note is-error" role="alert">{shownError}</p>}
-
-      {suggestions.length > 0 && <details className="card group">
-        <summary>{suggestions.length} {suggestions.length === 1 ? 'rule' : 'rules'} to add</summary>
-        {suggestions.map((item) => <div className="suggest" key={`${item.from}|${item.action}`}>
-          <span>{ruleActionLabel[item.action]} everything from {item.from} <small>{item.count} so far</small></span>
-          <button className="secondary" type="button" onClick={() => { void actions.makeRule({ from: item.from, action: item.action }); onDismissSuggestion(item) }}>add rule</button>
-          <button className="plain" type="button" onClick={() => onDismissSuggestion(item)}>not now</button>
-        </div>)}
-      </details>}
 
       {(needsRows.length > 0 || fineRows.length > 0) && <div className="lanes">
         {needsRows.length > 0 && <section className="lane">

@@ -88,7 +88,7 @@ export function Shell({ view, views, counts = {}, busy, canRefresh, links, onVie
         {view === 'inbox' && <button className={`icon-button${busy ? ' is-spinning' : ''}`} type="button" aria-label="check mail" title="check mail" disabled={!canRefresh} onClick={onRefresh}><Icon name="refresh" /></button>}
         <Menu items={[
           ...(updateReady ? [{ label: 'update ready · restart', onSelect: () => void checkForUpdate() }] : []),
-          ...views.filter((item) => item !== view && item !== 'inbox' && item !== 'search').map((item) => ({ label: viewLabel[item], onSelect: () => onView(item) })),
+          ...views.filter((item) => item !== view && item !== 'inbox' && item !== 'search').map((item) => ({ label: counts[item] ? `${viewLabel[item]} · ${counts[item]}` : viewLabel[item], onSelect: () => onView(item) })),
           ...links,
         ]}><Icon name="more" />{updateReady && <i className="update-dot" aria-hidden="true" />}</Menu>
       </header>
