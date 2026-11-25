@@ -1,6 +1,9 @@
+/// <reference types="node" />
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { knownSenders } from './rules'
-import { brightness, darkened, frameDocument, framePolicy, linkParts, loadsRemote, mailLook, wantsRemote, wearsAppColours } from './mailHtml'
+import { brightness, darkened, frameDocument, framePolicy, frameSandbox, linkParts, loadsRemote, mailLook, wantsRemote, wearsAppColours } from './mailHtml'
 
 const designed = '<html><body><table bgcolor="#ffffff"><tr><td style="color:#222222">sale</td></tr></table></body></html>'
 const plain = '<p>Does <b>five</b> work?</p>'
@@ -108,5 +111,37 @@ describe('mail markup for reading', () => {
     expect(linkParts('Pay at https://example.com/pay?x=1. Or by mail.')).toEqual(['Pay at ', { href: 'https://example.com/pay?x=1' }, '. Or by mail.'])
     expect(linkParts('no links')).toEqual(['no links'])
     expect(linkParts('https://a.example https://b.example')).toEqual([{ href: 'https://a.example' }, ' ', { href: 'https://b.example' }])
+  })
+})
+
+// The frame is the only thing between a message's markup and the app's page, sign-in and keys.
+// If one of these fails, do not loosen the test: mail must never run a script.
+describe('the mail frame', () => {
+  const reader = readFileSync(join(process.cwd(), 'src', 'views', 'MailBody.tsx'), 'utf8')
+
+  it('never lets a message run scripts', () => {
+    expect(frameSandbox).not.toMatch(/allow-scripts/i)
+    expect(frameSandbox.split(' ').sort()).toEqual(['allow-popups', 'allow-popups-to-escape-sandbox', 'allow-same-origin'])
+    expect(reader).not.toMatch(/allow-scripts/i)
+    // One frame, and its sandbox is the constant above: not a string written in place, and never left off.
+    const frames = reader.match(/<iframe\b[^>]*>/g) ?? []
+    expect(frames).toHaveLength(1)
+    expect(frames[0]).toContain('sandbox={frameSandbox}')
+    expect(reader.match(/sandbox=/g)).toHaveLength(1)
+    // The message goes in as a document of its own, never as markup in the app's page.
+    expect(frames[0]).toContain('srcDoc={frameDocument(')
+    expect(reader).not.toMatch(/dangerouslySetInnerHTML|innerHTML|document\.write/)
+  })
+
+  it('keeps a policy that allows nothing by default and names no script source', () => {
+    for (const policy of [framePolicy(), framePolicy(true)]) {
+      const directives = policy.split(';').map((part) => part.trim().split(/\s+/))
+      expect(directives.find(([name]) => name === 'default-src')).toEqual(['default-src', "'none'"])
+      expect(directives.map(([name]) => name).sort()).toEqual(['default-src', 'font-src', 'img-src', 'style-src'])
+      expect(policy).not.toMatch(/script-src|unsafe-eval|object-src|frame-src|connect-src|form-action/)
+      const page = frameDocument('<script>alert(1)</script><p>hi</p>', 'app', policy === framePolicy(true))
+      expect(page).toContain(`<meta http-equiv="Content-Security-Policy" content="${policy}">`)
+      expect(page.indexOf('Content-Security-Policy')).toBeLessThan(page.indexOf('<script>'))
+    }
   })
 })
