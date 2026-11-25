@@ -6,5 +6,5 @@
 
 @media (min-width: 60rem) {
   /* Beside a reading pane the list owns its column, so the banner sits over the foot of it. */
-  .install-banner { grid-area: 3 / 1; align-self: end; z-index: 4; margin: 0 1rem 1rem 1.5rem; box-shadow: 0 8px 24px rgb(0 0 0 / 0.22); }
+  .install-banner { grid-area: 2 / 1; align-self: end; z-index: 4; margin: 0 1rem 1rem 1.5rem; box-shadow: 0 8px 24px rgb(0 0 0 / 0.22); }
 }

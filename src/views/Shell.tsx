@@ -92,7 +92,6 @@ export function Shell({ view, views, counts = {}, busy, canRefresh, links, onVie
           ...links,
         ]}><Icon name="more" />{updateReady && <i className="update-dot" aria-hidden="true" />}</Menu>
       </header>
-      <div className={`progress${busy ? ' is-busy' : ''}`} aria-hidden="true" />
       <div className={`content is-${view}`} key={view}>{children}</div>
     </div>
     <UpdateToast />
