@@ -41,6 +41,10 @@ export const bodyLimit = 1500
 export const snoozedFolderName = 'snoozed'
 export const receiptsFolderName = 'receipts'
 export const inboxPageSize = 50
+/** The folders the folders screen lists, beside the inbox and receipts, which have screens of their own. There is no junk: see `rescueJunk`. */
+export const folderNames = ['sent', 'drafts', 'archive', 'snoozed', 'deleted'] as const
+export type FolderName = typeof folderNames[number]
+const wellKnown: Record<Exclude<FolderName, 'snoozed'>, string> = { sent: 'sentitems', drafts: 'drafts', archive: 'archive', deleted: 'deleteditems' }
 export const threadCap = 100
 export const junkSweepCap = 200
 export const scanPageSize = 500
@@ -87,6 +91,12 @@ export function fromGraph(message: GraphMessage): Message {
     verdict: readShared(message.singleValueExtendedProperties?.[0]?.value),
     webLink: message.webLink,
   }
+}
+
+/** Mail read from a folder, with who it was written to: sent mail and drafts are all from me. */
+export function folderFromGraph(message: GraphMessage): Message {
+  const to = (message.toRecipients ?? []).flatMap(({ emailAddress }) => emailAddress.address ? [{ name: emailAddress.name?.trim() || emailAddress.address, address: emailAddress.address.toLowerCase() }] : [])
+  return { ...fromGraph(message), to }
 }
 
 export function scanFromGraph(message: GraphMessage): ScanMessage {
@@ -159,7 +169,21 @@ export class MailProvider {
     return this.page(await this.receiptsFolder(), count, before)
   }
 
-  private async page(folder: string, count: number, before?: string, since?: string): Promise<{ messages: Message[]; more: boolean }> {
+  private folderId(name: FolderName): Promise<string> {
+    return name === 'snoozed' ? this.snoozedFolder() : Promise.resolve(wellKnown[name])
+  }
+
+  /** One of the other folders, newest first, paged by date the same way as the inbox. */
+  async folder(name: FolderName, count = inboxPageSize, before?: string): Promise<{ messages: Message[]; more: boolean }> {
+    return this.page(await this.folderId(name), count, before, undefined, folderFromGraph)
+  }
+
+  /** Puts a message back in the folder it was taken from, as it was. */
+  async moveTo(id: string, name: FolderName): Promise<void> {
+    await this.move(id, await this.folderId(name))
+  }
+
+  private async page(folder: string, count: number, before?: string, since?: string, map = fromGraph): Promise<{ messages: Message[]; more: boolean }> {
     const query = new URLSearchParams({ '$top': String(Math.min(count, inboxPageSize)), '$orderby': 'receivedDateTime desc', '$select': messageSelect })
     if (before) query.set('$filter', `receivedDateTime le ${before}`)
     else if (since) query.set('$filter', `receivedDateTime ge ${since}`)
@@ -168,7 +192,7 @@ export class MailProvider {
       const withVerdicts = new URLSearchParams(query)
       withVerdicts.set('$expand', verdictExpand)
       try {
-        return await this.pages(`${path}?${withVerdicts}`, count)
+        return await this.pages(`${path}?${withVerdicts}`, count, map)
       } catch (error) {
         // A mailbox that will not hand the property back still gets its mail; the category alone is shared from here on.
         if (!(error instanceof GraphError && (error.status === 400 || error.status === 501))) throw error
@@ -176,15 +200,15 @@ export class MailProvider {
         console.warn('my-mail: verdicts are not shared on messages', error)
       }
     }
-    return this.pages(`${path}?${query}`, count)
+    return this.pages(`${path}?${query}`, count, map)
   }
 
-  private async pages(first: string, count: number): Promise<{ messages: Message[]; more: boolean }> {
+  private async pages(first: string, count: number, map = fromGraph): Promise<{ messages: Message[]; more: boolean }> {
     const all: Message[] = []
     let next: string | undefined = first
     while (next && all.length < count) {
       const page: { value: GraphMessage[]; '@odata.nextLink'?: string } = await this.graph.request(next)
-      all.push(...page.value.map(fromGraph))
+      all.push(...page.value.map(map))
       next = page['@odata.nextLink']
     }
     return { messages: all.slice(0, count), more: Boolean(next) || all.length > count }

@@ -4,17 +4,17 @@ import { Icon, Menu, Sheet, type IconName } from '../ui'
 import { UpdateToast } from './UpdateToast'
 import './update.css'
 
-export type View = 'inbox' | 'search' | 'receipts' | 'cleanup' | 'rules' | 'settings'
+export type View = 'inbox' | 'search' | 'folders' | 'receipts' | 'cleanup' | 'rules' | 'settings'
 export type ShellLink = { label: string; onSelect: () => void }
 
-export const viewLabel: Record<View, string> = { inbox: 'inbox', search: 'search', receipts: 'receipts', cleanup: 'clean up', rules: 'rules', settings: 'settings' }
+export const viewLabel: Record<View, string> = { inbox: 'inbox', search: 'search', folders: 'folders', receipts: 'receipts', cleanup: 'clean up', rules: 'rules', settings: 'settings' }
 /** The screen an update reload left from, when it is still one of the screens. */
 export function resumeView(): View | undefined {
   const place = takeResumePlace()
   return place && place in viewLabel ? (place as View) : undefined
 }
 
-const viewIcon: Record<View, IconName> = { inbox: 'inbox', search: 'search', receipts: 'receipt', cleanup: 'clean', rules: 'rules', settings: 'settings' }
+const viewIcon: Record<View, IconName> = { inbox: 'inbox', search: 'search', folders: 'folder', receipts: 'receipt', cleanup: 'clean', rules: 'rules', settings: 'settings' }
 
 /** Every key the app listens for. The inbox and the shell own the handlers; this is the one place they are listed. */
 export const shortcuts: [string, string][] = [

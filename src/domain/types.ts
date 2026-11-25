@@ -13,6 +13,8 @@ export type Message = {
   hasAttachments: boolean
   /** How many people it was sent to, to and cc together. More than one makes it group mail. */
   recipients?: number
+  /** Who it was written to. Only mail read from a folder carries it; sent mail and drafts are listed by it. */
+  to?: { name: string; address: string }[]
   /** Outlook categories on the message. The model's verdict is written here so every device shares it. */
   categories: string[]
   /** The whole verdict, when a device has written one onto the message. Every device reads it with the mail, so none pays to sort or read it again. */

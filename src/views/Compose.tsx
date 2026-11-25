@@ -15,7 +15,7 @@ export type ComposeRequest = {
   onSent?: () => void
 }
 
-export const composeTitle: Record<ComposeMode, string> = { new: 'new message', reply: 'reply', replyAll: 'reply all', forward: 'forward' }
+export const composeTitle: Record<ComposeMode, string> = { new: 'new message', reply: 'reply', replyAll: 'reply all', forward: 'forward', draft: 'draft' }
 
 const failed = (error: unknown) => error instanceof Error ? error.message.toLowerCase() : 'something failed'
 
@@ -78,6 +78,7 @@ export function Compose({ request, actions, contacts, onDraft, onSent, onClose }
       setShowCc(made.cc.length > 0)
       setSubject(made.subject)
       setFiles(made.attachments)
+      if (made.text !== undefined) setText(made.text)
     }).catch((error: unknown) => { if (live) setFailure(failed(error)) }).finally(() => { if (live) setStarting(false) })
     return () => { live = false }
   }, [])
@@ -168,6 +169,8 @@ export function Compose({ request, actions, contacts, onDraft, onSent, onClose }
   /** Closing keeps what was written. A message nobody touched leaves no draft behind. */
   function close(): void {
     if (busy) return
+    // A kept draft that was only looked at stays as it is.
+    if (mode === 'draft' && !touched.current) { onClose(); return }
     const written = touched.current || (mode === 'new' && Boolean(to.trim() || subject.trim() || text.trim()))
     void (written ? save() : discard())
   }
@@ -207,7 +210,7 @@ export function Compose({ request, actions, contacts, onDraft, onSent, onClose }
       </label>
       <datalist id="compose-contacts">{[...new Map(known.map((item) => [item.address, item])).values()].map((item) => <option key={item.address} value={item.address}>{item.name}</option>)}</datalist>
 
-      <textarea className="compose-text" aria-label="message" ref={body} value={text} onChange={(event) => edit(setText)(event.target.value)} onPaste={onPaste} />
+      <textarea className="compose-text" aria-label="message" ref={body} disabled={mode === 'draft' && starting} value={text} onChange={(event) => edit(setText)(event.target.value)} onPaste={onPaste} />
 
       {(files.length > 0 || uploading.length > 0) && <ul className="compose-files">
         {files.map((file) => <li key={file.id}>

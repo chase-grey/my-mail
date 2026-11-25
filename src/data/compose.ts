@@ -1,11 +1,12 @@
 import type { Recipient } from '../domain/recipients'
 import type { GraphClient } from './graphClient'
 
-export type ComposeMode = 'new' | 'reply' | 'replyAll' | 'forward'
+/** `draft` picks up a message that was started earlier and kept. */
+export type ComposeMode = 'new' | 'reply' | 'replyAll' | 'forward' | 'draft'
 export type DraftAttachment = { id: string; name: string; size: number }
 export type DraftBody = { contentType: string; content: string }
 /** A message being written. It is an Outlook draft from the moment it has an id. */
-export type Draft = { id: string; to: Recipient[]; cc: Recipient[]; subject: string; quoted: DraftBody; attachments: DraftAttachment[] }
+export type Draft = { id: string; to: Recipient[]; cc: Recipient[]; subject: string; quoted: DraftBody; attachments: DraftAttachment[]; /** What was already typed, on a draft picked up again. */ text?: string }
 export type ComposeFields = { to: Recipient[]; cc: Recipient[]; subject: string; text: string }
 export type Upload = Blob & { name: string }
 
@@ -20,8 +21,9 @@ export const chunkSize = 320 * 1024 * 10
 /** What a personal mailbox accepts on one message. */
 export const attachmentLimit = 25 * 1024 * 1024
 
+const asText = { Prefer: 'IdType="ImmutableId", outlook.body-content-type="text"' }
 const asHtml = { Prefer: 'IdType="ImmutableId", outlook.body-content-type="html"' }
-const starts: Record<Exclude<ComposeMode, 'new'>, string> = { reply: 'createReply', replyAll: 'createReplyAll', forward: 'createForward' }
+const starts: Record<Exclude<ComposeMode, 'new' | 'draft'>, string> = { reply: 'createReply', replyAll: 'createReplyAll', forward: 'createForward' }
 
 const fromGraph = (list?: GraphRecipient[]): Recipient[] => (list ?? []).flatMap((item) => {
   const address = item.emailAddress?.address?.toLowerCase()
@@ -40,6 +42,27 @@ export function composeBody(text: string, quoted?: DraftBody): DraftBody {
   if (!body || body.index === undefined) return { contentType: 'html', content: html + quoted.content }
   const at = body.index + body[0].length
   return { contentType: 'html', content: quoted.content.slice(0, at) + html + quoted.content.slice(at) }
+}
+
+const entities: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
+const unescapeHtml = (html: string) => html.replace(/&(#x?[0-9a-f]+|\w+);/gi, (whole, name: string) => {
+  if (name[0] !== '#') return entities[name.toLowerCase()] ?? whole
+  const code = name[1].toLowerCase() === 'x' ? parseInt(name.slice(2), 16) : Number(name.slice(1))
+  return Number.isFinite(code) ? String.fromCodePoint(code) : whole
+})
+
+/**
+ * A kept draft, taken apart again: what was typed, and the mail under it. `composeBody` writes the typed part as one
+ * plain block at the top of the body, and that block is what is looked for. A draft with no such block (a new message,
+ * or one written in Outlook) is all typed text, read from its plain form.
+ */
+export function splitDraft(html: string, plain: string): { text: string; quoted: DraftBody } {
+  const typed = html.match(/(<body[^>]*>\s*)<div>((?:[^<]|<br\s*\/?>)*)<\/div>\s*<br\s*\/?>/i)
+  const rest = typed && html.slice(0, typed.index! + typed[1].length) + html.slice(typed.index! + typed[0].length)
+  // Nothing under the block means there is no mail being answered, so the plain form is the whole message.
+  const under = rest?.replace(/<head[\s\S]*?<\/head>/i, '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
+  if (!typed || !rest || !under) return { text: plain.replace(/\r/g, '').trimEnd(), quoted: { contentType: 'text', content: '' } }
+  return { text: unescapeHtml(typed[2].replace(/\r?\n/g, '').replace(/<br\s*\/?>/gi, '\n')), quoted: { contentType: 'html', content: rest } }
 }
 
 export function toBase64(bytes: Uint8Array): string {
@@ -63,6 +86,7 @@ export class Composer {
   /** A blank draft, or one Outlook has addressed and quoted for a reply or a forward. */
   async start(mode: ComposeMode, messageId?: string): Promise<Draft> {
     if (mode !== 'new' && !messageId) throw new Error('nothing to answer')
+    if (mode === 'draft') return this.resume(messageId!)
     const made = await this.graph.request<GraphDraft>(mode === 'new' ? '/me/messages' : this.path(messageId!, `/${starts[mode]}`), { method: 'POST', body: '{}', headers: asHtml })
     return {
       id: made.id,
@@ -73,6 +97,17 @@ export class Composer {
       // A forward carries the original's files with it.
       attachments: mode === 'forward' ? await this.attachments(made.id) : [],
     }
+  }
+
+  /** A draft kept earlier, with what was typed back in the fields. Read twice: its markup holds the mail it answers, its plain form what was typed. */
+  private async resume(draftId: string): Promise<Draft> {
+    const select = '?$select=id,subject,toRecipients,ccRecipients,body'
+    const [html, plain, attachments] = await Promise.all([
+      this.graph.request<GraphDraft>(this.path(draftId, select), { headers: asHtml }),
+      this.graph.request<GraphDraft>(this.path(draftId, select), { headers: asText }),
+      this.attachments(draftId),
+    ])
+    return { id: html.id, to: fromGraph(html.toRecipients), cc: fromGraph(html.ccRecipients), subject: html.subject ?? '', attachments, ...splitDraft(html.body?.content ?? '', plain.body?.content ?? '') }
   }
 
   /** The files on a draft. Pictures placed inside the body are not listed. */

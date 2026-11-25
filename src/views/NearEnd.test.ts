@@ -16,5 +16,5 @@ it('has no button that loads the next page', () => {
 
 it('pages every list of mail from the end of the list', () => {
   const paged = screens.filter(({ code }) => /<NearEnd\b/.test(code)).map(({ file }) => file.split(sep).join('/')).sort()
-  expect(paged).toEqual(['views/InboxView.tsx', 'views/ReceiptsView.tsx', 'views/SearchView.tsx'])
+  expect(paged).toEqual(['views/FoldersView.tsx', 'views/InboxView.tsx', 'views/ReceiptsView.tsx', 'views/SearchView.tsx'])
 })

@@ -23,6 +23,10 @@ There is no junk folder. Every run moves what Outlook junked into the inbox befo
 
 An open message in the inbox or search has `archive + rule` (`block`): it archives every conversation from that sender on the list and adds a rule that archives what they send next. One undo brings the mail back and removes the rule. No second rule is made when one already clears the sender. On a phone, mail that needs me keeps it in the menu, where five buttons would not fit.
 
+## folders
+
+The other folders are on one `folders` screen: `sent`, `drafts`, `archive`, `snoozed` and `deleted`, one at a time, newest first, opening on the one last looked at (`folderNames` in `src/data/mailProvider.ts`, `FoldersView`). The inbox and receipts keep their own screens, there is still no junk, and any other folder is reached through search. Sent mail and drafts are listed by who they are to. A draft opens in compose with what was written back in the fields (`splitDraft`); closing it untouched leaves it as it was. Everything else opens to its conversation, with `reply` and `move to inbox` (`forward` on sent mail) and the rest in the menu. A delete can be undone back to the folder it came from, and nothing done here is learned from as a decision about a sender. Do not add a folder to the navigation itself, and do not list folders the mailbox happens to have.
+
 ## inbox layout
 
 The inbox is one list with one extra thing on top: a `needs me` section, its count beside the heading. All other mail follows below it with no heading and no category name. There is no `probably fine` group, no side by side columns, and no summary line of counts above the list; the line under search only says a check is running. An empty inbox says `inbox zero` as soon as it is known to be empty: on open when it was empty last time, and the moment a read comes back empty, with the check still running. The connect button never shows before the saved sign-in has been looked for. That line takes no room when it has nothing to say: on a wide screen the check's status sits beside the `inbox` title, and on a phone the line is gone unless a check is running or it holds `archive all`. Do not leave an empty row between the title and the mail. Nothing else may appear above the list or change its height while mail is being cleared: rules to add are offered on the rules screen, never in the inbox. `rules` in the navigation carries no count; only `inbox` does.
@@ -33,7 +37,7 @@ A check never brings other mail in to take the place of what was cleared. A full
 
 ## loading more
 
-No list has a `load more` button. Inbox, search and receipts ask for the next page on their own when the scroll gets near the end of the list, or straight away when few rows are left (`NearEnd` in `src/views/NearEnd.tsx`). It measures against whatever scrolls: the page on a phone, the list's own column from 60rem up. Only a failed load leaves a button (`try again`), so a failure is not retried in a loop. A new list that pages uses `NearEnd`; do not add a button that loads the next page.
+No list has a `load more` button. Inbox, search, folders and receipts ask for the next page on their own when the scroll gets near the end of the list, or straight away when few rows are left (`NearEnd` in `src/views/NearEnd.tsx`). It measures against whatever scrolls: the page on a phone, the list's own column from 60rem up. Only a failed load leaves a button (`try again`), so a failure is not retried in a loop. A new list that pages uses `NearEnd`; do not add a button that loads the next page.
 
 ## buttons on mail
 
@@ -49,7 +53,7 @@ The row shows the code where the preview line would be, and pressing it copies i
 
 ## threads
 
-The inbox shows one row per conversation: its newest message, with a count when more of it is in the inbox. The row sits with the mail that needs me when any message in it does, not only the newest. What clears the row (archive, delete, snooze, keep, to do, a sent reply that archives) clears every inbox message in the conversation, and undo brings them all back. A message opened anywhere (inbox, search, receipts) shows its whole conversation from every folder, sent mail included, newest first. Do not go back to one row per message, and do not add a place that opens a message without its conversation.
+The inbox shows one row per conversation: its newest message, with a count when more of it is in the inbox. The row sits with the mail that needs me when any message in it does, not only the newest. What clears the row (archive, delete, snooze, keep, to do, a sent reply that archives) clears every inbox message in the conversation, and undo brings them all back. A message opened anywhere (inbox, search, folders, receipts) shows its whole conversation from every folder, sent mail included, newest first. Do not go back to one row per message, and do not add a place that opens a message without its conversation.
 
 ## reading a message
 
@@ -101,7 +105,7 @@ When a task is finished, commit the files you edited by name and push to main wi
 
 ## desktop
 
-- Any screen that lists messages (inbox, search, receipts) uses the list with a reading pane beside it from 60rem up. From 60rem up each conversation in the list is its own card, and the open message is a card beside them, sized to the message rather than stretched across the screen. The card whose message is open is filled solid with the accent colour and lifted; a tint is not enough. Do not go back to rows joined in one box or a reading pane flush to the edges.
+- Any screen that lists messages (inbox, search, folders, receipts) uses the list with a reading pane beside it from 60rem up. From 60rem up each conversation in the list is its own card, and the open message is a card beside them, sized to the message rather than stretched across the screen. The card whose message is open is filled solid with the accent colour and lifted; a tint is not enough. Do not go back to rows joined in one box or a reading pane flush to the edges.
 - The inbox is saved on the device and shown on open while the mailbox is checked in the background. A check never blanks or blocks the list; the status line and the spinning check mail button say it is running. There is no loading bar; do not add one.
 - A new deploy reaches an open tab or installed window on its own (`src/appUpdate.ts`, the pattern in `~/.claude/patterns/app-update.md`). The app reloads onto it at a quiet moment: off screen, just reopened and not yet touched, or left alone for five minutes. It never reloads over an open sheet, a draft, or a screen that called `holdUpdates`, and it comes back to the screen it left. Until the reload happens, settings wears a dot and its button restarts onto the new build. Do not reload any other way, and do not rely on a manual refresh.
 - Check layout changes in `dev/preview.html` at 3438x1440 and 1440x900 as well as the phone. Every screen is in the preview; add new ones to it.

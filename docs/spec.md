@@ -94,8 +94,8 @@ Sources: [Inbox Zero](https://github.com/elie222/inbox-zero),
 - Not a calendar. Invitations can be accepted or declined from a message; the calendar lives in Outlook
   and My Brain.
 - Not a notifier. No badges, no push.
-- Not an archive browser. Folders other than inbox, receipts, archive, snoozed, drafts, and sent are
-  reachable through search, not navigation.
+- Not an archive browser. Folders other than inbox, receipts, sent, drafts, archive, snoozed, and
+  deleted are reachable through search, not navigation.
 
 ## screens
 
@@ -303,6 +303,14 @@ inbox, and the sorter makes it no rule. Each row: `archive all + rule`
 first, then archive all, unsubscribe, open latest, delete all + rule, delete all. Moves go through
 Graph's batch endpoint twenty at a time with progress in the status line. The inbox refreshes from
 what is left.
+
+### folders
+
+Behind `…` on a phone, in the rail on a wide screen. One list with a switch across the top: `sent`,
+`drafts`, `archive`, `snoozed`, `deleted`. It opens on the folder last looked at. Sent mail and
+drafts are listed by who they are to. A draft opens in compose to be finished; any other row opens
+to its conversation with `reply`, `move to inbox` (`forward` on sent mail), and `reply all`,
+`forward` and `delete` in the menu. A delete can be undone. *Added 2026-11-25.*
 
 ### receipts
 

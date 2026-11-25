@@ -32,6 +32,7 @@ import { Compose, type ComposeRequest } from './views/Compose'
 import { InboxView } from './views/InboxView'
 import { BodySource } from './views/MailBody'
 import { InstallBanner, InstallStep, hasInstallStep } from './views/InstallOffer'
+import { FoldersView, type FolderActions } from './views/FoldersView'
 import { ReceiptsView, type ReceiptActions } from './views/ReceiptsView'
 import { RulesView } from './views/RulesView'
 import { SearchView, type SearchActions } from './views/SearchView'
@@ -159,6 +160,8 @@ export default function App() {
   const [dismissed, setDismissed] = useState<string[]>([])
   const [composing, setComposing] = useState<ComposeRequest>()
   const [composeNote, setComposeNote] = useState<ToastState>()
+  /** Counts the times compose closed, so the folders screen reads drafts and sent again. */
+  const [composed, setComposed] = useState(0)
   const [cleanup, setCleanup] = useState<CleanupState>(emptyCleanup)
   const scanRef = useRef<ScanMessage[]>([])
   /** What each sender's clear took away this visit, by address, so undo can put it back. */
@@ -1036,6 +1039,15 @@ export default function App() {
     forward: (message) => setComposing({ mode: 'forward', message }),
   }
 
+  const folderActions: FolderActions = {
+    load: (folder, before) => services!.mail.folder(folder, inboxPageSize, before),
+    toInbox: (message) => actions.restore(message),
+    // Not a decision about a sender, so nothing is learned from it.
+    remove: (message) => services!.mail.delete(message.id),
+    putBack: (message, folder) => services!.mail.moveTo(message.id, folder),
+    compose: (request) => setComposing(request),
+  }
+
   const suggestions = useMemo<RuleSuggestion[]>(() => suggestRules(automation.decisions, automation.rules, automation.noRules).filter((item) => !dismissed.includes(`${item.from}|${item.action}`)), [automation, dismissed])
   const triaged = useMemo<Triaged[]>(() => rankTriaged(messages.map((message) => ({ message, triage: triage[message.id], pending: pending.has(message.id) }))), [messages, triage, pending])
   const connected = connection === 'connected' && Boolean(services)
@@ -1104,19 +1116,20 @@ export default function App() {
     ...(install.canPrompt ? [{ label: 'install app', onSelect: () => void install.install() }] : []),
   ]
 
-  return <BodySource value={connected ? readBody : undefined}><ThreadContext value={connected ? threadActions : undefined}><Shell view={view} views={connected ? ['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe } : undefined} busy={Boolean(busy)} alert={Boolean(error)} status={connected ? busy : undefined} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })} onCompose={connected ? () => setComposing({ mode: 'new' }) : undefined}>
+  return <BodySource value={connected ? readBody : undefined}><ThreadContext value={connected ? threadActions : undefined}><Shell view={view} views={connected ? ['inbox', 'search', 'folders', 'receipts', 'cleanup', 'rules', 'settings'] : ['inbox', 'rules', 'settings']} counts={connected ? { inbox: needsMe } : undefined} busy={Boolean(busy)} alert={Boolean(error)} status={connected ? busy : undefined} canRefresh={connected && !busy} links={links} onView={go} onRefresh={() => services && void run(services, { settings })} onCompose={connected ? () => setComposing({ mode: 'new' }) : undefined}>
     {view === 'inbox' && installFirst && <InstallStep install={install} onSkip={() => setInstallSkipped(true)} />}
     {view === 'inbox' && connected && <InstallBanner install={install} />}
     {view === 'inbox' && !installFirst && <InboxView items={triaged} kept={kept} read={read} busy={busy} error={error} connection={connection} archiveAfterReply={settings.archiveAfterReply} snoozes={automation.snoozes} actions={actions} more={more} onMore={(sweeping) => services ? loadMore(services, { settings }, !sweeping) : undefined}
       onConnect={connect} />}
     {view === 'search' && connected && <SearchView search={searchActions} actions={actions} hasModel={Boolean(settings.anthropicApiKey)} senders={senders} subjects={subjects} />}
+    {view === 'folders' && connected && <FoldersView actions={folderActions} refresh={composed} />}
     {view === 'receipts' && connected && <ReceiptsView actions={receiptActions} />}
     {view === 'rules' && <RulesView rules={automation.rules} outlookRules={outlookRules} snoozes={automation.snoozes} suggestions={suggestions} onRules={updateRules} onDismissSuggestion={(item) => setDismissed((current) => [...current, `${item.from}|${item.action}`])} />}
     {view === 'cleanup' && <CleanupView state={{ ...cleanup, notNoise: automation.noRules }} actions={cleanupActions} onError={setError} />}
     {view === 'settings' && <SettingsView settings={settings} connection={connection} accountName={accountName} busy={Boolean(busy)} error={error ?? (jevDown && settings.jevApiKey ? "jev can't be reached" : undefined)} onSettings={setSettings} onConnect={connect} onDisconnect={disconnect} />}
     {composing && services && <Compose key={`${composing.mode}:${composing.message?.id ?? ''}`} request={composing} actions={services.compose} contacts={senders}
-      onDraft={settings.anthropicApiKey ? (strong, instruction, written) => actions.draft(composing.mode === 'forward' ? undefined : composing.message, strong, instruction, written) : undefined}
-      onSent={() => sent(composing)} onClose={(note) => { setComposing(undefined); if (note) setComposeNote({ key: Date.now(), text: note }) }} />}
+      onDraft={settings.anthropicApiKey ? (strong, instruction, written) => actions.draft(composing.mode === 'forward' || composing.mode === 'draft' ? undefined : composing.message, strong, instruction, written) : undefined}
+      onSent={() => sent(composing)} onClose={(note) => { setComposing(undefined); setComposed((count) => count + 1); if (note) setComposeNote({ key: Date.now(), text: note }) }} />}
     <Toast toast={composeNote} onDone={() => setComposeNote(undefined)} />
   </Shell></ThreadContext></BodySource>
 }

@@ -11,6 +11,7 @@ import { CleanupView, type CleanupActions } from '../views/CleanupView'
 import { Compose, type ComposeRequest } from '../views/Compose'
 import { InboxView } from '../views/InboxView'
 import { BodySource } from '../views/MailBody'
+import { FoldersView } from '../views/FoldersView'
 import { ReceiptsView } from '../views/ReceiptsView'
 import { RulesView } from '../views/RulesView'
 import { SearchView, type SearchActions } from '../views/SearchView'
@@ -117,6 +118,9 @@ const receipts = Array.from({ length: 9 }, (_, at) => ({ ...seed[7].message, id:
 // Six pages, each older than the last, so the list has an end to scroll toward.
 const receiptPages = Array.from({ length: 6 }, (_, page) => receipts.map((message, at) => ({ ...message, id: `r${page}-${at}`, receivedAt: hoursAgo((page * 9 + at) * 190 + 20) })))
 
+// Each folder holds the same few pages, written to someone when it is sent mail or a draft.
+const folderPage = (folder: string, page: number): Message[] => seed.slice(0, 9).map((item, at) => ({ ...item.message, id: `${folder}${page}-${at}`, isRead: true, receivedAt: hoursAgo((page * 9 + at) * 31 + 2), to: folder === 'drafts' && at === 2 ? [] : [item.message.from, ...(at % 3 ? [] : [{ name: 'Tess Arnett', address: 'tess.arnett@example.com' }])] }))
+
 // Compose against a made-up mailbox: a reply comes back addressed, a forward brings the original's file.
 let attached: DraftAttachment[] = []
 const composeActions: ComposeActions = {
@@ -127,6 +131,7 @@ const composeActions: ComposeActions = {
     return {
       id: 'draft',
       to: mode === 'new' || mode === 'forward' || !from ? [] : [from.from],
+      text: mode === 'draft' ? 'Five works. I will bring the chairs.' : undefined,
       cc: mode === 'replyAll' ? [{ name: 'Tess Arnett', address: 'tess.arnett@example.com' }] : [],
       subject: from ? `${mode === 'forward' ? 'FW' : 'RE'}: ${from.subject}` : '',
       quoted: { contentType: 'html', content: '<body>earlier</body>' },
@@ -171,11 +176,12 @@ function Preview() {
     restoreAll: async (messages) => { await wait(500); const ids = new Set(messages.map((message) => message.id)); setItems((current) => rankTriaged([...current, ...everything.filter((item) => ids.has(item.message.id) && !current.includes(item))])) },
   }
 
-  return <BodySource value={readBody}><ThreadContext value={threads}><Shell view={view} views={['inbox', 'search', 'receipts', 'cleanup', 'rules', 'settings']} counts={{ inbox: groupInbox(items.filter((item) => !kept[item.message.id])).needsMe.length }} busy={params.has('busy')} alert={params.has('error')} status={params.has('busy') ? 'checking mail' : undefined} canRefresh links={[{ label: 'open my brain', onSelect: () => {} }]} onView={setView} onRefresh={() => setItems(seed)} onCompose={() => setComposing({ mode: 'new' })}>
+  return <BodySource value={readBody}><ThreadContext value={threads}><Shell view={view} views={['inbox', 'search', 'folders', 'receipts', 'cleanup', 'rules', 'settings']} counts={{ inbox: groupInbox(items.filter((item) => !kept[item.message.id])).needsMe.length }} busy={params.has('busy')} alert={params.has('error')} status={params.has('busy') ? 'checking mail' : undefined} canRefresh links={[{ label: 'open my brain', onSelect: () => {} }]} onView={setView} onRefresh={() => setItems(seed)} onCompose={() => setComposing({ mode: 'new' })}>
     {view === 'inbox' && <InboxView items={items} kept={kept} read busy={params.has('busy') ? 'checking mail' : loading ? 'loading more' : undefined} connection="connected"
       snoozes={params.has('snoozed') ? [{ messageId: 's1', until: new Date(Date.now() + 86_400_000).toISOString(), subject: 'Renew passport', from: 'Travel Office' }] : []} actions={actions} onConnect={async () => {}} more={!params.has('empty') && pages < olderPages}
       onMore={async () => { setLoading(true); await wait(700); setItems((current) => [...current, ...older(pages)]); setPages(pages + 1); setLoading(false) }} />}
     {view === 'search' && <SearchView search={search} actions={actions} hasModel senders={seed.map((item) => item.message.from)} subjects={seed.map((item) => item.message.subject)} />}
+    {view === 'folders' && <FoldersView actions={{ load: async (folder, before) => { await wait(300); if (folder === 'deleted') return { messages: [], more: false }; const pages = Array.from({ length: folder === 'drafts' ? 1 : 5 }, (_, page) => folderPage(folder, page)); const page = pages.findIndex((messages) => !before || messages[0].receivedAt < before); return { messages: pages[page] ?? [], more: page >= 0 && page < pages.length - 1 } }, toInbox: () => wait(300), remove: () => wait(300), putBack: () => wait(300), compose: (request) => setComposing(request) }} />}
     {view === 'receipts' && <ReceiptsView actions={{ load: async (before) => { await wait(300); const page = receiptPages.findIndex((messages) => !before || messages[0].receivedAt < before); return { messages: receiptPages[page] ?? [], more: page >= 0 && page < receiptPages.length - 1 } }, fromArchive: async () => { await wait(600); return 3 }, toInbox: () => wait(300), forward: (message) => setComposing({ mode: 'forward', message }) }} />}
     {view === 'cleanup' && <CleanupView state={{ scanned: scanned.length, total: scanned.length, groups: senders, old: { count: old.ids.length, unread: old.unread, flagged: 2 }, swept: params.has('swept') ? 1204 : undefined, working: params.has('sweeping') ? 'archived 640 of 1,204' : undefined, done: true }} actions={cleanupActions} onError={() => {}} />}
     {view === 'rules' && <RulesView rules={[{ id: 'r1', from: '@harbor.example.com', action: 'archive', enabled: true, createdAt: 'now', hits: 12, outlookId: 'o1' }, { id: 'r2', subject: 'receipt', action: 'read', enabled: true, createdAt: 'now', hits: 3 }]} outlookRules={[]} snoozes={[{ messageId: 's1', until: new Date(Date.now() + 86_400_000).toISOString(), subject: 'Renew passport', from: 'Travel Office' }]} suggestions={[{ from: 'news@weeklyfold.example.com', action: 'archive', count: 4 }]} onRules={async () => {}} />}
