@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyRules, autoRuleSenders, matchesRule, newRule, recordHits, rememberDecision, retiredSenders, senderDomain, suggestRules } from './rules'
+import { applyRules, autoRuleSenders, clearsSender, matchesRule, newRule, recordHits, rememberDecision, retiredSenders, senderDomain, suggestRules } from './rules'
 import { message } from './fixtures'
 import type { Category, Decision, Rule, Triage } from './types'
 
@@ -85,5 +85,22 @@ describe('rules the sorter makes', () => {
     expect(retiredSenders(before, [before[2]], ['old@example.com'])).toEqual(['old@example.com', 'news@daily.example.com'])
     expect(retiredSenders(before, before, ['old@example.com'])).toEqual(['old@example.com'])
     expect(newRule({ from: 'a@b.example.com', action: 'archive', auto: true }, 'id', 'now').auto).toBe(true)
+  })
+})
+
+describe('blocking a sender', () => {
+  const rule = (input: Parameters<typeof newRule>[0]) => newRule(input, 'r', 'now')
+
+  it('adds nothing when a rule already clears everything from the address', () => {
+    expect(clearsSender(rule({ from: 'news@daily.example.com', action: 'archive' }), 'News@Daily.example.com')).toBe(true)
+    expect(clearsSender(rule({ from: '@daily.example.com', action: 'delete' }), 'news@daily.example.com')).toBe(true)
+    expect(clearsSender(rule({ from: '@daily.example.com', action: 'receipts' }), 'news@daily.example.com')).toBe(true)
+  })
+
+  it('still needs a rule when the one there leaves mail in the inbox', () => {
+    expect(clearsSender(rule({ from: 'news@daily.example.com', action: 'read' }), 'news@daily.example.com')).toBe(false)
+    expect(clearsSender(rule({ from: 'news@daily.example.com', subject: 'sale', action: 'archive' }), 'news@daily.example.com')).toBe(false)
+    expect(clearsSender({ ...rule({ from: 'news@daily.example.com', action: 'archive' }), enabled: false }, 'news@daily.example.com')).toBe(false)
+    expect(clearsSender(rule({ from: 'other@daily.example.com', action: 'archive' }), 'news@daily.example.com')).toBe(false)
   })
 })

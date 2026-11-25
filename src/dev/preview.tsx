@@ -151,6 +151,7 @@ function Preview() {
     flag: async (message) => setItems((current) => current.map((item) => item.message.id === message.id ? { ...item, message: { ...item.message, flagged: !item.message.flagged } } : item)),
     unsubscribe: async (message) => `unsubscribed from ${message.from.address}`,
     makeRule: async () => wait(200),
+    block: async () => { await wait(200); return () => wait(200) },
     restore: async (message) => { await wait(250); setItems((current) => rankTriaged([...current, ...seed.filter((item) => item.message.id === message.id)])) },
   }
 

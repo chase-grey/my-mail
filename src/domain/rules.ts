@@ -76,6 +76,13 @@ export function newRule(input: { from?: string; subject?: string; action: RuleAc
   return { id, from: input.from?.trim() || undefined, subject: input.subject?.trim() || undefined, action: input.action, enabled: true, createdAt, hits: 0, auto: input.auto || undefined }
 }
 
+const clearing: RuleAction[] = ['archive', 'receipts', 'delete']
+
+/** The rule already takes everything from this address out of the inbox, so blocking the sender again adds nothing. */
+export function clearsSender(rule: Rule, address: string): boolean {
+  return rule.enabled && clearing.includes(rule.action) && !rule.subject && Boolean(rule.from) && address.toLowerCase().includes(normalize(rule.from!))
+}
+
 /** Kinds that earn their sender a rule once the sorter is sure. Notifications stay out: the same address sends login codes and security alerts. */
 export const ruleCategories: Category[] = ['newsletter', 'promo', 'receipt']
 

@@ -19,6 +19,8 @@ The only colors are the theme tokens at the top of `src/styles.css`: the neutral
 
 There is no junk folder. Every run moves what Outlook junked into the inbox before reading it (`rescueJunk`), and that mail goes through the same rules and sorting as the rest. Blocking is done with rules. Do not add a junk view, and do not read the inbox without emptying junk first.
 
+An open message in the inbox or search has `archive + rule` (`block`): it archives every conversation from that sender on the list and adds a rule that archives what they send next. One undo brings the mail back and removes the rule. No second rule is made when one already clears the sender. On a phone, mail that needs me keeps it in the menu, where five buttons would not fit.
+
 ## inbox layout
 
 The inbox is one list with one extra thing on top: a `needs me` section, its count beside the heading. All other mail follows below it with no heading and no category name. There is no `probably fine` group, no side by side columns, and no summary line of counts above the list; the line under search only says a check is running.

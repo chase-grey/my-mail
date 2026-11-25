@@ -18,7 +18,7 @@ import { holdUpdates } from './appUpdate'
 import { groupBySender, keepSenderKinds, sendersToAsk, oldMail, type ScanMessage, type SenderGroup, type SenderKinds } from './domain/cleanup'
 import { historyTriage, noiseSenders, senderHistoryLine } from './domain/history'
 import { compileRule, planRuleSync } from './domain/outlookRules'
-import { applyRules, autoRuleSenders, newRule, recordHits, rememberDecision, retiredSenders, suggestRules, type RuleSuggestion } from './domain/rules'
+import { applyRules, autoRuleSenders, clearsSender, newRule, recordHits, rememberDecision, retiredSenders, suggestRules, type RuleSuggestion } from './domain/rules'
 import { dueSnoozes, snoozeRecord, snoozeUntil, withoutSnoozes, type SnoozeOption } from './domain/snooze'
 import { ageTriage, autoArchivable, needsReading, oldAfterDays, outlookTriage, pruneTriage, rankTriaged, sharedOf, summarize, unsureBelow, worthSharing, writeShared, type RunSummary, type Triaged } from './domain/triage'
 import { emptyAutomation, type Action, type Automation, type Message, type OutlookRule, type Rule, type RuleAction, type Triage } from './domain/types'
@@ -124,6 +124,8 @@ export type MessageActions = {
   /** Follows the sender's List-Unsubscribe header. Returns a short note on what happened. */
   unsubscribe: (message: Message) => Promise<string>
   makeRule: (input: { from?: string; subject?: string; action: RuleAction }) => Promise<void>
+  /** Adds an archive rule for the sender. Gives back the way to take the rule away again, or nothing when a rule already clears their mail. */
+  block: (message: Message) => Promise<(() => Promise<void>) | undefined>
   /** Undo: bring a message that was just archived, deleted, or snoozed back to the inbox. */
   restore: (message: Message) => Promise<void>
 }
@@ -763,6 +765,20 @@ export default function App() {
     makeRule: async (input) => {
       const rule = newRule(input, crypto.randomUUID(), new Date().toISOString())
       await updateRules([...automationRef.current.rules, rule])
+    },
+    block: async (message) => {
+      const from = message.from.address.trim().toLowerCase()
+      if (!from) throw new Error('this mail has no sender address')
+      if (automationRef.current.rules.some((rule) => clearsSender(rule, from))) return undefined
+      setError(undefined)
+      try {
+        const rule = newRule({ from, action: 'archive' }, crypto.randomUUID(), new Date().toISOString())
+        await updateRules([...automationRef.current.rules, rule])
+        return () => updateRules(automationRef.current.rules.filter((item) => item.id !== rule.id))
+      } catch (failure) {
+        setError(errorText(failure))
+        throw failure
+      }
     },
     restore: async (message) => {
       if (!services) throw new Error('connect microsoft first')

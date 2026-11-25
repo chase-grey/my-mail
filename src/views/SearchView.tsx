@@ -53,6 +53,7 @@ const failed = (error: unknown) => error instanceof Error ? error.message.toLowe
 type Handlers = {
   open: (hit: SearchHit) => void
   archive: (hit: SearchHit) => void
+  block: (hit: SearchHit) => void
   task: (hit: SearchHit) => void
   flag: (hit: SearchHit) => void
   toInbox: (hit: SearchHit) => void
@@ -66,6 +67,7 @@ function Detail({ hit, pane, on }: { hit: SearchHit; pane: boolean; on: Handlers
   return <div className="detail">
     <div className="mail-actions">
       {hit.inInbox && <button type="button" onClick={() => on.archive(hit)}>archive</button>}
+      {hit.inInbox && <button type="button" onClick={() => on.block(hit)}>archive + rule</button>}
       <button type="button" onClick={() => on.task(hit)}>to do</button>
       <Menu label={`more for ${message.subject}`} items={[
         { label: 'reply', onSelect: () => on.compose(hit, 'reply') },
@@ -243,6 +245,22 @@ export function SearchView({ search, actions, hasModel, senders = noSenders, sub
       patch(hit.message.id, (item) => ({ ...item, inInbox: false, folder: 'archive' }))
       say('archived', putBack(hit, hits.indexOf(hit)))
     }),
+    block: (hit) => {
+      // Every hit from the sender that is still in the inbox goes, and a rule archives what they send next.
+      const from = hit.message.from.address.toLowerCase()
+      const gone = [hit, ...hits.filter((other) => other !== hit && other.inInbox && other.message.from.address.toLowerCase() === from)]
+      const ids = new Set(gone.map((item) => item.message.id))
+      const mark = (inbox: boolean) => setResult((shown) => shown && { ...shown, hits: shown.hits.map((item) => ids.has(item.message.id) ? { ...item, inInbox: inbox, folder: inbox ? undefined : 'archive' } : item) })
+      const each = async (work: (message: Message) => Promise<void>) => { for (const item of gone) await work(item.message) }
+      let unrule: (() => Promise<void>) | undefined
+      act(actions.block(hit.message).then((undo) => { unrule = undo; return each(actions.archive) }).catch(async (failure: unknown) => { await unrule?.().catch(() => undefined); throw failure }), () => {
+        mark(false)
+        say(unrule ? 'archived · rule added' : 'archived', () => {
+          setToast(undefined)
+          void (unrule?.() ?? Promise.resolve()).then(() => each(actions.restore)).then(() => mark(true)).catch((failure: unknown) => setError(failed(failure)))
+        })
+      })
+    },
     task: (hit) => act(actions.task(hit.message, hit.message.subject), () => {
       patch(hit.message.id, (item) => ({ ...item, inInbox: false, folder: 'archive' }))
       say('added to to do')

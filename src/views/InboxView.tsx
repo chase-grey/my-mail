@@ -24,6 +24,8 @@ type Leave = { to: 'right' | 'left' | 'fade'; delay?: number }
 type Handlers = {
   open: (item: InboxThread) => void
   archive: (item: InboxThread) => void
+  /** Archive, and add a rule that archives the sender from now on. */
+  block: (item: InboxThread) => void
   remove: (item: InboxThread) => void
   keep: (item: InboxThread) => void
   flag: (item: InboxThread) => void
@@ -77,6 +79,8 @@ function Detail({ item, kept, quiet, pane, on }: { item: InboxThread; kept: bool
   return <div className="detail">
     <div className="mail-actions">
       {button('archive', 'archive', () => on.archive(item))}
+      {/* Five buttons do not fit a phone, so mail that needs me keeps this one in the menu there. */}
+      {(quiet || pane) && <button type="button" onClick={() => on.block(item)}>archive + rule</button>}
       {!quiet && button('to do', 'task', () => on.task(item))}
       {!quiet && button('reply', 'reply', () => on.reply(item))}
       {quiet ? button('keep', 'keep', () => on.keep(item)) : button('snooze', 'snooze', () => on.snooze(item))}
@@ -86,6 +90,7 @@ function Detail({ item, kept, quiet, pane, on }: { item: InboxThread; kept: bool
           { label: 'reply', onSelect: () => on.reply(item) },
           { label: 'snooze', onSelect: () => on.snooze(item) },
         ] : [{ label: kept ? 'kept' : 'keep in inbox', disabled: kept, onSelect: () => on.keep(item) }]),
+        ...(quiet || pane ? [] : [{ label: 'archive + rule', onSelect: () => on.block(item) }]),
         { label: 'reply all', onSelect: () => on.replyAll(item) },
         { label: 'forward', onSelect: () => on.forward(item) },
         { label: message.flagged ? 'unflag' : 'flag', onSelect: () => on.flag(item) },
@@ -248,6 +253,33 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
       .finally(() => stay([item.key]))
   }
 
+  /**
+   * Blocks a sender: every conversation of theirs on the list is archived and a rule archives what they send next.
+   * Undo brings the mail back and takes the rule away. If the mail will not move, the rule does not stay either.
+   */
+  function block(item: InboxThread): void {
+    const from = item.message.from.address.toLowerCase()
+    const gone = [item, ...order.filter((other) => other.key !== item.key && other.message.from.address.toLowerCase() === from)]
+    const keys = gone.map(keyOf)
+    const all = gone.flatMap((thread) => thread.all)
+    setLocalError(undefined)
+    if (selectedId && keys.includes(selectedId)) {
+      const at = order.findIndex((entry) => entry.key === selectedId)
+      const staying = (entry: InboxThread) => !keys.includes(entry.key)
+      setOpenId(pane ? (order.slice(at).find(staying) ?? order.slice(0, Math.max(at, 0)).reverse().find(staying))?.key : undefined)
+    }
+    setLeaving((current) => ({ ...current, ...Object.fromEntries(keys.map((key, index) => [key, { to: 'right', delay: Math.min(index, 8) } as Leave])) }))
+    let unrule: (() => Promise<void>) | undefined
+    void actions.block(item.message)
+      .then((undo) => { unrule = undo; return each(all, actions.archive) })
+      .then(() => say(unrule ? 'archived · rule added' : 'archived', () => {
+        setToast(undefined)
+        void (unrule?.() ?? Promise.resolve()).then(() => each(all, actions.restore)).catch(() => undefined)
+      }))
+      .catch(() => { void unrule?.().catch(() => undefined) })
+      .finally(() => stay(keys))
+  }
+
   /** The newest message was handled on its own; the older ones in the conversation are archived behind it. */
   function clearRest(item: InboxThread): void {
     const rest = item.all.slice(1)
@@ -264,6 +296,7 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
   const on: Handlers = {
     open: (item) => setOpenId(pane || selectedId !== item.key ? item.key : undefined),
     archive: (item) => clear(item, 'right', actions.archive, actions.isReceipt(item.message) ? 'moved to receipts' : 'archived', true),
+    block,
     remove: (item) => clear(item, 'fade', actions.remove, 'deleted', true),
     keep: (item) => clear(item, 'fade', actions.keep),
     flag: (item) => void actions.flag(item.message).catch(() => undefined),
