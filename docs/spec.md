@@ -568,9 +568,11 @@ Defaults are set so nothing blocks; change any of these in a sentence.
 - **Auto-archive** default off. The expected first move is on after a week of watching the
   `probably fine` group and its confidence chips.
 - **Jev in the browser.** The key is sent from the page like the Anthropic key. TypeSafe refuses
-  cross-origin requests (checked 2026-11-24: the preflight answers `Disallowed CORS origin`), so Jev
-  does not run from the site today. The first failed call says so once and Claude sorts until the
-  page reloads. Making Jev work needs a tiny proxy or TypeSafe allowing the site's origin.
+  cross-origin requests (checked 2026-11-24: the preflight answers `Disallowed CORS origin`), so the
+  page asks through a Cloudflare Worker (`relay/`, deployed with `npx wrangler deploy` from that
+  folder). The worker holds no key, answers only the site's origin, forwards only the one POST, and
+  logs nothing. Epic's network blocks `workers.dev`, so on that network the call times out after six
+  seconds, the app says so once, and Claude sorts until the page reloads.
 - **Images** default to people only.
 - **Sent-mail voice samples** default off until tried once.
 - **Name** stays `my mail`.

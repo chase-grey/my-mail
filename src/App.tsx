@@ -67,9 +67,9 @@ function writeJson(key: string, value: unknown): void {
   }
 }
 
-/** TypeSafe turns away calls made from a web page. Once one fails that way, Jev is not asked again until the page reloads; Claude sorts instead. */
+/** Jev is reached through a relay that some networks block. Once a call fails to connect, Jev is not asked again until the page reloads; Claude sorts instead. */
 let jevUnreachable = false
-const isNetworkFailure = (failure: unknown) => failure instanceof TypeError
+const isNetworkFailure = (failure: unknown) => failure instanceof TypeError || (failure instanceof DOMException && (failure.name === 'TimeoutError' || failure.name === 'AbortError'))
 
 function errorText(error: unknown): string {
   if (error instanceof InteractionRequiredAuthError) return 'reconnect microsoft'
@@ -265,7 +265,7 @@ export default function App() {
         withoutModel += results.length
       } catch (failure) {
         if (isNetworkFailure(failure)) jevUnreachable = true
-        setError(isNetworkFailure(failure) ? "jev can't be reached from the browser" : errorText(failure))
+        setError(isNetworkFailure(failure) ? "jev can't be reached" : errorText(failure))
       }
     }
 

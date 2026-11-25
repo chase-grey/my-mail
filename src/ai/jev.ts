@@ -10,11 +10,16 @@ export class JevError extends Error {
   }
 }
 
+/** TypeSafe refuses requests made from a web page, so the page asks through the worker in `relay/`, which passes them on and keeps nothing. */
+export const jevRelayUrl = 'https://my-mail-jev.grey-chase.workers.dev/'
+/** A network that blocks the relay leaves the request hanging; past this the app stops waiting and Claude sorts. */
+export const jevTimeoutMs = 6000
+
 export class JevClient {
   constructor(
     private readonly apiKey: string,
     private readonly fetcher: typeof fetch = (input, init) => fetch(input, init),
-    private readonly baseUrl = 'https://api.typesafe.ai/v1/systemone',
+    private readonly baseUrl = jevRelayUrl,
     private readonly model = 'jev-latest',
   ) {}
 
@@ -23,6 +28,7 @@ export class JevClient {
       method: 'POST',
       headers: { 'content-type': 'application/json', authorization: `Bearer ${this.apiKey}` },
       body: JSON.stringify({ model: this.model, state, questions }),
+      signal: AbortSignal.timeout(jevTimeoutMs),
     })
     if (!response.ok) throw new JevError(response.status, await response.text())
     const result = await response.json() as { answers?: Record<string, JevAnswer> }

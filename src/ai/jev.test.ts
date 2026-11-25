@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { message } from '../domain/fixtures'
-import { JevClient, JevError, classifyWithJev, jevState, kindOf, mailQuestions, triageFromAnswers } from './jev'
+import { JevClient, JevError, classifyWithJev, jevRelayUrl, jevState, kindOf, mailQuestions, triageFromAnswers } from './jev'
 
 const answer = (choice: string, probability: number, extra: Record<string, number> = {}) => ({ type: 'choice' as const, choice, probabilities: { [choice]: probability, ...extra } })
 
@@ -11,7 +11,7 @@ describe('jev', () => {
     const answers = await client.ask(jevState(message('m1', 'deals@shop.example.com', 'Sale', { body: '20% off' })), mailQuestions)
     expect(answers.kind.choice).toBe('promo')
     const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit]
-    expect(url).toBe('https://api.typesafe.ai/v1/systemone')
+    expect(url).toBe(jevRelayUrl)
     expect(new Headers(init.headers).get('authorization')).toBe('Bearer key')
     const body = JSON.parse(init.body as string)
     expect(body.model).toBe('jev-latest')
