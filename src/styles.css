@@ -161,7 +161,9 @@ a { color: var(--accent); }
 .quick.is-suggested { color: var(--accent); font-weight: 600; }
 .quick:hover { background: var(--surface-2); }
 .quick:active { scale: 0.94; }
-.zero { padding: 3rem 0; color: var(--muted); text-align: center; animation: rise var(--move) var(--ease); }
+/* An empty inbox is one big accent dot with the check cut out of it, in the middle of the screen and behind anything else that is showing. */
+.zero { position: fixed; inset: 0; z-index: -1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; pointer-events: none; animation: rise var(--move) var(--ease); }
+.zero svg { width: 9rem; height: 9rem; fill: var(--accent); }
 
 /* the open message */
 .fold { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--move) var(--ease); }

@@ -510,7 +510,13 @@ export function InboxView({ items, kept, summary, busy, error, connection, archi
 
       {more && onMore && <NearEnd busy={Boolean(busy)} failed={Boolean(error)} onNear={() => { if (!run.current) void onMore() }} />}
 
-      {!busy && items.length === 0 && !more && summary && <p className="zero">inbox zero{snoozes.length ? ` · ${snoozes.length} snoozed` : ''}</p>}
+      {!busy && items.length === 0 && !more && summary && <div className="zero">
+        <svg viewBox="0 0 100 100" role="img" aria-label="inbox zero">
+          <mask id="zero-cut"><rect width="100" height="100" fill="#fff" /><path d="M29 52.5 43.5 67 72 36" fill="none" stroke="#000" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" /></mask>
+          <circle cx="50" cy="50" r="50" mask="url(#zero-cut)" />
+        </svg>
+        {snoozes.length > 0 && <small>{snoozes.length} snoozed</small>}
+      </div>}
 
       {keptItems.length > 0 && <details className="card group">
         <summary>{keptItems.length} kept in inbox</summary>
