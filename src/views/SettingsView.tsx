@@ -1,6 +1,7 @@
 import { APP_BUILD_TIME, APP_COMMIT, checkForUpdate, useAppUpdate } from '../appUpdate'
 import { modelOptions, type Settings } from '../settings'
 import { Card, Field, Switch } from '../ui'
+import { AccentPicker } from './AccentPicker'
 
 export type ConnectionStatus = 'unconfigured' | 'disconnected' | 'connected'
 
@@ -54,6 +55,10 @@ export function SettingsView({ settings, connection, accountName, busy, error, o
       <div className="stack">
         <Field label="my brain"><input autoComplete="off" inputMode="url" value={settings.brainUrl} onChange={set('brainUrl')} /></Field>
       </div>
+    </Card>
+
+    <Card title="color">
+      <AccentPicker />
     </Card>
 
     <Card title="app">

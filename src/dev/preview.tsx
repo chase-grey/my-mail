@@ -18,7 +18,10 @@ import { SettingsView } from '../views/SettingsView'
 import { Shell, type View } from '../views/Shell'
 import { ThreadContext, type ThreadActions } from '../views/Thread'
 import { defaultSettings } from '../settings'
+import { applyAccent, loadAccent } from '../accent'
 import '../styles.css'
+
+applyAccent(loadAccent())
 
 // Made-up mail for looking at the interface without a mailbox. Open /dev/preview.html while `npm run dev` runs.
 const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString()

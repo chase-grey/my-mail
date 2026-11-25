@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
+import { applyAccent, loadAccent } from './accent'
 import { watchForUpdates } from './appUpdate'
 import './styles.css'
 
@@ -14,6 +15,9 @@ if (isSignInResponse()) {
   // msal 5 no longer reads the popup from the opener: the popup has to hand the result back itself, then it closes.
   void import('@azure/msal-browser/redirect-bridge').then((bridge) => bridge.broadcastResponseToMainFrame())
 } else {
+  // Before the first paint, so the app never opens in a color that is about to change.
+  applyAccent(loadAccent())
+
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <App />
