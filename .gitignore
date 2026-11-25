@@ -12,3 +12,6 @@ dist
 
 # extra git worktrees for this repo
 .worktrees/
+
+# the auto-fixer keeps its lock, logs and scratch here (scripts/autofix.mjs)
+.autofix

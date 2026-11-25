@@ -83,6 +83,13 @@ Tests cover the rules engine and its Outlook compilation, snooze times, grouping
 auto-archive gates, sender history, body trimming, the Jev and Claude requests and response
 parsing, unsubscribe headers, cleanup grouping, the Graph mail mapping, and a render of the inbox.
 
+## issues
+
+There is no chat here, so a bug or a change is reported from the chat in my brain, which files it as a
+GitHub issue on this repo. `npm run autofix` on the work pc hands each one to the local `claude`, fenced in
+as `scripts/autofix.mjs` describes, and the fix goes up as a pull request. `npm run autofix` in my-brain
+starts it for every app at once. my-brain carries the same file.
+
 ## deploy
 
 Push to `main`; `.github/workflows/deploy.yml` builds and publishes to GitHub Pages. The first

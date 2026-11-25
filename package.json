@@ -10,7 +10,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc -b",
     "lint": "oxlint",
-    "icons": "node scripts/make-icons.mjs"
+    "icons": "node scripts/make-icons.mjs",
+    "autofix": "node scripts/autofix.mjs"
   },
   "dependencies": {
     "@azure/msal-browser": "^5.21.0",
